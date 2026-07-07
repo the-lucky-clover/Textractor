@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>Textractor</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.textractor.app</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Textractor</string>
+    <key>CFBundleDisplayName</key>
+    <string>Textractor</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSSupportsAutomaticTermination</key>
+    <true/>
+    <key>NSSupportsSuddenTermination</key>
+    <true/>
+    <key>CFBundleIconFile</key>
+    <string>textractor</string>
+    <key>CFBundleIconName</key>
+    <string>Textractor</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Textractor needs Screen Recording access to extract text from selected regions and windows on your screen. All processing is performed locally on your Mac</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Textractor may send the keyboard shortcut Cmd-V after extracting text in order to paste it into the active app</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Textractor needs Camera access so Continuity Camera photos you take with your iPhone can be ingested for text extraction. All processing stays on this Mac</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Textractor. Privacy-first, on-device text extraction</string>
+    <key>LSEnvironment</key>
+    <dict>
+        <key>OS_ACTIVITY_MODE</key>
+        <string>disable</string>
+   </dict>
+</dict>
+</plist>

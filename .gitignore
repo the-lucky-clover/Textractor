@@ -1,0 +1,33 @@
+# Swift / SPM
+.build/
+.swiftpm/
+*.xcodeproj/
+DerivedData/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Build artifacts
+dist/Textractor.dmg
+dist/Textractor.app
+
+# Local logs / IDE
+.waylog/
+.snapshots/
+*.code-workspace.bak
+
+# Editor
+*.swp
+*~
+
+# Secrets — keep entitlements in tree but never commit
+*.p12
+*.cer
+
+# Local environment overrides
+*.local
+.env

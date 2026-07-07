@@ -1,0 +1,31 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"launch": {
+		"configurations": [
+			{
+				"type": "swift",
+				"request": "launch",
+				"args": [],
+				"cwd": "${workspaceFolder:Textractor}",
+				"name": "Debug Textractor (Textractor)",
+				"target": "Textractor",
+				"configuration": "debug",
+				"preLaunchTask": "swift: Build Debug Textractor (Textractor)"
+			},
+			{
+				"type": "swift",
+				"request": "launch",
+				"args": [],
+				"cwd": "${workspaceFolder:Textractor}",
+				"name": "Release Textractor (Textractor)",
+				"target": "Textractor",
+				"configuration": "release",
+				"preLaunchTask": "swift: Build Release Textractor (Textractor)"
+			}
+		]
+	}
+}
