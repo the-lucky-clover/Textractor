@@ -27,14 +27,27 @@ private struct SplashView: View {
     private let cardSize = NSSize(width: 460, height: 460)
 
     var body: some View {
-        Image(nsImage: image)
-            .resizable()
-            .interpolation(.high)
-            .scaledToFit()
-            .frame(width: cardSize.width, height: cardSize.height)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .opacity(opacity)
-            .onAppear(perform: runAnimation)
+        ZStack {
+            // 3D drop shadow: a soft, offset shadow that sits under the graphic
+            // to make it read as floating above the desktop. Rendered behind the
+            // image so the logo's own rounded corners stay crisp on top.
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.black.opacity(0.45))
+                .frame(width: cardSize.width, height: cardSize.height)
+                .offset(y: 18)
+                .blur(radius: 28)
+                .opacity(opacity)
+
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: cardSize.width, height: cardSize.height)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .opacity(opacity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear(perform: runAnimation)
     }
 
     private func runAnimation() {
@@ -72,7 +85,9 @@ final class SplashWindowController {
             completion()
         }
 
-        let size = NSSize(width: 460, height: 460)
+        // Panel is larger than the 460pt graphic to leave room for the soft
+        // 3D drop shadow (it would otherwise be clipped at the window edges).
+        let size = NSSize(width: 540, height: 540)
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless],
