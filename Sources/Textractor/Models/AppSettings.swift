@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Carbon.HIToolbox
 
 // MARK: - StorageMode
 
@@ -113,6 +114,9 @@ public struct AppSettings: Codable, Sendable {
     /// detect tabular layouts and emit a Markdown table to the clipboard.
     public var windowCaptureAsTable: Bool
 
+    /// Last time we checked for updates (for update auto-check logic).
+    public var lastUpdateCheckAt: Date?
+
     // MARK: - Hotkey remapping
 
     /// User-customisable keycode for the ⌘⇧2 hotkey. `nil` means "use default".
@@ -139,6 +143,9 @@ public struct AppSettings: Codable, Sendable {
     /// written to the clipboard or shared. Default OFF — most users prefer
     /// original line breaks from the OCR pass.
     public var wordWrapCaptured: Bool
+    
+    /// Font scale factor for accessibility (0.75 to 2.5).
+    public var fontScale: Double
 
     public init(
         storageMode: StorageMode = .ask,
@@ -151,13 +158,15 @@ public struct AppSettings: Codable, Sendable {
         festiveFeedback: Bool = true,
         localTelemetryEnabled: Bool = true,
         openPopoverOnCapture: Bool = false,
-        windowCaptureAsTable: Bool = true,
+        lastUpdateCheckAt: Date? = nil,
         customHotkeyKeyCode: UInt32? = nil,
         customHotkeyModifiers: UInt32? = nil,
         customHotkeyLabel: String? = nil,
         soundEffectsEnabled: Bool = true,
         pasteAsPlainText: Bool = true,
-        wordWrapCaptured: Bool = false
+        wordWrapCaptured: Bool = false,
+        windowCaptureAsTable: Bool = true,
+        fontScale: Double = 1.0
     ) {
         self.storageMode = storageMode
         self.saveFolderBookmark = saveFolderBookmark
@@ -170,6 +179,8 @@ public struct AppSettings: Codable, Sendable {
         self.localTelemetryEnabled = localTelemetryEnabled
         self.openPopoverOnCapture = openPopoverOnCapture
         self.windowCaptureAsTable = windowCaptureAsTable
+        self.lastUpdateCheckAt = lastUpdateCheckAt
+        self.fontScale = fontScale
         self.customHotkeyKeyCode = customHotkeyKeyCode
         self.customHotkeyModifiers = customHotkeyModifiers
         self.customHotkeyLabel = customHotkeyLabel
@@ -196,11 +207,7 @@ extension AppSettings {
     public var resolvedHotkeyLabel: String {
         customHotkeyLabel ?? Self.defaultHotkeyLabel
     }
-    public var hotkeyIsCustom: Bool {
-        customHotkeyKeyCode != nil
-            || customHotkeyModifiers != nil
-            || customHotkeyLabel != nil
-    }
+}
 
 // MARK: - Sensible defaults
 

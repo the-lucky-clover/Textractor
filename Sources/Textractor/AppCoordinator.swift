@@ -146,8 +146,17 @@ public final class AppCoordinator: ObservableObject {
 
         // OCR
         appState.pipelinePhase = .ocr
+        let cgImage: CGImage
+        do {
+            cgImage = try loadCGImage(from: capture.fileURL)
+        } catch {
+            // Don't silently OCR an empty placeholder and report success —
+            // surface the load failure so the user sees a real error.
+            handleFailure(error: error, context: "loadImage")
+            return
+        }
         let ocr = await OCRService.shared.recognizeText(
-            in: (try? loadCGImage(from: capture.fileURL)) ?? emptyCGImage,
+            in: cgImage,
             weirdness: weirdness,
             customVocabulary: vocab
         )
@@ -192,7 +201,9 @@ public final class AppCoordinator: ObservableObject {
 
         // Clipboard
         appState.pipelinePhase = .clipboard
+        LoggerService.shared.debug("Copying to clipboard: \(finalText.prefix(100))…")
         let ok = ClipboardService.shared.copy(finalText, attributed: attributed, plainTextOnly: pasteAsPlainText)
+        LoggerService.shared.debug("Clipboard copy result: \(ok)")
         SoundManager.playCaptureComplete()
         if ok, appState.settings.autoPasteEnabled {
             _ = ClipboardService.shared.autoPasteIntoFrontmostApp()
@@ -226,11 +237,9 @@ public final class AppCoordinator: ObservableObject {
 
         // Now govern storage.
         if let request = storageRequest {
-            // Wait for user click (with 8s default = delete).
-            let decision = await firstOf(
-                await request.await(),
-                timeoutSeconds: 8.0
-            ) ?? .delete
+            // Wait for the user's click, defaulting to delete after 8s so a
+            // temp screenshot is never left behind if the toast is ignored.
+            let decision = await resolveStorageDecision(for: request, timeoutSeconds: 8.0)
             applyStorageDecision(decision, for: capture)
         } else {
             // Apply non-ask modes immediately.
@@ -333,6 +342,10 @@ public final class AppCoordinator: ObservableObject {
         LoggerService.shared.info("Showing credits modal")
     }
 
+    public func showHistoryWindow() {
+        HistoryWindowController.shared.show()
+    }
+
     public func quitApp() {
         TelemetryService.shared.record(
             TelemetryEvent(kind: .sessionEnd),
@@ -347,7 +360,7 @@ public final class AppCoordinator: ObservableObject {
         guard let screen = NSScreen.main else { return }
 
         let view = CaptureOverlayView(
-            screen: screen,
+            frame: screen.frame,
             initialMode: initialMode,
             onRegionCaptured: { [weak self] rect in
                 self?.dismissCaptureOverlay()
@@ -432,38 +445,36 @@ public final class AppCoordinator: ObservableObject {
         return img
     }
 
-    /// Diagnostic-only empty 1×1 image used as a fallback so async callers don't blow up.
-    private var emptyCGImage: CGImage {
-        let provider = CGDataProvider(data: Data([0, 0, 0, 0]) as CFData)!
-        return CGImage(
-            width: 1, height: 1,
-            bitsPerComponent: 8, bitsPerPixel: 32,
-            bytesPerRow: 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-            provider: provider, decode: nil,
-            shouldInterpolate: false, intent: .defaultIntent
-        )!
-    }
-
-    /// Race two events: an async value or a timeout. Returns the value if it
-    /// comes in time, otherwise `nil`.
-    private func firstOf<T: Sendable>(
-        _ a: T,
+    /// Await the user's storage decision, defaulting to `.delete` after
+    /// `timeoutSeconds`. This genuinely races the user's click against a
+    /// timeout — the previous `firstOf(await request.await(), …)` form
+    /// evaluated the await *before* the race, so the timeout never applied and
+    /// an ignored toast left the pipeline hung with an un-cleaned temp file.
+    ///
+    /// On timeout the still-pending request is cancelled so its continuation is
+    /// resumed (no leak) before we fall back to `.delete`.
+    private func resolveStorageDecision(
+        for request: StorageDecisionRequest,
         timeoutSeconds: Double
-    ) async -> T? {
-        return await withTaskGroup(of: T?.self) { group in
+    ) async -> StorageDecision {
+        await withTaskGroup(of: StorageDecision?.self) { group in
+            group.addTask { await request.await() }
             group.addTask {
                 try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
                 return nil
             }
-            group.addTask {
-                _ = a
-                return a
-            }
-            let first = await group.next() ?? nil
+            let winner = await group.next() ?? nil
             group.cancelAll()
-            return first
+            if let winner {
+                return winner
+            }
+            // Timeout won: resume the suspended continuation (Task cancellation
+            // alone won't, since CheckedContinuation isn't cancellation-aware)
+            // so the awaiting child finishes and nothing leaks.
+            if !request.isResolved {
+                StorageService.shared.cancelPending(requestID: request.id, with: .delete)
+            }
+            return .delete
         }
     }
 

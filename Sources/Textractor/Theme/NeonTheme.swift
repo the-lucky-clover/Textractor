@@ -62,6 +62,37 @@ public enum NeonPalette {
     )
 }
 
+// MARK: - BreakingDad Palette
+// Toxic lab green, blue-crystal, and hazmat yellow on greenish-black. Used for
+// the capture overlay (window highlight glow, accents).
+
+public enum BreakingDad {
+    /// Signature chemistry / toxic lab green.
+    public static let toxicGreen    = Color(red: 0.42, green: 0.71, blue: 0.20) // #6BB534
+    /// Deeper money/lab green for fills and shadows.
+    public static let deepGreen     = Color(red: 0.18, green: 0.36, blue: 0.11) // #2E5C1C
+    /// Blue-crystal (the famous product) — cool cyan-blue accent.
+    public static let methBlue      = Color(red: 0.16, green: 0.67, blue: 0.88) // #29ABE0
+    /// Hazmat suit yellow.
+    public static let hazmatYellow  = Color(red: 0.96, green: 0.78, blue: 0.08) // #F5C714
+    /// Caution / barrel orange.
+    public static let cautionOrange = Color(red: 0.90, green: 0.45, blue: 0.13) // #E67321
+    /// Danger rust red.
+    public static let rust          = Color(red: 0.72, green: 0.16, blue: 0.12) // #B8291F
+    /// Off-white chalk for faint outlines / neutral ink.
+    public static let chalk         = Color(red: 0.90, green: 0.92, blue: 0.86) // #E6EADC
+    /// Greenish near-black backdrop.
+    public static let greenBlack    = Color(red: 0.043, green: 0.063, blue: 0.039) // #0B100A
+
+    /// Toxic-green → hazmat-yellow sweep for accented borders.
+    public static let gradient = LinearGradient(
+        gradient: Gradient(colors: [toxicGreen, hazmatYellow]),
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+}
+
+
 // MARK: - Gradients as ShapeStyles (for SwiftUI `foregroundStyle` etc)
 public struct NeonGradientStyle: ViewModifier {
     public init() {}

@@ -28,7 +28,7 @@ public final class HotkeyManager {
 
     /// Register with the default ⌘⇧2 binding.
     public func register() {
-        register(
+        _ = register(
             keyCode: AppSettings.defaultHotkeyKeyCode,
             modifiers: AppSettings.defaultHotkeyModifiers,
             label: AppSettings.defaultHotkeyLabel
@@ -59,7 +59,7 @@ public final class HotkeyManager {
             &handlerRef
         )
 
-        var hotKeyID = EventHotKeyID(signature: signature, id: hotKeyIDValue)
+        let hotKeyID = EventHotKeyID(signature: signature, id: hotKeyIDValue)
 
         // Probe: try a transient registration with a throwaway ID to detect
         // conflicts without affecting our true hot key ref. If Carbon rejects
@@ -114,7 +114,7 @@ public final class HotkeyManager {
         if conflict {
             return "“\(label)” is in use by another app or by macOS itself."
         }
-        switch status {
+        switch Int(status) {
         case -9878:  // eventInternalErr / paramErr on bad key code
             return "“\(label)” isn't a valid key combination."
         case paramErr:  // -50
@@ -156,58 +156,40 @@ public final class HotkeyManager {
     }
 
     private static func keyCodeLabel(_ keyCode: Int) -> String {
-        // Subset mirroring common Carbon→displayable labels.
-        switch Int32(keyCode) {
-        case kVK_ANSI_A: return "A"
-        case kVK_ANSI_B: return "B"
-        case kVK_ANSI_C: return "C"
-        case kVK_ANSI_D: return "D"
-        case kVK_ANSI_E: return "E"
-        case kVK_ANSI_F: return "F"
-        case kVK_ANSI_G: return "G"
-        case kVK_ANSI_H: return "H"
-        case kVK_ANSI_I: return "I"
-        case kVK_ANSI_J: return "J"
-        case kVK_ANSI_K: return "K"
-        case kVK_ANSI_L: return "L"
-        case kVK_ANSI_M: return "M"
-        case kVK_ANSI_N: return "N"
-        case kVK_ANSI_O: return "O"
-        case kVK_ANSI_P: return "P"
-        case kVK_ANSI_Q: return "Q"
-        case kVK_ANSI_R: return "R"
-        case kVK_ANSI_S: return "S"
-        case kVK_ANSI_T: return "T"
-        case kVK_ANSI_U: return "U"
-        case kVK_ANSI_V: return "V"
-        case kVK_ANSI_W: return "W"
-        case kVK_ANSI_X: return "X"
-        case kVK_ANSI_Y: return "Y"
-        case kVK_ANSI_Z: return "Z"
-        case kVK_ANSI_0: return "0"
-        case kVK_ANSI_1: return "1"
-        case kVK_ANSI_2: return "2"
-        case kVK_ANSI_3: return "3"
-        case kVK_ANSI_4: return "4"
-        case kVK_ANSI_5: return "5"
-        case kVK_ANSI_6: return "6"
-        case kVK_ANSI_7: return "7"
-        case kVK_ANSI_8: return "8"
-        case kVK_ANSI_9: return "9"
-        case kVK_Space:       return "Space"
-        case kVK_Return:      return "↩"
-        case kVK_Tab:         return "⇥"
-        case kVK_Escape:      return "⎋"
-        case kVK_Delete:      return "⌫"
-        case kVK_LeftArrow:   return "←"
-        case kVK_RightArrow:  return "→"
-        case kVK_UpArrow:     return "↑"
-        case kVK_DownArrow:   return "↓"
-        case kVK_F1 ... kVK_F12:
-            return "F\(keyCode - Int(kVK_F1) + 1)"
-        default:
-            return "Key \(keyCode)"
+        // Subset mirroring common Carbon→displayable labels. We flatten the
+        // switch over a typed `Int` so we don't fight the bridging types of
+        // `kVK_*` constants (which come in as `Int32` from Carbon.HIToolbox).
+        let map: [Int: String] = [
+            Int(kVK_ANSI_A): "A",  Int(kVK_ANSI_B): "B",  Int(kVK_ANSI_C): "C",
+            Int(kVK_ANSI_D): "D",  Int(kVK_ANSI_E): "E",  Int(kVK_ANSI_F): "F",
+            Int(kVK_ANSI_G): "G",  Int(kVK_ANSI_H): "H",  Int(kVK_ANSI_I): "I",
+            Int(kVK_ANSI_J): "J",  Int(kVK_ANSI_K): "K",  Int(kVK_ANSI_L): "L",
+            Int(kVK_ANSI_M): "M",  Int(kVK_ANSI_N): "N",  Int(kVK_ANSI_O): "O",
+            Int(kVK_ANSI_P): "P",  Int(kVK_ANSI_Q): "Q",  Int(kVK_ANSI_R): "R",
+            Int(kVK_ANSI_S): "S",  Int(kVK_ANSI_T): "T",  Int(kVK_ANSI_U): "U",
+            Int(kVK_ANSI_V): "V",  Int(kVK_ANSI_W): "W",  Int(kVK_ANSI_X): "X",
+            Int(kVK_ANSI_Y): "Y",  Int(kVK_ANSI_Z): "Z",
+            Int(kVK_ANSI_0): "0",  Int(kVK_ANSI_1): "1",  Int(kVK_ANSI_2): "2",
+            Int(kVK_ANSI_3): "3",  Int(kVK_ANSI_4): "4",  Int(kVK_ANSI_5): "5",
+            Int(kVK_ANSI_6): "6",  Int(kVK_ANSI_7): "7",  Int(kVK_ANSI_8): "8",
+            Int(kVK_ANSI_9): "9",
+            Int(kVK_Space):       "Space",
+            Int(kVK_Return):      "↩",
+            Int(kVK_Tab):         "⇥",
+            Int(kVK_Escape):      "⎋",
+            Int(kVK_Delete):      "⌫",
+            Int(kVK_LeftArrow):   "←",
+            Int(kVK_RightArrow):  "→",
+            Int(kVK_UpArrow):     "↑",
+            Int(kVK_DownArrow):   "↓"
+        ]
+        if let label = map[keyCode] { return label }
+        let f1 = Int(kVK_F1)
+        let f12 = Int(kVK_F12)
+        if keyCode >= f1 && keyCode <= f12 {
+            return "F\(keyCode - f1 + 1)"
         }
+        return "Key \(keyCode)"
     }
 
     // MARK: - Carbon callback (bridged via @_cdecl at file scope)

@@ -3,10 +3,6 @@ import Vision
 import CoreGraphics
 import CoreImage
 
-// `CGImage` is internally thread-safe but doesn't conform to `Sendable`. We need
-// it across an async/await boundary here, so we declare it @unchecked Sendable.
-extension CGImage: @unchecked Sendable {}
-
 /// On-device OCR using Apple's Vision framework. Privacy-first — Vision never
 /// transmits anything off-device.
 public final class OCRService {
@@ -21,7 +17,8 @@ public final class OCRService {
     public func recognizeText(
         in cgImage: CGImage,
         weirdness: Double = 0.45,
-        customVocabulary: [String] = []
+        customVocabulary: [String] = [],
+        telemetryEnabled: Bool = true
     ) async -> OCRResult {
         let started = Date()
         let normalized = max(0.0, min(1.0, weirdness))
@@ -46,7 +43,7 @@ public final class OCRService {
         if observations.isEmpty {
             TelemetryService.shared.record(
                 TelemetryEvent(kind: .ocrRetry, success: false, meta: ["reason": "empty-accurate"]),
-                telemetryEnabled: true
+                telemetryEnabled: telemetryEnabled
             )
             observations = await Task.detached(priority: .userInitiated) {
                 Self.runSync(
@@ -80,7 +77,7 @@ public final class OCRService {
         if observations.isEmpty && !customVocabulary.isEmpty {
             TelemetryService.shared.record(
                 TelemetryEvent(kind: .ocrRetry, success: false, meta: ["reason": "vocab-fallback"]),
-                telemetryEnabled: true
+                telemetryEnabled: telemetryEnabled
             )
             observations = await Task.detached(priority: .userInitiated) {
                 Self.runSync(
@@ -112,7 +109,7 @@ public final class OCRService {
                     "attempts": "\(revisionsUsed.count)"
                 ]
             ),
-            telemetryEnabled: true
+            telemetryEnabled: telemetryEnabled
         )
 
         return result

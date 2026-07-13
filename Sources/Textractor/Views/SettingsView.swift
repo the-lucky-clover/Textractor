@@ -19,7 +19,7 @@ public struct SettingsView: View {
                 .ignoresSafeArea()
                 .overlay(NeonPalette.scanlines)
             ScrollView {
-                VStack(spacing: 18) {
+                VStack(spacing: 12) {
                     header
                     captureSection
                     aiSection
@@ -29,11 +29,11 @@ public struct SettingsView: View {
                     creditsSection
                     footer
                 }
-                .padding(20)
-                .frame(maxWidth: 540)
+                .padding(16)
+                .frame(maxWidth: 560)
             }
         }
-        .frame(width: 580, height: 740)
+        .frame(width: 600, height: 740)
         .onAppear {
             aiVocabText = appState.settings.customVocabulary.joined(separator: ", ")
         }
@@ -112,7 +112,7 @@ public struct SettingsView: View {
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder private var folderRow: some View {
+    private var folderRow: some View {
         let path = appState.settings.saveFolderPath ?? AppSettings.defaultSaveFolder().path
         return HStack {
             Image(systemName: "folder.fill")

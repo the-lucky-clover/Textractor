@@ -125,7 +125,7 @@ public final class AIInferenceService {
                     "sentiment": sentiment.rawValue
                 ]
             ),
-            telemetryEnabled: true
+            telemetryEnabled: TelemetryService.shared.isEnabled
         )
 
         return analysis
@@ -147,16 +147,20 @@ public final class AIInferenceService {
         s = s.replacingOccurrences(of: "\t", with: " ")
 
         if weirdness < 0.05 {
-            // Strict mode: only collapse 3+ consecutive blanks.
-            s = collapseRepeats(s, runs: ["  ": 2, "\n\n\n": 2])
+            // Strict mode: only collapse 3+ consecutive blanks (no smart-quote
+            // rewriting, no aggressive space flattening).
+            s = collapseRuns(of: "\n\n\n", to: "\n\n", in: s)
             return s.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        // Smart-quote normalisation (always helpful on OCR text).
-        s = s.replacingOccurrences(of: "“", with: "\u{201C}")
-        s = s.replacingOccurrences(of: "”", with: "\u{201D}")
-        s = s.replacingOccurrences(of: "‘", with: "\u{2018}")
-        s = s.replacingOccurrences(of: "’", with: "\u{2019}")
+        // Smart-quote normalisation (always helpful on OCR text) — convert
+        // curly quotes down to ASCII so downstream paste targets see stable
+        // straight quotes. The earlier implementation no-op'd because it
+        // replaced each glyph with itself.
+        s = s.replacingOccurrences(of: "\u{201C}", with: "\"") // “
+        s = s.replacingOccurrences(of: "\u{201D}", with: "\"") // ”
+        s = s.replacingOccurrences(of: "\u{2018}", with: "'")  // ‘
+        s = s.replacingOccurrences(of: "\u{2019}", with: "'")  // ’
 
         // Strip non-printables except newlines
         s = s.unicodeScalars
@@ -164,8 +168,12 @@ public final class AIInferenceService {
             .map { Character($0) }
             .reduce(into: "", { $0.append($1) })
 
-        // Collapse runs of spaces & blank lines.
-        s = collapseRepeats(s, runs: ["   ": 2, "  ": 1, "\n\n\n": 1, "\n\n": 1])
+        // Collapse runs of spaces & blank lines with explicit regexes — easier
+        // to reason about than the old doubled-token loop.
+        s = collapseRuns(of: "   ", to: "  ",   in: s)
+        s = collapseRuns(of: "  ",  to: " ",    in: s)
+        s = collapseRuns(of: "\n\n\n", to: "\n\n", in: s)
+        s = collapseRuns(of: "\n\n",   to: "\n",  in: s)
 
         if weirdness >= 0.5 {
             // Dehyphenate words split across lines ("extracted-\nword" → "extractedword")
@@ -190,14 +198,16 @@ public final class AIInferenceService {
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func collapseRepeats(_ s: String, runs: [String: Int]) -> String {
-        var out = s
-        for (token, maxRun) in runs {
-            var pattern = token
-            for _ in 0..<maxRun { pattern.append(token) }
-            out = out.replacingOccurrences(of: pattern, with: token, options: .regularExpression)
-        }
-        return out
+    /// Replace any run of `repeating` (two or more copies) with a single
+    /// occurrence of `replacement`. Constant pattern, hot path: cache the regex.
+    private static func collapseRuns(of repeating: String, to replacement: String, in text: String) -> String {
+        guard repeating.count >= 1 else { return text }
+        // Build the "two or more" pattern: (repeating){2,}
+        let escaped = NSRegularExpression.escapedPattern(for: repeating)
+        let pattern = "(?:\(escaped)){2,}"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)
     }
 
     // MARK: - Sentiment

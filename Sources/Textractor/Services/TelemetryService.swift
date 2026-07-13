@@ -7,6 +7,13 @@ public final class TelemetryService {
     public static let shared = TelemetryService()
 
     public let fileURL: URL
+
+    /// Single source of truth for the user's opt-in, mirrored from
+    /// `AppSettings.localTelemetryEnabled` by `SettingsStore`. Low-level
+    /// services read this instead of hardcoding `true`, so disabling telemetry
+    /// in Settings actually stops all local logging.
+    public var isEnabled: Bool = true
+
     private let writeQueue = DispatchQueue(label: "com.textractor.telemetry", qos: .utility)
     private let dateFormatter: ISO8601DateFormatter
     private let encoder: JSONEncoder

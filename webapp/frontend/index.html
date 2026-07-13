@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Textractor – OCR Across Multiple Displays</title>
+    <script src="https://cdn.tailwindcss.com</script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        // BreakingDad Palette - Toxic lab aesthetic
+                        toxicGreen: '#6BB534',      // Signature chemistry green
+                        deepGreen: '#2E5C1C',       // Deeper money/lab green
+                        methBlue: '#29ABE0',        // Blue-crystal product
+                        hazmatYellow: '#F5C714',    // Hazmat suit yellow
+                        cautionOrange: '#E67321',   // Caution/barrel orange
+                        rust: '#B8291F',            // Danger rust red
+                        chalk: '#E6EADC',           // Off-white chalk
+                        greenBlack: '#0B100A',      // Greenish near-black backdrop
+                        
+                        // Legacy names for backward compatibility in templates
+                        primary: '#29ABE0',         // methBlue as primary
+                        secondary: '#6BB534',       // toxicGreen as secondary
+                        accent: '#F5C714',          // hazmatYellow as accent
+                        dark: '#0B100A',            // greenBlack
+                        light: '#E6EADC'            // chalk
+                    }
+                }
+            }
+        }
+   </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-greenBlack text-light font-sans">
+    <header class="container mx-auto px-4 py-6 flex items-center justify-between border-b border-chalk/20">
+        <span class="text-xl font-bold tracking-tight text-toxicGreen">Textractor</span>
+        <nav class="text-sm space-x-4">
+            <a href="#pricing" class="hover:text-methBlue">Pricing</a>
+            <a href="/api/health" class="hover:text-methBlue">Status</a>
+       </nav>
+   </header>
+
+    <section class="relative min-h-[70vh] bg-gradient-to-br from-greenBlack via-methBlue to-hazmatYellow">
+        <div class="container mx-auto px-4 py-20 flex flex-col lg:flex-row items-center justify-between">
+            <div class="lg:w-1/2 mb-10 lg:mb-0">
+                <h1 class="text-4xl lg:text-6xl font-bold mb-6 leading-tight text-methBlue">
+                    Extract Text From <span class="text-toxicGreen">Any Display</span> Instantly
+               </h1>
+                <p class="text-lg mb-8 text-chalk">
+                    Capture text from your MacBook screen, external monitors, or even your TV.
+                    Textractor's advanced OCR works across multiple displays simultaneously.
+               </p>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <a href="#pricing" class="bg-toxicGreen hover:bg-methBlue text-white font-bold px-8 py-4 rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg text-center">
+                        Start Free Trial
+                   </a>
+                    <a href="#download" class="border border-chalk/30 hover:border-methBlue text-white font-medium px-8 py-4 rounded-lg text-lg text-center">
+                        Download for macOS
+                   </a>
+               </div>
+                <p class="mt-6 text-sm text-chalk/60">
+                    Or grab the installer directly from the repo: <code class="text-toxicGreen">./build.sh</code>.
+               </p>
+           </div>
+            <div class="lg:w-1/2">
+                <div class="bg-greenBlack/60 rounded-2xl p-6 border border-chalk/10 shadow-2xl">
+                    <pre class="text-sm text-chalk/80 whitespace-pre-wrap leading-relaxed">⌘⇧ 2   Capture a region
+SPACE   Switch region / window
+ESC     Cancel
+
+Extracted text is on your clipboard, ready to paste</pre>
+               </div>
+           </div>
+       </div>
+   </section>
+
+    <section id="pricing" class="container mx-auto px-4 py-20">
+        <h2 class="text-3xl font-bold text-center mb-12 text-methBlue">Pricing</h2>
+        <div class="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+            <div class="rounded-2xl p-8 border border-chalk/10 bg-greenBlack/50">
+                <h3 class="text-xl font-semibold mb-2 text-methBlue">Free</h3>
+                <p class="text-4xl font-bold mb-4 text-methBlue">$0<span class="text-base text-chalk/60">/month</span</p>
+                <ul class="space-y-2 text-chalk/80">
+                    <li>100 cloud OCR requests / month</li>
+                    <li>1 active display</li>
+                    <li>Community support</li>
+               </ul>
+           </div>
+            <div class="rounded-2xl p-8 border border-toxicGreen/50 bg-greenBlack/70">
+                <h3 class="text-xl font-semibold mb-2 text-toxicGreen">Pro</h3>
+                <p class="text-4xl font-bold mb-4 text-toxicGreen">$9<span class="text-base text-chalk/60">/month</span</p>
+                <ul class="space-y-2 text-chalk/80">
+                    <li>Unlimited cloud OCR requests</li>
+                    <li>All connected displays</li>
+                    <li>Priority support</li>
+               </ul>
+           </div>
+       </div>
+   </section>
+
+    <section id="download" class="container mx-auto px-4 py-20 text-center">
+        <h2 class="text-3xl font-bold mb-6 text-methBlue">Install the macOS app</h2>
+        <p class="text-chalk/70 mb-8 max-w-xl mx-auto">
+            Textractor is open-source and on-device by default. The cloud tier shown above is here for
+            users who want to offload heavy OCR to our Workers AI endpoint.
+       </p>
+        <a href="https://github.com" class="bg-toxicGreen hover:bg-methBlue text-white font-bold px-8 py-4 rounded-lg text-lg shadow-lg inline-block">
+            Get Textractor
+       </a>
+   </section>
+
+    <footer class="border-t border-chalk/10 py-8 text-center text-sm text-chalk/50">
+        &copy; 2026 Textractor. Privacy-first, on-device text extraction on macOS.
+   </footer>
+</body>
+</html>

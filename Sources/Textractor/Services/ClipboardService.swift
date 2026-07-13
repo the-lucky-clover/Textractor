@@ -1,8 +1,9 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Writes extracted text to the pasteboard, optionally with rich-text formatting
-/// and synthesizes ⌘V into the frontmost app for one-tap paste.
+/// Writes extracted text to the pasteboard, optionally with rich-text
+/// formatting. Can also synthesise ⌘V to auto-paste into the frontmost app when
+/// the user opts in.
 public final class ClipboardService {
 
     public static let shared = ClipboardService()
@@ -12,8 +13,8 @@ public final class ClipboardService {
     // MARK: - Plain & rich
 
     /// Writes `text` to the general pasteboard. If `attributed` is provided,
-    /// it is additionally written as both `.rtf` and `.rtfd`, so apps that honour
-    /// styled pasteboard receive the typography-rich version.
+    /// it is additionally written as `.rtf` so apps that honour styled
+    /// pasteboards receive the typography-rich version.
     /// Pass `plainTextOnly: true` to skip the rich-text path entirely.
     @discardableResult
     public func copy(
@@ -25,11 +26,11 @@ public final class ClipboardService {
         let pb = NSPasteboard.general
         pb.clearContents()
 
-        var success = pb.setString(text, forType: .string)
+        let success = pb.setString(text, forType: .string)
         guard success else {
             TelemetryService.shared.record(
                 TelemetryEvent(kind: .clipboardFailure, success: false, meta: ["stage": "setString"]),
-                telemetryEnabled: true
+                telemetryEnabled: TelemetryService.shared.isEnabled
             )
             return false
         }
@@ -60,43 +61,60 @@ public final class ClipboardService {
                     "rich": attributed != nil ? "1" : "0"
                 ]
             ),
-            telemetryEnabled: true
+            telemetryEnabled: TelemetryService.shared.isEnabled
         )
         return success
     }
 
-    // MARK: - Auto-paste ⌘V
+    // MARK: - Snapshot
 
-    /// Synthesises ⌘V into the frontmost app using CoreGraphics events.
-    /// Requires "Accessibility" permission, which the user grants in
-    /// System Settings → Privacy & Security → Accessibility.
+    /// Snapshot the previous pasteboard (used for restore-on-confirm flows).
+    public func snapshot() -> [NSPasteboardItem] {
+        let pb = NSPasteboard.general
+        return pb.pasteboardItems ?? []
+    }
+
+    // MARK: - Auto-paste
+
+    /// Synthesise ⌘V into the frontmost app's key window to paste whatever is on the
+    /// general pasteboard. Convenience wrapper around `synthesizePaste()`.
+    /// Returns `true` if the keystroke was dispatched, `false` if accessibility is
+    /// not granted or the frontmost app can't accept input.
+    @discardableResult
     public func autoPasteIntoFrontmostApp() -> Bool {
-        let vKey: CGKeyCode = CGKeyCode(kVK_ANSI_V)
-        let flags: CGEventFlags = .maskCommand
-
-        guard
-            let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: vKey, keyDown: true),
-            let keyUp   = CGEvent(keyboardEventSource: nil, virtualKey: vKey, keyDown: false)
-        else {
+        guard AXIsProcessTrusted() else {
+            LoggerService.shared.warning("Auto-paste skipped — Accessibility permission not granted")
             return false
         }
-        keyDown.flags = flags
-        keyUp.flags = flags
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
-        // Tiny pause between events; production code would use Task.sleep
-        Thread.sleep(forTimeInterval: 0.04)
+        guard let frontmost = NSWorkspace.shared.frontmostApplication,
+              frontmost.bundleIdentifier != Bundle.main.bundleIdentifier else {
+            return false
+        }
+        synthesizePaste()
         return true
     }
 
-    // MARK: - Snapshot the previous clipboard before overwriting (so we can restore)
-
-    public func snapshot() -> [NSPasteboardItem] {
-        let pb = NSPasteboard.general
-        var snapshot: [NSPasteboardItem] = []
-        for item in pb.pasteboardItems ?? [] {
-            snapshot.append(item)
+    /// Synthesise a ⌘V keystroke into whatever app is now frontmost, so the
+    /// freshly-copied text pastes automatically. Requires Accessibility
+    /// permission; silently no-ops if it isn't granted. Posted after a short
+    /// delay so the previously-active app has time to regain focus once our
+    /// capture overlay / popover has dismissed.
+    public func synthesizePaste() {
+        guard AXIsProcessTrusted() else {
+            LoggerService.shared.warning("Auto-paste skipped — Accessibility permission not granted")
+            return
         }
-        return snapshot
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            let source = CGEventSource(stateID: .combinedSessionState)
+            let vKey = CGKeyCode(kVK_ANSI_V)
+            guard
+                let down = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true),
+                let up = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false)
+            else { return }
+            down.flags = .maskCommand
+            up.flags = .maskCommand
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
     }
 }

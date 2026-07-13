@@ -97,11 +97,11 @@ enum ExtractionStatus: String, Codable {
 
     var color: Color {
         switch self {
-        case .success:  return .neonCyan
-        case .partial:  return .neonAmber
-        case .failed:   return .neonRed
-        case .empty:    return .neonGray
-        case .healed:   return .neonMagenta
+        case .success:  return BreakingDad.toxicGreen
+        case .partial:  return BreakingDad.hazmatYellow
+        case .failed:   return BreakingDad.rust
+        case .empty:    return BreakingDad.chalk.opacity(0.5)
+        case .healed:   return BreakingDad.methBlue
         }
     }
 }

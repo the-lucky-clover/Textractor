@@ -1,0 +1,16 @@
+{
+  "name": "textractor-webapp",
+  "version": "2.0.0",
+  "description": "Textractor webapp - multi-display OCR platform frontend",
+  "scripts": {
+    "dev": "wrangler pages dev frontend --port 8788",
+    "build": "echo 'No build step required - static site'",
+    "preview": "wrangler pages dev frontend --port 8788",
+    "deploy:frontend": "wrangler pages deploy frontend",
+    "deploy:backend": "cd backend && wrangler deploy",
+    "deploy": "npm run deploy:frontend && npm run deploy:backend"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

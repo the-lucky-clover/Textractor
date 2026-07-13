@@ -7,11 +7,9 @@ struct TextractorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var coordinator = AppCoordinator.shared
 
-    init() {
-        // Bootstrap services synchronously so the hotkey is registered and any
-        // persistent state is initialised before any UI appears.
-        AppCoordinator.shared.bootstrap()
-    }
+    // NOTE: Do NOT call `AppCoordinator.bootstrap()` here. It is invoked once
+    // from `AppDelegate.applicationDidFinishLaunching`. Calling it from both
+    // paths previously produced two menu-bar status items.
 
     var body: some Scene {
         // The menu-bar entry point is owned by `StatusBarController` (an

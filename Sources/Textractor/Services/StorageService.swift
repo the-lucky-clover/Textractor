@@ -82,8 +82,9 @@ public final class StorageService {
     }
 
     public func resolvePending(_ decision: StorageDecision, requestID: UUID) {
-        guard var request = pendingRequests[requestID] else { return }
+        guard let request = pendingRequests[requestID] else { return }
         request.continuation?.resume(returning: decision)
+        request.markResolved()
         pendingRequests.removeValue(forKey: requestID)
     }
 
@@ -110,6 +111,7 @@ public final class StorageDecisionRequest: @unchecked Sendable, Identifiable {
     public let capture: CapturedImage
     public let mode: StorageMode
     public var continuation: CheckedContinuation<StorageDecision, Never>?
+    public private(set) var isResolved: Bool = false
 
     init(id: UUID, capture: CapturedImage, mode: StorageMode) {
         self.id = id
@@ -128,5 +130,10 @@ public final class StorageDecisionRequest: @unchecked Sendable, Identifiable {
     @MainActor
     public func resolve(_ decision: StorageDecision) {
         StorageService.shared.resolvePending(decision, requestID: id)
+    }
+
+    /// Mark the request as resolved. Called by `StorageService.resolvePending`.
+    fileprivate func markResolved() {
+        isResolved = true
     }
 }

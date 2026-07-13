@@ -27,8 +27,12 @@ let package = Package(
                 .linkedFramework("NaturalLanguage"),
                 .linkedFramework("CoreImage"),
                 .linkedFramework("CoreGraphics"),
-                .linkedFramework("ScreenCaptureKit")
+                .linkedFramework("ScreenCaptureKit"),
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("QuartzCore")
             ]
         )
     ]
 )
+
+// Version: 2.0.0 - Release with multi-display OCR, Continuity Camera support, and webapp

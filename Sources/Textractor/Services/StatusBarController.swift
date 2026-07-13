@@ -35,8 +35,6 @@ final class StatusBarController: NSObject {
         button.imagePosition = .imageOnly
         button.target = self
         button.action = #selector(handleClick(_:))
-        // Right-click is delivered as a regular mouse-up; both kinds should
-        // open the same popover.
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
@@ -45,16 +43,44 @@ final class StatusBarController: NSObject {
         popover.behavior = .transient
         popover.animates = true
         let host = NSHostingController(rootView: AnyView(
-            LegacyMenuContentView(coordinator: coordinator)
+            MenuContentView(
+                appState: coordinator.appState,
+                onCaptureRegion: { [weak self] in
+                    self?.closePopover()
+                    coordinator.startCaptureRegion()
+                },
+                onCaptureWindow: { [weak self] in
+                    self?.closePopover()
+                    coordinator.startCaptureWindow()
+                },
+                onCaptureFullScreen: { [weak self] in
+                    self?.closePopover()
+                    coordinator.startCaptureFullScreen()
+                },
+                onOpenSettings: { [weak self] in
+                    self?.closePopover()
+                    coordinator.openSettings()
+                },
+                onShowHistory: { [weak self] in
+                    self?.closePopover()
+                    coordinator.showHistoryWindow()
+                },
+                onQuit: { [weak self] in
+                    self?.closePopover()
+                    coordinator.quitApp()
+                },
+                onClose: { [weak self] in
+                    self?.closePopover()
+                }
+            )
         ))
-        host.view.frame = NSRect(x: 0, y: 0, width: 280, height: 1)
+        // Don't force a fixed height — let the hosting controller size the
+        // popover to the SwiftUI content so the whole menu fits with no scroll.
         popover.contentViewController = host
     }
 
     // MARK: - Click handling
 
-    /// Both left-click and right-click open the same legacy-styled popover —
-    /// the user prefers a single opening gesture.
     @objc private func handleClick(_ sender: AnyObject) {
         togglePopover()
     }
@@ -65,6 +91,12 @@ final class StatusBarController: NSObject {
             popover.performClose(nil)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
+
+    func closePopover() {
+        if popover.isShown {
+            popover.performClose(nil)
         }
     }
 }

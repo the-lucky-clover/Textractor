@@ -93,7 +93,7 @@ public final class ShareService {
     private func record(_ kind: TelemetryEvent.Kind, success: Bool) {
         TelemetryService.shared.record(
             TelemetryEvent(kind: kind, success: success),
-            telemetryEnabled: true
+            telemetryEnabled: TelemetryService.shared.isEnabled
         )
     }
 }

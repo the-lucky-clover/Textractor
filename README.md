@@ -95,40 +95,86 @@ Without these, OCR returns empty and the toast surfaces a "Permissions" card.
 
 ```
 Sources/Textractor/
-├── Resources/Info.plist
-├── Theme/
-│   ├── NeonTheme.swift           # color, gradient, motion tokens
-│   └── BeakerIcon.swift          # vector beaker + floating "T·X·T"
+├── AppCoordinator.swift           # pipeline, hotkey bridge, storage flow
+├── AppDelegate.swift              # LSUIElement runtime policy
+├── TextractorApp.swift            # @main, Settings scene host
 ├── Models/
+│   ├── AppSettings.swift          # persisted settings + migration decoder
+│   ├── AppState.swift             # @Published state, ToastState, StorageDecision
 │   ├── CaptureMode.swift
 │   ├── CapturedImage.swift
-│   ├── OCRResult.swift
+│   ├── CaptureMode.swift
+│   ├── ExtractionRecord.swift
+│   ├── HistoryRecord.swift
+│   ├── OCRResult.swift            # TextObservation + joined text
 │   ├── TelemetryEvent.swift
-│   ├── AppSettings.swift
-│   └── AppState.swift            # @Published state, ToastState, StorageDecision
+│   └── TextractorError.swift
 ├── Services/
-│   ├── LoggerService.swift
-│   ├── TelemetryService.swift
-│   ├── SettingsStore.swift
-│   ├── HotkeyManager.swift       # Carbon RegisterEventHotKey ⌘⇧2
-│   ├── ScreenshotService.swift   # region / window / fullscreen / file
-│   ├── OCRService.swift          # Vision + self-healing retries
-│   ├── AIInferenceService.swift  # NaturalLanguage sentiment + cleanup + keywords
-│   ├── TextFormatter.swift       # typography NSAttributedString
-│   ├── TableFormatter.swift      # OCR observations → Markdown table
-│   ├── ClipboardService.swift    # .string + .rtf + auto-⌘V
-│   ├── StorageService.swift      # save / trash / ask flow
-│   ├── ShareService.swift        # NSSharingService Mail/Message/AirDrop
-│   └── PermissionService.swift   # CGPreflight*, AXIsProcessTrusted
-├── Views/
-│   ├── CaptureOverlayView.swift  # full-screen crosshair + window picker
-│   ├── ClipboardToastView.swift  # animated neon toast, storage/share chips
-│   ├── CreditsModalView.swift    # skeuomorphic 3D popover → soundcloud
-│   ├── MenuContentView.swift     # the menubar popover
-│   └── SettingsView.swift        # full settings window
-├── TextractorApp.swift           # @main, MenuBarExtra, Settings scene
-├── AppCoordinator.swift          # pipeline, hotkey bridge, storage flow
-└── AppDelegate.swift             # LSUIElement runtime policy
+│   ├── AIInferenceService.swift   # NaturalLanguage sentiment + cleanup + keywords
+│   ├── ClipboardService.swift     # .string + .rtf + auto-⌘V
+│   ├── HistoryStore.swift
+│   ├── HistoryWindowController.swift
+│   ├── HotkeyManager.swift        # Carbon RegisterEventHotKey ⌘⇧2
+│   ├── LoggerService.swift        # OSLog wrapper
+│   ├── OCRService.swift           # Vision + self-healing retries
+│   ├── OnboardingState.swift
+│   ├── PasteFormatter.swift       # layout + cleanup transforms
+│   ├── PermissionService.swift    # CGPreflight*, AXIsProcessTrusted
+│   ├── ScreenshotService.swift    # region / window / fullscreen / file / video
+│   ├── SettingsStore.swift        # UserDefaults-backed, debounced writes
+│   ├── SettingsWindowController.swift
+│   ├── ShareService.swift         # NSSharingService Mail/Message/AirDrop
+│   ├── SoundManager.swift         # synthesized UI tones (gated by setting)
+│   ├── StatusBarController.swift  # NSStatusItem + popover
+│   ├── StorageService.swift       # save / trash / ask flow
+│   ├── TableFormatter.swift       # OCR observations → Markdown table
+│   ├── TelemetryService.swift     # local JSONL log
+│   ├── TextFormatter.swift        # typography NSAttributedString
+│   ├── ToastWindowController.swift
+│   └── UpdateService.swift        # local-only version check (no remote channel)
+├── Theme/
+│   ├── BeakerIcon.swift           # vector beaker + floating "T·X·T"
+│   └── NeonTheme.swift            # color, gradient, motion tokens
+└── Views/
+    ├── BannerView.swift           # wordmark banner + shimmer
+    ├── CaptureOverlayView.swift   # full-screen crosshair + window picker
+    ├── ClipboardToastView.swift   # animated toast, storage/share chips
+    ├── CreditsModalView.swift     # "Made with ❤️" modal → soundcloud
+    ├── HistoryView.swift          # screenshot thumbnails + extracted text
+    ├── MatrixRainView.swift
+    ├── MenuContentView.swift      # the menubar popover
+    ├── SplashScreen.swift
+    └── SettingsView.swift         # full settings window
+```
+
+---
+
+## 🌐 Companion webapp
+
+`webapp/` is an **optional, separate** companion (static landing page + Cloudflare
+Worker) for users who want to offload heavy OCR to the cloud. It is **not** part
+of the macOS `.app` binary — the app itself has no network code and never talks
+to the webapp.
+
+* `webapp/frontend/` — static HTML/Tailwind landing page (Cloudflare Pages).
+* `webapp/backend/` — Cloudflare Worker exposing `/api/ocr`, `/api/pricing`, and
+  `/health`.
+
+### Webapp security
+
+* `/api/ocr` requires a `Authorization: Bearer <API_TOKEN>` token (Workers AI
+  secret). Without `API_TOKEN` set, the endpoint rejects all requests (401).
+* CORS is restricted to `ALLOWED_ORIGINS` (comma-separated env var).
+* `/api/ocr` enforces a 10 MB request-body cap.
+* User-supplied `text` is wrapped as untrusted **data** before being sent to
+  Workers AI so it can't carry prompt-injection instructions.
+
+Deploy (from `webapp/`):
+
+```bash
+npm install
+npm run deploy:frontend     # wrangler pages deploy frontend
+cd backend && wrangler deploy && wrangler secret put API_TOKEN
 ```
 
 ---
@@ -169,13 +215,17 @@ Telemetry events fire at every step. No network is ever touched.
 
 * `LSUIElement` — no Dock icon, no app menu
 * `NSPrincipalClass` = `NSApplication`, single window
-* **Zero** network code in the entire binary
+* **Zero** network code in the macOS `.app` binary — it never opens a socket
 * All OCR → Apple's `Vision` (offline, on-device)
 * All NLP → Apple's `NaturalLanguage` (offline, on-device)
 * No third-party dependencies
 * Telemetry is JSONL to `~/Library/Application Support/Textractor/telemetry.jsonl`
   (Settings → Footer toggle to disable; "Made with ❤️ by Lucky Clover" credits link
   to https://soundcloud.com/lucky-clover)
+
+> Note: the optional `webapp/` companion (see "🌐 Companion webapp") is a
+> separate Cloudflare-hosted service and is **not** linked from the app. Using
+> it uploads images/text to Cloudflare Workers AI; it is entirely opt-in.
 
 ---
 

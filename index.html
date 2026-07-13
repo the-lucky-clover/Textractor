@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Textractor - AI-Powered OCR for Multiple Displays</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e40af',
+                        secondary: '#3b82f6',
+                        accent: '#06b6d4',
+                        dark: '#0f172a',
+                        light: '#f8fafc'
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-dark text-light font-sans">
+    <!-- Hero Section -->
+    <section class="relative min-h-screen bg-gradient-to-br from-dark via-primary to-secondary">
+        <div class="container mx-auto px-4 py-20">
+            <div class="flex flex-col lg:flex-row items-center justify-between">
+                <div class="lg:w-1/2 mb-10 lg:mb-0">
+                    <h1 class="text-4xl lg:text-6xl font-bold mb-6 leading-tight">
+                        Extract Text From <span class="text-accent">Any Display</span> Instantly
+                    </h1>
+                    <p class="text-lg mb-8 text-gray-200">
+                        Capture text from your MacBook screen, external monitors, or even your TV. 
+                        Textractor's advanced OCR works across multiple displays simultaneously.
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button onclick="subscribe()" class="bg-accent hover:bg-cyan-400 text-dark font-bold px-8 py-4 rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg">
+                            Start Free Trial
+                        </button>
+                        <button onclick="watchDemo()" class="border-2 border-light hover:bg-white hover:text-dark px-8 py-4 rounded-lg text-lg transition-all">
+                            Watch Demo <i class="fas fa-play ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="lg:w-1/2">
+                    <img src="https://placehold.co/600x400/0f172a/3b82f6?text=Textractor+App+Screenshot" 
+                         alt="Textractor App Interface" 
+                         class="rounded-xl shadow-2xl">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="py-20 bg-gray-900">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl lg:text-4xl font-bold text-center mb-16">Powerful Features</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="bg-gray-800 p-8 rounded-xl hover:transform hover:-translate-y-2 transition-all">
+                    <i class="fas fa-display text-4xl text-accent mb-4"></i>
+                    <h3 class="text-xl font-bold mb-4">Multi-Display Support</h3>
+                    <p class="text-gray-300">Capture text from MacBook Pro, external monitors, and TVs simultaneously.</p>
+                </div>
+                <div class="bg-gray-800 p-8 rounded-xl hover:transform hover:-translate-y-2 transition-all">
+                    <i class="fas fa-brain text-4xl text-accent mb-4"></i>
+                    <h3 class="text-xl font-bold mb-4">AI-Powered OCR</h3>
+                    <p class="text-gray-300">Advanced neural networks recognize text in any language, any font.</p>
+                </div>
+                <div class="bg-gray-800 p-8 rounded-xl hover:transform hover:-translate-y-2 transition-all">
+                    <i class="fas fa-bolt text-4xl text-accent mb-4"></i>
+                    <h3 class="text-xl font-bold mb-4">Instant Processing</h3>
+                    <p class="text-gray-300">Extract text in milliseconds with real-time preview.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="py-20 bg-gradient-to-br from-primary to-dark">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl lg:text-4xl font-bold text-center mb-16">Simple Pricing</h2>
+            <div class="max-w-4xl mx-auto">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Free Plan -->
+                    <div class="bg-gray-800 p-8 rounded-xl">
+                        <h3 class="text-2xl font-bold mb-4">Free</h3>
+                        <div class="text-4xl font-bold mb-6">$0<span class="text-lg">/month</span></div>
+                        <ul class="space-y-3 mb-8">
+                            <li class="flex items-center"><i class="fas fa-check text-accent mr-2"></i> 100 captures/month</li>
+                            <li class="flex items-center"><i class="fas fa-check text-accent mr-2"></i> Single display support</li>
+                            <li class="flex items-center"><i class="fas fa-check text-accent mr-2"></i> Basic OCR accuracy</li>
+                        </ul>
+                        <button onclick="getStarted()" class="w-full py-3 border-2 border-accent rounded-lg font-bold hover:bg-accent transition-all">
+                            Get Started
+                        </button>
+                    </div>
+                    
+                    <!-- Pro Plan -->
+                    <div class="bg-gradient-to-br from-accent to-secondary p-8 rounded-xl transform scale-105">
+                        <div class="absolute -top-4 right-8 bg-accent text-dark px-4 py-1 rounded-full text-sm font-bold">POPULAR</div>
+                        <h3 class="text-2xl font-bold mb-4">Pro</h3>
+                        <div class="text-4xl font-bold mb-6">$9<span class="text-lg">/month</span></div>
+                        <ul class="space-y-3 mb-8">
+                            <li class="flex items-center"><i class="fas fa-check text-dark mr-2"></i> <strong>Unlimited captures</strong></li>
+                            <li class="flex items-center"><i class="fas fa-check text-dark mr-2"></i> <strong>All display support</strong></li>
+                            <li class="flex items-center"><i class="fas fa-check text-dark mr-2"></i> <strong>Advanced AI OCR</strong></li>
+                            <li class="flex items-center"><i class="fas fa-check text-dark mr-2"></i> <strong>Priority support</strong></li>
+                        </ul>
+                        <button onclick="subscribe()" class="w-full py-3 bg-dark text-white rounded-lg font-bold hover:bg-gray-900 transition-all">
+                            Subscribe Now
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-20 bg-dark text-center">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl lg:text-4xl font-bold mb-8">Ready to Transform Your Workflow?</h2>
+            <p class="text-xl text-gray-300 mb-10 max-w-2xl mx-auto">
+                Join thousands of professionals who have already boosted their productivity with Textractor.
+            </p>
+            <button onclick="subscribe()" class="bg-accent hover:bg-cyan-400 text-dark font-bold px-12 py-5 rounded-lg text-xl transition-all transform hover:scale-105 shadow-2xl">
+                Start Your Free Trial Today
+            </button>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 py-8">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-gray-400">
+                &copy; 2026 Textractor. All rights reserved. 
+                <a href="#" class="text-accent hover:underline">Privacy Policy</a> | 
+                <a href="#" class="text-accent hover:underline">Terms of Service</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        function subscribe() {
+            window.location.href = 'https://buy.stripe.com/your-subscription-link';
+        }
+        
+        function getStarted() {
+            window.location.href = '/download';
+        }
+        
+        function watchDemo() {
+            // Open demo video
+            window.open('https://youtube.com/watch?v=your-demo-video', '_blank');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+name = "textractor-api"
+main = "src/index.js"
+compatibility_date = "2024-07-07"
+compatibility_flags = ["nodejs_compat"]
+
+# Required environment bindings:
+#   - AI               (Workers AI binding; managed by Cloudflare automatically)
+#   - API_TOKEN        (set via `wrangler secret put API_TOKEN`)
+# Optional:
+#   - ALLOWED_ORIGINS  (comma-separated list; "*" if empty)
+
+[observability]
+enabled = true

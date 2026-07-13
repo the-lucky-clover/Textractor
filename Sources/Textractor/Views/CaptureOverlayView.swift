@@ -15,7 +15,7 @@ public struct CaptureOverlayView: View {
     public typealias OnWindowCaptured = (CGWindowID) -> Void
     public typealias OnCancel = () -> Void
 
-    let screen: NSScreen
+    let frame: CGRect
     var initialMode: CaptureMode
     var onRegionCaptured: OnRegionCaptured
     var onWindowCaptured: OnWindowCaptured
@@ -29,15 +29,19 @@ public struct CaptureOverlayView: View {
     @State private var dragCurrent: CGPoint?
     @State private var hoveredWindow: WindowDescriptor?
     @State private var windows: [WindowDescriptor] = []
+    /// AR rule-of-thirds 3×3 grid overlay. Toggleable via the **G** key while
+    /// the capture overlay is on screen so users can frame the capture region
+    /// to thirds before pressing RETURN.
+    @State private var showsGrid: Bool = true
 
     public init(
-        screen: NSScreen,
+        frame: CGRect,
         initialMode: CaptureMode = .crosshair,
         onRegionCaptured: @escaping OnRegionCaptured,
         onWindowCaptured: @escaping OnWindowCaptured,
         onCancel: @escaping OnCancel
     ) {
-        self.screen = screen
+        self.frame = frame
         self.initialMode = initialMode
         self.onRegionCaptured = onRegionCaptured
         self.onWindowCaptured = onWindowCaptured
@@ -48,15 +52,16 @@ public struct CaptureOverlayView: View {
     // MARK: Geometry
 
     private let padding: CGFloat = 28
-    private let screenFrame: CGRect = NSScreen.main?.frame ?? .zero
 
     public var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
             ZStack {
-                // Inverse scrim - darkens the WHOLE screen, but we leave the
-                // captured selection bright via .blendMode(.difference).
-                Color.black.opacity(0.45)
+                // Lighter, more-transparent scrim — keeps the user's screen
+                // visible while the crosshair is active. 0.18 darkens just
+                // enough to highlight the crosshair without obscuring the
+                // content underneath.
+                Color.black.opacity(0.18)
                     .ignoresSafeArea()
                     .overlay(selectionScrim(size: size))
 
@@ -66,6 +71,13 @@ public struct CaptureOverlayView: View {
                     crosshairBody(size: size)
                 case .window:
                     windowBody(size: size)
+                }
+
+                // AR rule-of-thirds 3x3 grid — overlays across the whole screen
+                // when `showsGrid` is on. Toggleable via G key.
+                if showsGrid {
+                    GridOverlayView(size: size)
+                        .allowsHitTesting(false)
                 }
 
                 // Top status bar
@@ -86,7 +98,7 @@ public struct CaptureOverlayView: View {
                 switch phase {
                 case .active(let p):
                     cursorPoint = p
-                    updateHoveredWindow()
+                    updateHoveredWindow(size: size)
                 case .ended:
                     hoveredWindow = nil
                 }
@@ -109,6 +121,11 @@ public struct CaptureOverlayView: View {
                 handleAccept(size: size)
                 return .handled
             }
+            .onKeyPress(characters: CharacterSet(charactersIn: "gG")) { _ in
+                showsGrid.toggle()
+                LoggerService.shared.info("[capture.key] G pressed, showsGrid=\(showsGrid)")
+                return .handled
+            }
             .onAppear {
                 LoggerService.shared.info("[capture.ui] onAppear; windows=\(ScreenshotService.shared.enumerateWindows().filter { $0.isCaptureEligible }.count)")
                 windows = ScreenshotService.shared.enumerateWindows().filter { $0.isCaptureEligible }
@@ -128,11 +145,22 @@ public struct CaptureOverlayView: View {
             Spacer()
             Text(mode == .crosshair ? "Region  •  drag" : "Window  •  click")
                 .font(NeonFont.monoCaps(11))
-                .foregroundStyle(mode == .crosshair ? NeonPalette.cyberCyan : NeonPalette.magentaNeon)
+                .foregroundStyle(mode == .crosshair ? NeonPalette.cyberCyan : BreakingDad.toxicGreen)
             Text("·").foregroundStyle(.secondary)
             Text("SPACE: switch").font(NeonFont.monoCaps(11)).foregroundStyle(.secondary)
             Text("·").foregroundStyle(.secondary)
             Text("ESC: cancel").font(NeonFont.monoCaps(11)).foregroundStyle(.secondary)
+            Text("·").foregroundStyle(.secondary)
+            Text(showsGrid ? "G: grid  on" : "G: grid  off")
+                .font(NeonFont.monoCaps(11))
+                .foregroundStyle(showsGrid ? NeonPalette.cyberCyan : .secondary)
+            Button(action: { onCancel() }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Cancel capture")
         }
         .padding(.horizontal, 14)
         .frame(maxWidth: 420)
@@ -147,11 +175,50 @@ public struct CaptureOverlayView: View {
         .padding(.top, 18)
     }
 
-    private var neonEdge: some View {
-        Capsule()
-            .stroke(NeonPalette.gradientPrimary, lineWidth: 1)
-            .opacity(0.5)
+private var neonEdge: some View {
+    Capsule()
+        .stroke(NeonPalette.gradientPrimary, lineWidth: 1)
+        .opacity(0.5)
+}
+
+// MARK: - AR 3x3 Rule-of-Thirds Grid
+
+/// A lightweight, non-interactive 3×3 grid overlay used during capture to
+/// help the user frame screens by thirds (photography convention). The grid
+/// spans the full size it is given; parent controls `showsGrid` via keyboard.
+private struct GridOverlayView: View {
+    let size: CGSize
+
+    var body: some View {
+        Canvas { context, _ in
+            let stroke = GraphicsContext.Shading.color(.primary.opacity(0.55))
+            let dash: [CGFloat] = [3, 5]
+
+            // Two vertical lines at 1/3 and 2/3 of the width.
+            var v1 = Path()
+            v1.move(to: CGPoint(x: size.width / 3, y: 0))
+            v1.addLine(to: CGPoint(x: size.width / 3, y: size.height))
+            context.stroke(v1, with: stroke, style: StrokeStyle(lineWidth: 0.6, dash: dash))
+
+            var v2 = Path()
+            v2.move(to: CGPoint(x: (size.width / 3) * 2, y: 0))
+            v2.addLine(to: CGPoint(x: (size.width / 3) * 2, y: size.height))
+            context.stroke(v2, with: stroke, style: StrokeStyle(lineWidth: 0.6, dash: dash))
+
+            // Two horizontal lines at 1/3 and 2/3 of the height.
+            var h1 = Path()
+            h1.move(to: CGPoint(x: 0, y: size.height / 3))
+            h1.addLine(to: CGPoint(x: size.width, y: size.height / 3))
+            context.stroke(h1, with: stroke, style: StrokeStyle(lineWidth: 0.6, dash: dash))
+
+            var h2 = Path()
+            h2.move(to: CGPoint(x: 0, y: (size.height / 3) * 2))
+            h2.addLine(to: CGPoint(x: size.width, y: (size.height / 3) * 2))
+            context.stroke(h2, with: stroke, style: StrokeStyle(lineWidth: 0.6, dash: dash))
+        }
+        .blendMode(.plusLighter)
     }
+}
 
     // MARK: - Crosshair body
 
@@ -169,7 +236,7 @@ public struct CaptureOverlayView: View {
 
             // Solid selection
             if let r = currentSelectionRect(size: size) {
-                var rect = Path(r)
+                let rect = Path(r)
                 context.fill(rect, with: .color(.white.opacity(0.06)))
                 context.stroke(rect, with: stroke, style: StrokeStyle(lineWidth: 1.2, dash: []))
                 drawHandles(rect: r, context: context)
@@ -204,36 +271,77 @@ public struct CaptureOverlayView: View {
     // MARK: - Window-highlight body
 
     @ViewBuilder private func windowBody(size: CGSize) -> some View {
-        // For each window, draw a stroked rect path; highlight the hovered one.
+        // Faint outlines for every eligible (non-hovered) window.
         Canvas { context, _ in
-            for w in windows {
+            for w in windows where w.id != hoveredWindow?.id {
                 let local = convertToOverlay(bounds: w.bounds, size: size)
-                var p = Path(local)
-                let color: Color = (w.id == hoveredWindow?.id) ? NeonPalette.cyberCyan : Color.primary.opacity(0.30)
-                let lineWidth: CGFloat = (w.id == hoveredWindow?.id) ? 2.4 : 1.0
-                context.stroke(p, with: .color(color), style: StrokeStyle(lineWidth: lineWidth, dash: [2, 4]))
+                let p = Path(roundedRect: local, cornerRadius: 5)
+                context.stroke(
+                    p,
+                    with: .color(BreakingDad.chalk.opacity(0.16)),
+                    style: StrokeStyle(lineWidth: 1.0, dash: [2, 5])
+                )
             }
         }
-        .blendMode(.plusLighter)
+        .allowsHitTesting(false)
 
+        // The hovered window: a true animated pulsing outer bloom (drawn as a
+        // real SwiftUI layer so we get an animatable blurred shadow, not the old
+        // concentric Canvas strokes).
         if let w = hoveredWindow {
+            let r = convertToOverlay(bounds: w.bounds, size: size)
+            WindowGlowHighlight(rect: r, color: BreakingDad.toxicGreen)
+                .id(w.id)
+                .allowsHitTesting(false)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(w.displayName)
                     .font(NeonFont.monoCaps(11))
                     .foregroundStyle(.white)
                 Text("\(Int(w.bounds.width)) × \(Int(w.bounds.height))")
                     .font(NeonFont.monoCaps(10))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(BreakingDad.hazmatYellow)
             }
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.black.opacity(0.75))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(NeonPalette.cyberCyan, lineWidth: 1.6))
+                    .fill(BreakingDad.greenBlack.opacity(0.82))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(BreakingDad.toxicGreen, lineWidth: 1.6)
+                    )
             )
-            .modifier(NeonGlow.outer(NeonPalette.cyberCyan, radius: 16, opacity: 0.6))
+            .modifier(NeonGlow.outer(BreakingDad.toxicGreen, radius: 16, opacity: 0.6))
             .position(x: cursorPoint.x + 90, y: max(cursorPoint.y + 90, 60))
             .allowsHitTesting(false)
+        }
+    }
+
+    // MARK: - Animated window highlight
+
+    /// A pulsing, blurred outer bloom drawn around the hovered window. Uses real
+    /// SwiftUI shadows (animatable) rather than concentric Canvas strokes.
+    private struct WindowGlowHighlight: View {
+        let rect: CGRect
+        let color: Color
+        @State private var pulse = false
+
+        var body: some View {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(color.opacity(0.10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(color, lineWidth: 2.5)
+                )
+                .frame(width: rect.width, height: rect.height)
+                .shadow(color: color.opacity(pulse ? 0.95 : 0.45), radius: pulse ? 28 : 14)
+                .shadow(color: color.opacity(pulse ? 0.6 : 0.22), radius: pulse ? 46 : 22)
+                .position(x: rect.midX, y: rect.midY)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.95).repeatForever(autoreverses: true)) {
+                        pulse = true
+                    }
+                }
         }
     }
 
@@ -273,7 +381,7 @@ public struct CaptureOverlayView: View {
     // MARK: - Gestures & helpers
 
     private func dragGesture(size: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 4)
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
                 if mode == .crosshair {
                     if dragStart == nil {
@@ -286,8 +394,9 @@ public struct CaptureOverlayView: View {
             .onEnded { value in
                 LoggerService.shared.info("[capture.drag] onEnded mode=\(mode.rawValue) loc=\(NSStringFromPoint(value.location))")
                 if mode == .window {
-                    let p = value.location
-                    if let w = windows.first(where: { convertToOverlay(bounds: $0.bounds, size: size).contains(p) }) {
+                    // Use the same hit-test as hover so the highlighted window
+                    // is exactly the one that gets captured.
+                    if let w = windowAt(point: value.location, size: size) {
                         onWindowCaptured(w.id)
                     }
                 } else if mode == .crosshair {
@@ -320,29 +429,59 @@ public struct CaptureOverlayView: View {
     }
 
     // Convert overlay-local CGPoint / CGRect (origin top-left, points down)
-    // back to screen-global coordinates used by CGWindowListCreateImage.
+    // back to screen-global coordinates consumed by ScreenshotService.
+    // Overlay-local space matches the live `NSScreen.frame` of the active
+    // display — read it fresh from `NSApp.keyWindow` so a drag that started
+    // on the MacBook display still maps correctly after the cursor-follow
+    // timer animates the overlay onto an external monitor.
+    private func liveFrame() -> CGRect {
+        NSApp.keyWindow?.frame ?? frame
+    }
+
     private func convertToScreen(_ rect: CGRect) -> CGRect {
-        // The overlay's "local" coordinates are top-left origin per SwiftUI;
-        // their absolute position is the window's frame on screen (origin at bottom-left in AppKit).
-        // We need to translate SwiftUI's top-left-origin local rect back into AppKit's bottom-left screen coords.
-        let originX = screen.frame.origin.x + rect.minX
-        let originY = screen.frame.origin.y + (screen.frame.height - rect.maxY)
+        let f = liveFrame()
+        let originX = f.origin.x + rect.minX
+        let originY = f.origin.y + (f.height - rect.maxY)
         return CGRect(x: originX, y: originY, width: rect.width, height: rect.height)
     }
 
+    /// Height of the primary display (the screen whose AppKit frame origin is
+    /// `.zero`). This is the reference height for converting Quartz top-left
+    /// global coordinates (used by `CGWindowList` bounds) into AppKit
+    /// bottom-left global coordinates.
+    private func primaryDisplayHeight() -> CGFloat {
+        (NSScreen.screens.first { $0.frame.origin == .zero }
+            ?? NSScreen.main
+            ?? NSScreen.screens.first)?.frame.height ?? liveFrame().height
+    }
+
+    /// Convert a window's `bounds` (Quartz **top-left** origin global coords, as
+    /// returned by `CGWindowListCopyWindowInfo`) into overlay-local coordinates
+    /// (SwiftUI **top-left** origin, spanning this overlay window). Multi-display
+    /// safe: accounts for the overlay window's own AppKit frame and the primary
+    /// display height used by the Quartz→AppKit flip.
     private func convertToOverlay(bounds: CGRect, size: CGSize) -> CGRect {
-        // AppKit screen coords -> SwiftUI overlay local (top-left origin)
-        let x = bounds.origin.x - screen.frame.origin.x
-        let y = (screen.frame.height) - (bounds.origin.y + bounds.height - screen.frame.origin.y)
+        let f = liveFrame()                       // overlay window, AppKit bottom-left global
+        let primaryH = primaryDisplayHeight()
+        // Quartz global x already matches AppKit global x.
+        let x = bounds.origin.x - f.origin.x
+        // Quartz y (down from primary top) → overlay-local y (down from overlay top).
+        // Derivation: appKitTop = primaryH - qy;  overlayLocalY = f.maxY - appKitTop
+        //           = f.maxY - (primaryH - qy) = qy + f.maxY - primaryH.
+        let y = bounds.origin.y + f.maxY - primaryH
         return CGRect(x: x, y: y, width: bounds.width, height: bounds.height)
     }
 
-    private func updateHoveredWindow() {
+    /// The single source of truth for "which window is under this overlay-local
+    /// point". Used by BOTH hover-highlight and click-to-capture so they always
+    /// agree. Returns the frontmost eligible window containing the point
+    /// (`windows` is front-to-back z-order).
+    private func windowAt(point: CGPoint, size: CGSize) -> WindowDescriptor? {
+        windows.first { convertToOverlay(bounds: $0.bounds, size: size).contains(point) }
+    }
+
+    private func updateHoveredWindow(size: CGSize) {
         guard mode == .window else { return }
-        let size = NSScreen.main?.frame.size ?? .zero
-        let screenPoint = convertToScreen(CGRect(origin: cursorPoint, size: .zero))
-        let windowList = ScreenshotService.shared.enumerateWindows()
-        hoveredWindow = windowList.first(where: { $0.isCaptureEligible && $0.bounds.contains(screenPoint.origin) })
-        _ = size
+        hoveredWindow = windowAt(point: cursorPoint, size: size)
     }
 }

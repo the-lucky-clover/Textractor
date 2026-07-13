@@ -29,7 +29,7 @@ enum TextractorError: Error, LocalizedError {
         case .noDisplayDetected:
             return "No active display detected."
         case .ocrEngineUnavailable:
-            return "On-device OCR engine unavailable. macOS 12.0+ required."
+            return "On-device OCR engine unavailable. macOS 14.0 Sonoma or later required."
         case .ocrProcessingFailed(let detail):
             return "OCR processing error: \(detail)"
         case .noTextRecognized:
@@ -60,7 +60,7 @@ enum TextractorError: Error, LocalizedError {
         case .noDisplayDetected:
             return "Ensure your display is connected and awake."
         case .ocrEngineUnavailable:
-            return "Update to macOS 12.0 Monterey or later."
+            return "Update to macOS 14.0 Sonoma or later."
         case .ocrProcessingFailed:
             return "Try selecting a clearer, higher-contrast region."
         case .noTextRecognized:

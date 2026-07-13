@@ -45,8 +45,22 @@ if [[ -f "Sources/Textractor/Resources/textractor.icns" ]]; then
   cp "Sources/Textractor/Resources/textractor.icns" "${APP_DIR}/Contents/Resources/"
 fi
 
-# Touch the bundle so Finder/Launch Services pick it up
-touch "$APP_DIR"
+# Copy menu-bar template images into Contents/Resources/MenuBar (used by
+# StatusBarController to render the system status-bar icon).
+if [[ -d "Sources/Textractor/Resources/MenuBar" ]]; then
+  mkdir -p "${APP_DIR}/Contents/Resources/MenuBar"
+  cp -R "Sources/Textractor/Resources/MenuBar/" "${APP_DIR}/Contents/Resources/MenuBar/"
+fi
+
+# Copy the menubar popover banner image into Contents/Resources.
+if [[ -f "Sources/Textractor/Resources/textractor-type.png" ]]; then
+  cp "Sources/Textractor/Resources/textractor-type.png" "${APP_DIR}/Contents/Resources/textractor-type.png"
+fi
+
+# Copy the launch splash image into Contents/Resources.
+if [[ -f "Sources/Textractor/Resources/textractor-splash.png" ]]; then
+  cp "Sources/Textractor/Resources/textractor-splash.png" "${APP_DIR}/Contents/Resources/textractor-splash.png"
+fi
 
 # Ad-hoc sign the bundle so Gatekeeper lets the user open it via right-click → Open
 if command -v codesign >/dev/null 2>&1; then
@@ -56,11 +70,29 @@ if command -v codesign >/dev/null 2>&1; then
     || echo "  (codesign unavailable; skipping)"
 fi
 
+# Install the finished bundle into /Applications so it's available system-wide.
+# Writing there usually requires admin rights, so try a plain copy first and
+# fall back to `sudo` (which will prompt for your password). Either way the
+# build itself is already done, so a failed install never aborts the script.
+install_to_applications() {
+  local dest="/Applications/${APP_NAME}.app"
+  rm -rf "$dest" 2>/dev/null || sudo rm -rf "$dest" 2>/dev/null || true
+  if cp -R "$APP_DIR" "$dest" 2>/dev/null; then
+    echo "▸ Installed to /Applications/${APP_NAME}.app"
+  elif sudo cp -R "$APP_DIR" "$dest"; then
+    echo "▸ Installed to /Applications/${APP_NAME}.app (via sudo)"
+  else
+    echo "  (Skipped /Applications install — copy ${APP_DIR} there manually if you want.)"
+  fi
+}
+install_to_applications
+
 echo ""
 echo "✓ Built ${APP_DIR}"
 echo ""
 echo "Run it with:"
-echo "  open '${ROOT}/${APP_DIR}'"
+echo "  open '/Applications/${APP_NAME}.app'"
+echo "  # or: open '${ROOT}/${APP_DIR}'"
 echo ""
 echo "Or install with:"
 echo "  ./install.sh"

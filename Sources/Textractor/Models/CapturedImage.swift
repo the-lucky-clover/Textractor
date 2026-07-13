@@ -9,6 +9,9 @@ public struct CapturedImage: Identifiable, Sendable {
         case region
         case window
         case fullscreen
+        case video
+        case continuityCamera
+        case file
     }
 
     public let id: UUID
