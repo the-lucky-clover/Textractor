@@ -138,22 +138,24 @@ public struct CaptureOverlayView: View {
 
     @ViewBuilder private func statusBar(size: CGSize) -> some View {
         HStack(spacing: 14) {
-            BeakerIcon(size: 18, glyphs: ["T"], style: .template)
+            Image(systemName: "flask.fill")
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(BreakingDad.toxicGreen)
             Text("Textractor Capture")
-                .font(NeonFont.monoCaps(11))
+                .font(BreakingDadFont.hudCaps(11))
                 .foregroundStyle(.primary)
             Spacer()
             Text(mode == .crosshair ? "Region  •  drag" : "Window  •  click")
-                .font(NeonFont.monoCaps(11))
-                .foregroundStyle(mode == .crosshair ? NeonPalette.cyberCyan : BreakingDad.toxicGreen)
+                .font(BreakingDadFont.hudCaps(11))
+                .foregroundStyle(mode == .crosshair ? BreakingDad.toxicGreen : BreakingDad.toxicGreen)
             Text("·").foregroundStyle(.secondary)
-            Text("SPACE: switch").font(NeonFont.monoCaps(11)).foregroundStyle(.secondary)
+            Text("SPACE: switch").font(BreakingDadFont.hudCaps(11)).foregroundStyle(.secondary)
             Text("·").foregroundStyle(.secondary)
-            Text("ESC: cancel").font(NeonFont.monoCaps(11)).foregroundStyle(.secondary)
+            Text("ESC: cancel").font(BreakingDadFont.hudCaps(11)).foregroundStyle(.secondary)
             Text("·").foregroundStyle(.secondary)
             Text(showsGrid ? "G: grid  on" : "G: grid  off")
-                .font(NeonFont.monoCaps(11))
-                .foregroundStyle(showsGrid ? NeonPalette.cyberCyan : .secondary)
+                .font(BreakingDadFont.hudCaps(11))
+                .foregroundStyle(showsGrid ? BreakingDad.toxicGreen : .secondary)
             Button(action: { onCancel() }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 14))
@@ -168,16 +170,16 @@ public struct CaptureOverlayView: View {
         .background(
             Capsule(style: .continuous)
                 .fill(.ultraThinMaterial)
-                .overlay(Capsule().stroke(NeonPalette.cyberCyan.opacity(0.7), lineWidth: 1))
+                .overlay(Capsule().stroke(BreakingDad.toxicGreen.opacity(0.7), lineWidth: 1))
         )
         .overlay(neonEdge)
-        .modifier(NeonGlow.outer(NeonPalette.cyberCyan, radius: 14, opacity: 0.35))
+        .shadow(color: BreakingDad.toxicGreen.opacity(0.35), radius: 14)
         .padding(.top, 18)
     }
 
 private var neonEdge: some View {
     Capsule()
-        .stroke(NeonPalette.gradientPrimary, lineWidth: 1)
+        .stroke(BreakingDad.gradient, lineWidth: 1)
         .opacity(0.5)
 }
 
@@ -296,10 +298,10 @@ private struct GridOverlayView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(w.displayName)
-                    .font(NeonFont.monoCaps(11))
+                    .font(BreakingDadFont.hudCaps(11))
                     .foregroundStyle(.white)
                 Text("\(Int(w.bounds.width)) × \(Int(w.bounds.height))")
-                    .font(NeonFont.monoCaps(10))
+                    .font(BreakingDadFont.hudCaps(10))
                     .foregroundStyle(BreakingDad.hazmatYellow)
             }
             .padding(8)
@@ -311,7 +313,7 @@ private struct GridOverlayView: View {
                             .stroke(BreakingDad.toxicGreen, lineWidth: 1.6)
                     )
             )
-            .modifier(NeonGlow.outer(BreakingDad.toxicGreen, radius: 16, opacity: 0.6))
+            .shadow(color: BreakingDad.toxicGreen.opacity(0.6), radius: 16)
             .position(x: cursorPoint.x + 90, y: max(cursorPoint.y + 90, 60))
             .allowsHitTesting(false)
         }
@@ -369,7 +371,7 @@ private struct GridOverlayView: View {
     @ViewBuilder private func rectReadout(_ r: CGRect) -> some View {
         HStack(spacing: 6) {
             Text("\(Int(r.width)) × \(Int(r.height))")
-                .font(NeonFont.monoCaps(10))
+                .font(BreakingDadFont.hudCaps(10))
                 .foregroundStyle(.primary)
         }
         .padding(.horizontal, 8)

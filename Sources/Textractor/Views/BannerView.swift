@@ -34,10 +34,14 @@ public struct ShimmerBanner: View {
     @State private var phase: CGFloat = 0
     @State private var shimmering: Bool = false
 
-    public init(image: NSImage, width: CGFloat, height: CGFloat) {
+    /// When `false`, the specular sweep is skipped (reduce-motion / calm UI).
+    public var animate: Bool = true
+
+    public init(image: NSImage, width: CGFloat, height: CGFloat, animate: Bool = true) {
         self.image = image
         self.width = width
         self.height = height
+        self.animate = animate
     }
 
     public var body: some View {
@@ -48,7 +52,9 @@ public struct ShimmerBanner: View {
                     .allowsHitTesting(false)
             )
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .onAppear { scheduleNext() }
+            .onAppear {
+                if animate { scheduleNext() }
+            }
     }
 
     private var base: some View {

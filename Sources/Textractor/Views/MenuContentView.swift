@@ -51,8 +51,6 @@ public struct MenuContentView: View {
             // natural image size with 5 points of breathing room on either side
             // so the popover edges hug the artwork instead of clipping it.
             banner
-                .padding(.bottom, 8)
-                .frame(maxWidth: .infinity)
                 .background(Self.headerBackground)
                 .introReveal(0, appeared: appeared)
 
@@ -76,8 +74,6 @@ public struct MenuContentView: View {
                 sectionLabel("App").introReveal(8, appeared: appeared)
                 MenuRow("Settings…",         icon: "gearshape")         { onClose(); onOpenSettings() }
                     .introReveal(9, appeared: appeared)
-                MenuRow("Check for Updates", icon: "arrow.up.circle")   { checkForUpdates() }
-                    .introReveal(10, appeared: appeared)
             }
             .padding(.horizontal, 8)
             .padding(.top, 0)
@@ -86,9 +82,9 @@ public struct MenuContentView: View {
             // Quit is pinned to the bottom of the popover — always reachable
             // without scrolling.
             Divider().padding(.horizontal, 8).padding(.vertical, 4)
-                .introReveal(11, appeared: appeared)
+                .introReveal(10, appeared: appeared)
             MenuRow("Quit Textractor", icon: "power", role: .destructive) { onClose(); onQuit() }
-                .introReveal(12, appeared: appeared)
+                .introReveal(11, appeared: appeared)
                 .padding(.horizontal, 8)
 
             // Subtle version footer for visual closure — also pinned, never cut.
@@ -98,7 +94,7 @@ public struct MenuContentView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.top, 4)
                 .padding(.bottom, 8)
-                .introReveal(13, appeared: appeared)
+                .introReveal(12, appeared: appeared)
         }
         .background(Self.headerBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -129,13 +125,20 @@ public struct MenuContentView: View {
     /// Desired banner image width. The banner takes the full popover content
     /// width minus 5 points of horizontal padding on each side (total 10).
     private var bannerWidth: CGFloat { 232 }
+    /// Banner is rendered slightly larger (5%) and bled past the popover edges
+    /// so its sides fill the gaps and the top sits flush with the popover top.
+    private var bannerDisplayWidth: CGFloat { bannerWidth * 1.05 }
     /// Height derived from the banner's natural image aspect ratio.
     private var bannerHeight: CGFloat { bannerWidth * bannerAspect * 0.95 }
 
     @ViewBuilder private var banner: some View {
         if let nsImage = loadBannerImage() {
-            ShimmerBanner(image: nsImage, width: bannerWidth, height: bannerHeight)
+            ShimmerBanner(image: nsImage, width: bannerDisplayWidth, height: bannerHeight * 1.05, animate: !AppCoordinator.shared.appState.settings.reduceMotion)
                 .frame(maxWidth: .infinity, alignment: .center)
+                // Bleed the banner to the popover edges: center it horizontally
+                // so it spills 5/2% on each side, and push the top to the popover
+                // top so there are no gaps above or beside the artwork.
+                .offset(x: 0, y: -(bannerDisplayWidth - bannerWidth) / 2)
         }
     }
 

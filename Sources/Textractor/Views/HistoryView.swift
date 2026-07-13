@@ -128,26 +128,26 @@ private struct HistoryCard: View {
     let onDelete: () -> Void
 
     @State private var hovered = false
-    @State private var nsImage: NSImage?
 
     /// Single animation token so appear/closing share one `.animation` modifier
     /// (avoids conflicting per-property animations).
     private var animKey: Int { (appeared ? 1 : 0) + (closing ? 2 : 0) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            thumbnail
-            Text(record.textPreview.isEmpty ? "(no text)" : record.textPreview)
-                .font(.caption)
-                .foregroundStyle(.primary)
-                .lineLimit(3)
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Image(systemName: CaptureMode(rawValue: record.mode.rawValue)?.symbolName ?? "doc")
+                    .foregroundStyle(BreakingDad.toxicGreen)
                 Text(record.capturedAt, style: .date)
+                Text(record.capturedAt, style: .time)
                 Spacer()
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
+            Text(record.textPreview.isEmpty ? "(no text)" : record.textPreview)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .lineLimit(4)
         }
         .padding(8)
         .background(
@@ -161,31 +161,12 @@ private struct HistoryCard: View {
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
         .onHover { hovered = $0 }
-        .onAppear { loadImage() }
         .contextMenu { Button("Delete", action: onDelete) }
         .overlay(deleteButton, alignment: .topTrailing)
         .opacity(closing ? 0 : (appeared ? 1 : 0))
         .offset(y: closing ? 8 : (appeared ? 0 : 12))
         .scaleEffect(closing ? 0.96 : 1)
         .animation(.spring(response: 0.42, dampingFraction: 0.8).delay(Double(index) * 0.035), value: animKey)
-    }
-
-    @ViewBuilder private var thumbnail: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.primary.opacity(0.06))
-            if let img = nsImage {
-                Image(nsImage: img)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } else {
-                Image(systemName: "doc.text")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .frame(height: 96)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
     @ViewBuilder private var deleteButton: some View {
@@ -200,11 +181,4 @@ private struct HistoryCard: View {
         .padding(6)
     }
 
-    private func loadImage() {
-        guard let path = record.screenshotPath else { return }
-        DispatchQueue.global(qos: .userInitiated).async {
-            let img = NSImage(contentsOfFile: path)
-            DispatchQueue.main.async { self.nsImage = img }
-        }
-    }
 }

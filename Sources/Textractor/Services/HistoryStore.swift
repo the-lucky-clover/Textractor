@@ -43,30 +43,28 @@ public final class HistoryStore: ObservableObject {
 
     // MARK: - Mutations
 
-    /// Copy the screenshot (if still present) into the history directory and
-    /// prepend a record. Synchronous so the file is captured before any
-    /// per-capture storage decision can delete the original.
+    /// Persist the raw extracted text (plus a timestamp) into the history
+    /// directory and prepend a record. Synchronous so the text is captured
+    /// before any per-capture storage decision can delete the original.
     public func record(capture: CapturedImage, text: String, mode: CaptureMode) {
-        var screenshotPath: String?
-        if FileManager.default.fileExists(atPath: capture.fileURL.path) {
-            let dest = directory.appendingPathComponent("\(capture.id.uuidString).png")
-            try? FileManager.default.removeItem(at: dest)
-            if (try? FileManager.default.copyItem(at: capture.fileURL, to: dest)) != nil {
-                screenshotPath = dest.path
-            }
+        var textPath: String?
+        let dest = directory.appendingPathComponent("\(capture.id.uuidString).txt")
+        try? FileManager.default.removeItem(at: dest)
+        if (try? text.write(to: dest, atomically: true, encoding: .utf8)) != nil {
+            textPath = dest.path
         }
         let record = HistoryRecord(
             id: capture.id,
             capturedAt: capture.capturedAt,
             textPreview: text,
             mode: mode,
-            screenshotPath: screenshotPath
+            textPath: textPath
         )
         records.insert(record, at: 0)
         if records.count > maxRecords {
             let overflow = records.suffix(from: maxRecords)
             for old in overflow {
-                if let p = old.screenshotPath { try? FileManager.default.removeItem(at: URL(fileURLWithPath: p)) }
+                if let p = old.textPath { try? FileManager.default.removeItem(at: URL(fileURLWithPath: p)) }
             }
             records = Array(records.prefix(maxRecords))
         }
@@ -74,14 +72,14 @@ public final class HistoryStore: ObservableObject {
     }
 
     public func delete(_ record: HistoryRecord) {
-        if let p = record.screenshotPath { try? FileManager.default.removeItem(at: URL(fileURLWithPath: p)) }
+        if let p = record.textPath { try? FileManager.default.removeItem(at: URL(fileURLWithPath: p)) }
         records.removeAll { $0.id == record.id }
         save()
     }
 
     public func clear() {
-        for r in records where r.screenshotPath != nil {
-            try? FileManager.default.removeItem(at: URL(fileURLWithPath: r.screenshotPath!))
+        for r in records where r.textPath != nil {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: r.textPath!))
         }
         records.removeAll()
         save()

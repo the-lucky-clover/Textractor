@@ -67,7 +67,6 @@ public final class SettingsStore: ObservableObject {
     public var storageMode: StorageMode { current.storageMode }
     public var weirdness: Double       { current.weirdness }
     public var quickShareTargets: Set<QuickShareTarget> { current.quickShareTargets }
-    public var festiveFeedback: Bool   { current.festiveFeedback }
     public var fontScale: Double       { current.fontScale }
 
     // MARK: - Internals

@@ -191,9 +191,18 @@ public final class AppCoordinator: ObservableObject {
         let rawFinalText = tableMarkdown ?? analysis.cleanedText
 
         // Apply word-wrap flattening if the user wants it (default OFF).
-        let finalText: String = wordWrapCaptured
+        var finalText: String = wordWrapCaptured
             ? Self.flattenWordWrap(rawFinalText, columns: 80)
             : rawFinalText
+
+        // Flatten text: drop carriage returns / newlines so list items become a
+        // single running paragraph. Default OFF.
+        if appState.settings.flattenText {
+            finalText = finalText.replacingOccurrences(of: "\r\n", with: " ")
+                          .replacingOccurrences(of: "\n", with: " ")
+                          .replacingOccurrences(of: "\r", with: " ")
+            finalText = finalText.split(separator: " ").filter { !$0.isEmpty }.joined(separator: " ")
+        }
 
         // Build rich NSAttributedString for the pasteboard. If we have a table,
         // ship the markdown string verbatim — pasting into a markdown editor
@@ -218,12 +227,10 @@ public final class AppCoordinator: ObservableObject {
         let ok = ClipboardService.shared.copy(finalText, attributed: attributed, plainTextOnly: pasteAsPlainText)
         LoggerService.shared.debug("Clipboard copy result: \(ok)")
         SoundManager.playCaptureComplete()
-        if ok, appState.settings.autoPasteEnabled {
-            _ = ClipboardService.shared.autoPasteIntoFrontmostApp()
-        }
 
-        // Update app state
+        // Update app state + persist a text-only history entry (timestamped).
         appState.record(capture: capture, ocr: ocr, analysis: analysis)
+        HistoryStore.shared.record(capture: capture, text: finalText, mode: capture.mode)
 
         // Begin storage decision flow (only if "ask each time").
         let isAsk = appState.settings.storageMode == .ask
@@ -341,12 +348,10 @@ public final class AppCoordinator: ObservableObject {
     // MARK: - UI
 
     public func openSettings() {
-        if #available(macOS 14, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            // Fallback: open App Settings via Cmd+, shortcut
-            NSApp.sendAction(#selector(NSApplication.activate(ignoringOtherApps:)), to: nil, from: nil)
-        }
+        // Use our own window controller rather than `NSApp.sendAction("showSettingsWindow:")`
+        // — the latter routes through the responder chain and frequently does nothing
+        // for an accessory (LSUIElement) app. This mirrors showHistoryWindow().
+        SettingsWindowController.shared.show(appState: appState)
     }
 
     public func showCredits() {

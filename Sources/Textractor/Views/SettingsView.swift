@@ -1,152 +1,256 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
-import Carbon.HIToolbox
 
-/// Window-pane settings UI (rendered inside the App's `Settings { ... }` scene
-/// binding). Implements every global option the user requested.
+/// Settings window styled to match the menubar popover: same 232pt width, same
+/// system typography (10pt section labels / 13pt rows), same dark rounded
+/// background. Branded with the shimmer banner (no second header) and Breaking
+/// Dad toxic-green accents. Elements fly in once with a framer-motion-style
+/// intro (disabled when Reduce Motion is on). All prefs bind to `AppState`.
 public struct SettingsView: View {
 
     @EnvironmentObject var appState: AppState
-
     @State private var aiVocabText: String = ""
+    /// Drives the one-time fly-in / scale-up / fade intro.
+    @State private var firstLoad: Bool = false
 
     public init() {}
 
-    public var body: some View {
-        ZStack {
-            NeonPalette.noirDeep
-                .ignoresSafeArea()
-                .overlay(NeonPalette.scanlines)
-            ScrollView {
-                VStack(spacing: 12) {
-                    header
-                    captureSection
-                    aiSection
-                    sharingSection
-                    windowTableSection
-                    permissionsSection
-                    creditsSection
-                    footer
-                }
-                .padding(16)
-                .frame(maxWidth: 560)
-            }
+    private static let headerBackground = textractorHeaderBackground
+    private var animate: Bool { !appState.settings.reduceMotion && firstLoad }
+
+    // MARK: - Banner (identical geometry to the menubar popover)
+
+    private let bannerWidth: CGFloat = 232
+    private var bannerAspect: CGFloat { 344.0 / 1280.0 }
+    private var bannerDisplayWidth: CGFloat { bannerWidth * 1.05 }
+    private var bannerHeight: CGFloat { bannerWidth * bannerAspect * 0.95 }
+
+    @ViewBuilder private var banner: some View {
+        if let nsImage = loadBannerImage() {
+            ShimmerBanner(
+                image: nsImage,
+                width: bannerDisplayWidth,
+                height: bannerHeight,
+                animate: !appState.settings.reduceMotion
+            )
+            .frame(maxWidth: .infinity, alignment: .center)
+            .offset(y: -(bannerDisplayWidth - bannerWidth) / 2)
         }
-        .frame(width: 600, height: 740)
+    }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            banner
+                .background(Self.headerBackground)
+                .introReveal(0, appeared: animate)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 1) {
+                    sectionLabel("AI & Extraction").introReveal(1, appeared: animate)
+                    weirdnessBlock.introReveal(1, appeared: animate)
+                    vocabularyBlock.introReveal(1, appeared: animate)
+                    Row("Reset to defaults", icon: "arrow.counterclockwise.circle.fill") { resetDefaults() }
+                        .introReveal(1, appeared: animate)
+
+                    sectionLabel("Sharing").introReveal(2, appeared: animate)
+                    ToggleRow(title: "Paste as plain text", icon: "doc.on.clipboard", isOn: pasteAsPlainTextBinding)
+                        .introReveal(2, appeared: animate)
+                    Text("QUICK-SHARE CHIPS")
+                        .font(.system(size: 9, weight: .black, design: .monospaced))
+                        .kerning(0.6).foregroundStyle(.tertiary)
+                        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 2)
+                        .introReveal(2, appeared: animate)
+                    ForEach(QuickShareTarget.allCases) { target in
+                        ToggleRow(title: target.label, icon: target.sfSymbol, isOn: quickShareBinding(target))
+                            .introReveal(2, appeared: animate)
+                    }
+
+                    sectionLabel("Window Captures").introReveal(3, appeared: animate)
+                    ToggleRow(title: "Convert to markdown tables", icon: "tablecells", isOn: windowCaptureBinding)
+                        .introReveal(3, appeared: animate)
+
+                    sectionLabel("Updates").introReveal(4, appeared: animate)
+                    updatesBlock.introReveal(4, appeared: animate)
+
+                    sectionLabel("History").introReveal(5, appeared: animate)
+                    Row("Open History", icon: "clock.arrow.circlepath") { AppCoordinator.shared.showHistoryWindow() }
+                        .introReveal(5, appeared: animate)
+
+                    sectionLabel("Behaviour").introReveal(6, appeared: animate)
+                    ToggleRow(title: "Flatten text (no line breaks)", icon: "paragraph", isOn: flattenBinding)
+                        .introReveal(6, appeared: animate)
+                    ToggleRow(title: "Reduce motion", icon: "decrease.quote.glass", isOn: reduceMotionBinding)
+                        .introReveal(6, appeared: animate)
+                    ToggleRow(title: "Local telemetry log", icon: "chart.bar", isOn: telemetryBinding)
+                        .introReveal(6, appeared: animate)
+
+                    sectionLabel("About").introReveal(7, appeared: animate)
+                    aboutBlock.introReveal(7, appeared: animate)
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 0)
+                .padding(.bottom, 6)
+            }
+            .frame(maxHeight: 560)
+        }
+        .background(Self.headerBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .frame(width: bannerWidth)
         .onAppear {
             aiVocabText = appState.settings.customVocabulary.joined(separator: ", ")
+            if !appState.settings.reduceMotion { firstLoad = true }
         }
     }
 
-    // MARK: - Header
+    // MARK: - Section label (matches the popover exactly)
 
-    @ViewBuilder private var header: some View {
-        HStack(spacing: 14) {
-            BeakerIcon.hero(size: 56)
-                .modifier(NeonGlow.outer(NeonPalette.cyberCyan, radius: 22, opacity: 0.6))
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Textractor Settings")
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundStyle(NeonPalette.gradientPrimary)
-                Text("On-device OCR · privacy-first")
-                    .font(NeonFont.monoCaps(10))
-                    .foregroundStyle(NeonPalette.inkMid)
+    private func sectionLabel(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .kerning(0.6)
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - AI & extraction
+
+    private var weirdnessBlock: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
+                    .foregroundStyle(BreakingDad.toxicGreen)
+                Text("Inference weirdness")
+                    .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Text("\(Int(appState.settings.weirdness * 100))%")
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(BreakingDad.toxicGreen)
             }
-            Spacer()
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            Slider(value: weirdnessBinding, in: 0...1).accentColor(BreakingDad.toxicGreen)
+                .padding(.horizontal, 10)
+            Text("0% strict · 100% aggressive correction & more retries.")
+                .font(.system(size: 9, weight: .regular)).foregroundStyle(.secondary)
+                .padding(.horizontal, 10).padding(.bottom, 4)
         }
     }
 
-    // MARK: - Capture section
-
-    @ViewBuilder private var captureSection: some View {
-        SettingsCard(title: "Screenshots", icon: "rectangle.dashed.badge.record", tinkle: NeonPalette.cyberCyan) {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(StorageMode.allCases) { mode in
-                    storageModeRow(mode)
-                }
-                if appState.settings.storageMode == .safe || appState.settings.storageMode == .safeOnlyScreenshot {
-                    folderRow
-                }
+    private var vocabularyBlock: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Image(systemName: "textformat")
+                    .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
+                    .foregroundStyle(BreakingDad.toxicGreen)
+                Text("Custom vocabulary (comma-separated)")
+                    .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
             }
+            .padding(.horizontal, 10).padding(.top, 4)
+            TextField("e.g. Textractor, visionOS, FRC", text: $aiVocabText)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 10)
+            Row("Save vocabulary", icon: "checkmark") { commitVocab() }
         }
     }
 
-    private func storageModeRow(_ mode: StorageMode) -> some View {
-        let active = appState.settings.storageMode == mode
-        return Button {
-            appState.updateSettings { $0.storageMode = mode }
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                ZStack {
-                    Circle()
-                        .stroke(active ? NeonPalette.cyberCyan : NeonPalette.inkLow.opacity(0.5), lineWidth: 1.2)
-                        .frame(width: 18, height: 18)
-                    if active {
-                        Circle()
-                            .fill(NeonPalette.cyberCyan)
-                            .frame(width: 10, height: 10)
-                            .modifier(NeonGlow.outer(NeonPalette.cyberCyan, radius: 8, opacity: 0.9))
-                    }
-                }
-                .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Image(systemName: mode.symbolName)
-                        Text(mode.label)
-                    }
-                    .font(NeonFont.roundedHeadline(13))
-                    .foregroundStyle(active ? NeonPalette.inkHigh : NeonPalette.inkMid)
-                    Text(mode.description)
-                        .font(NeonFont.mono(10))
-                        .foregroundStyle(NeonPalette.inkLow)
-                }
-                Spacer()
-            }
-            .padding(8)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(active ? NeonPalette.cyberCyan.opacity(0.06) : .clear)
-            )
-        }
-        .buttonStyle(.plain)
+    private func resetDefaults() {
+        appState.resetSettingsToDefaults()
+        aiVocabText = ""
     }
 
-    private var folderRow: some View {
-        let path = appState.settings.saveFolderPath ?? AppSettings.defaultSaveFolder().path
-        return HStack {
-            Image(systemName: "folder.fill")
-                .foregroundStyle(NeonPalette.amberLaser)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Default folder")
-                    .font(NeonFont.monoCaps(10))
-                    .foregroundStyle(NeonPalette.inkMid)
-                Text(path)
-                    .font(NeonFont.mono(10))
-                    .foregroundStyle(NeonPalette.inkHigh)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            }
-            Spacer()
-            Button("Choose…") { chooseFolder() }
-                .font(NeonFont.monoCaps(10))
-                .foregroundStyle(NeonPalette.cyberCyan)
+    // MARK: - Updates
+
+    private var updatesBlock: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.up.circle")
+                    .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
+                    .foregroundStyle(BreakingDad.toxicGreen)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Version  \(UpdateService.versionDescription)")
+                        .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
+                    Text("Last checked: \(UpdateService.relativeLastChecked(appState.settings.lastUpdateCheckAt))")
+                        .font(.system(size: 9, weight: .regular)).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Button { checkForUpdates() } label: {
+                    Text("Check now").font(.system(size: 11, weight: .semibold)).foregroundStyle(BreakingDad.toxicGreen)
+                }
                 .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 5)
+        }
+    }
+
+    private func checkForUpdates() {
+        appState.updateSettings { $0.lastUpdateCheckAt = Date() }
+        UpdateService.shared.presentUpToDateAlert()
+    }
+
+    // MARK: - About
+
+    private var aboutBlock: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
+                .foregroundStyle(BreakingDad.toxicGreen)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Textractor · on-device OCR").font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
+                Text("Built for your privacy and your eyes.").font(.system(size: 9, weight: .regular)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
             Button {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                NSWorkspace.shared.open(URL(string: "https://soundcloud.com/lucky-clover")!)
             } label: {
-                Image(systemName: "arrow.up.right.square")
-                    .foregroundStyle(NeonPalette.inkMid)
+                Text("by Lucky Clover").font(.system(size: 11, weight: .semibold)).foregroundStyle(BreakingDad.toxicGreen).underline()
             }
             .buttonStyle(.plain)
-            .help("Reveal in Finder")
+            .onHover { inside in if inside { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() } }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.ultraThinMaterial)
+        .padding(.horizontal, 10).padding(.vertical, 5)
+    }
+
+    // MARK: - Bindings
+
+    private var weirdnessBinding: Binding<Double> {
+        Binding(get: { appState.settings.weirdness },
+                set: { v in appState.updateSettings { $0.weirdness = v } })
+    }
+    private var pasteAsPlainTextBinding: Binding<Bool> {
+        Binding(get: { appState.settings.pasteAsPlainText },
+                set: { v in appState.updateSettings { $0.pasteAsPlainText = v } })
+    }
+    private var windowCaptureBinding: Binding<Bool> {
+        Binding(get: { appState.settings.windowCaptureAsTable },
+                set: { v in appState.updateSettings { $0.windowCaptureAsTable = v } })
+    }
+    private var flattenBinding: Binding<Bool> {
+        Binding(get: { appState.settings.flattenText },
+                set: { v in appState.updateSettings { $0.flattenText = v } })
+    }
+    private var reduceMotionBinding: Binding<Bool> {
+        Binding(get: { appState.settings.reduceMotion },
+                set: { v in appState.updateSettings { $0.reduceMotion = v } })
+    }
+    private var telemetryBinding: Binding<Bool> {
+        Binding(get: { appState.settings.localTelemetryEnabled },
+                set: { v in appState.updateSettings { $0.localTelemetryEnabled = v } })
+    }
+    private func quickShareBinding(_ target: QuickShareTarget) -> Binding<Bool> {
+        Binding(
+            get: { appState.settings.quickShareTargets.contains(target) },
+            set: { v in appState.updateSettings { current in
+                if v { current.quickShareTargets.insert(target) } else { current.quickShareTargets.remove(target) }
+            } }
         )
+    }
+
+    private func commitVocab() {
+        let tokens = aiVocabText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        appState.updateSettings { $0.customVocabulary = tokens }
     }
 
     private func chooseFolder() {
@@ -159,336 +263,133 @@ public struct SettingsView: View {
             if resp == .OK, let url = panel.url {
                 appState.updateSettings {
                     $0.saveFolderPath = url.path
-                    $0.saveFolderBookmark = try? url.bookmarkData(
-                        options: [.withSecurityScope],
-                        includingResourceValuesForKeys: nil,
-                        relativeTo: nil
-                    )
+                    $0.saveFolderBookmark = try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
                 }
-            }
-        }
-    }
-
-    // MARK: - AI section
-
-    @ViewBuilder private var aiSection: some View {
-        SettingsCard(title: "AI & extraction", icon: "sparkles", tinkle: NeonPalette.magentaNeon) {
-            VStack(alignment: .leading, spacing: 14) {
-                weirdnessRow
-                vocabularyRow
-                HStack {
-                    Spacer()
-                    Button {
-                        appState.resetSettingsToDefaults()
-                        aiVocabText = ""
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.counterclockwise.circle.fill")
-                            Text("Reset to defaults")
-                        }
-                        .font(NeonFont.monoCaps(11))
-                        .foregroundStyle(NeonPalette.amberLaser)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private var weirdnessRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Image(systemName: "waveform.path.ecg")
-                    .foregroundStyle(NeonPalette.magentaNeon)
-                Text("Inference weirdness")
-                    .font(NeonFont.roundedHeadline(13))
-                Spacer()
-                Text("\(Int(appState.settings.weirdness * 100))%")
-                    .font(NeonFont.monoCaps(11))
-                    .foregroundStyle(NeonPalette.magentaNeon)
-                    .frame(width: 44, alignment: .trailing)
-            }
-            Slider(
-                value: Binding(
-                    get: { appState.settings.weirdness },
-                    set: { v in appState.updateSettings { $0.weirdness = v } }
-                ),
-                in: 0.0...1.0
-            )
-            .accentColor(NeonPalette.magentaNeon)
-
-            Text("0% strict & conservative · 100% aggressive correction, more retries, larger vocab influence.  Increase if text keeps failing.")
-                .font(NeonFont.mono(10))
-                .foregroundStyle(NeonPalette.inkLow)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    @ViewBuilder private var vocabularyRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: "textformat")
-                    .foregroundStyle(NeonPalette.holoViolet)
-                Text("Custom vocabulary (comma-separated)")
-                    .font(NeonFont.roundedHeadline(12))
-            }
-            TextField("e.g. Textractor, visionOS, FRC", text: $aiVocabText)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { commitVocab() }
-            HStack {
-                Spacer()
-                Button("Save vocabulary") { commitVocab() }
-                    .font(NeonFont.monoCaps(10))
-                    .foregroundStyle(NeonPalette.holoViolet)
-                    .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func commitVocab() {
-        let tokens = aiVocabText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        appState.updateSettings { $0.customVocabulary = tokens }
-    }
-
-    // MARK: - Sharing section
-
-    @ViewBuilder private var sharingSection: some View {
-        SettingsCard(title: "Sharing", icon: "square.and.arrow.up", tinkle: NeonPalette.acidLime) {
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle(isOn: Binding(
-                    get: { appState.settings.autoPasteEnabled },
-                    set: { v in appState.updateSettings { $0.autoPasteEnabled = v } }
-                )) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Auto-paste into active app")
-                            .font(NeonFont.roundedHeadline(13))
-                        Text("After copying, synthesise ⌘V into the frontmost app. Requires Accessibility permission.")
-                            .font(NeonFont.mono(10))
-                            .foregroundStyle(NeonPalette.inkLow)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                Divider().background(NeonPalette.inkLow.opacity(0.3))
-                Text("Quick-share chips")
-                    .font(NeonFont.monoCaps(11))
-                    .foregroundStyle(NeonPalette.inkMid)
-                ForEach(QuickShareTarget.allCases) { target in
-                    sharingRow(target)
-                }
-            }
-        }
-    }
-
-    private func sharingRow(_ target: QuickShareTarget) -> some View {
-        let active = appState.settings.quickShareTargets.contains(target)
-        return Button {
-            appState.updateSettings { current in
-                if current.quickShareTargets.contains(target) {
-                    current.quickShareTargets.remove(target)
-                } else {
-                    current.quickShareTargets.insert(target)
-                }
-            }
-        } label: {
-            HStack {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(active ? NeonPalette.acidLime : NeonPalette.inkLow.opacity(0.5), lineWidth: 1.4)
-                        .frame(width: 16, height: 16)
-                    if active {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(NeonPalette.acidLime)
-                            .font(.system(size: 10, weight: .heavy))
-                    }
-                }
-                Image(systemName: target.sfSymbol)
-                    .foregroundStyle(active ? NeonPalette.acidLime : NeonPalette.inkLow)
-                Text(target.label)
-                    .font(NeonFont.roundedHeadline(13))
-                    .foregroundStyle(active ? NeonPalette.inkHigh : NeonPalette.inkMid)
-                Spacer()
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Window → table section
-
-    @ViewBuilder private var windowTableSection: some View {
-        SettingsCard(title: "Window captures", icon: "tablecells", tinkle: NeonPalette.amberLaser) {
-            Toggle(isOn: Binding(
-                get: { appState.settings.windowCaptureAsTable },
-                set: { v in appState.updateSettings { $0.windowCaptureAsTable = v } }
-            )) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Convert window captures to markdown tables")
-                        .font(NeonFont.roundedHeadline(13))
-                    Text("When alignment looks tabular (rows of consistent columns), Textractor exports a Markdown table instead of flat text.")
-                        .font(NeonFont.mono(10))
-                        .foregroundStyle(NeonPalette.inkLow)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-
-    // MARK: - Permissions
-
-    @ViewBuilder private var permissionsSection: some View {
-        SettingsCard(title: "Permissions", icon: "checkmark.shield", tinkle: NeonPalette.acidLime) {
-            let status = PermissionService.shared.check()
-            VStack(alignment: .leading, spacing: 8) {
-                permissionRow(
-                    label: "Screen Recording",
-                    ok: status.screenRecording,
-                    approve: { PermissionService.shared.requestScreenRecording() },
-                    open: { PermissionService.shared.openScreenRecordingSettings() }
-                )
-                permissionRow(
-                    label: "Accessibility",
-                    ok: status.accessibility,
-                    approve: { PermissionService.shared.requestAccessibility() },
-                    open: { PermissionService.shared.openAccessibilitySettings() }
-                )
-            }
-        }
-    }
-
-    private func permissionRow(
-        label: String,
-        ok: Bool,
-        approve: @escaping () -> Void,
-        open: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: ok ? "checkmark.seal.fill" : "xmark.octagon.fill")
-                .foregroundStyle(ok ? NeonPalette.acidLime : NeonPalette.hazardRed)
-            Text(label)
-                .font(NeonFont.roundedHeadline(13))
-                .foregroundStyle(.primary)
-            Spacer()
-            if !ok {
-                Button("Approve", action: approve)
-                    .font(NeonFont.monoCaps(10))
-                    .foregroundStyle(NeonPalette.acidLime)
-                    .buttonStyle(.plain)
-            }
-            Button("System Settings", action: { open() })
-                .font(NeonFont.monoCaps(10))
-                .foregroundStyle(NeonPalette.cyberCyan)
-                .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 5)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(ok ? NeonPalette.acidLime.opacity(0.06) : NeonPalette.hazardRed.opacity(0.06))
-        )
-    }
-
-    // MARK: - Credits
-
-    @ViewBuilder private var creditsSection: some View {
-        SettingsCard(title: "About", icon: "heart.fill", tinkle: NeonPalette.magentaNeon) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Textractor v1.0.0 · on-device")
-                        .font(NeonFont.mono(11))
-                        .foregroundStyle(.primary)
-                    Text("Built with care for your privacy and your eyes.")
-                        .font(NeonFont.mono(10))
-                        .foregroundStyle(NeonPalette.inkLow)
-                }
-                Spacer()
-                Button {
-                    NSWorkspace.shared.open(URL(string: "https://soundcloud.com/lucky-clover")!)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("Made with")
-                            .font(NeonFont.mono(11))
-                        Text("❤️")
-                        Text("by Lucky Clover")
-                            .font(.system(size: 12, weight: .heavy, design: .rounded))
-                            .underline()
-                    }
-                    .foregroundStyle(NeonPalette.gradientPrimary)
-                }
-                .buttonStyle(.plain)
-                .onHover { inside in
-                    if inside { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
-                }
-            }
-        }
-    }
-
-    // MARK: - Footer
-
-    @ViewBuilder private var footer: some View {
-        HStack {
-            Toggle(isOn: Binding(
-                get: { appState.settings.localTelemetryEnabled },
-                set: { v in appState.updateSettings { $0.localTelemetryEnabled = v } }
-            )) {
-                Text("Local writing of telemetry log to disk")
-                    .font(NeonFont.monoCaps(10))
-                    .foregroundStyle(NeonPalette.inkMid)
-            }
-            Spacer()
-            Toggle(isOn: Binding(
-                get: { appState.settings.festiveFeedback },
-                set: { v in appState.updateSettings { $0.festiveFeedback = v } }
-            )) {
-                Text("Festive nudges in toast")
-                    .font(NeonFont.monoCaps(10))
-                    .foregroundStyle(NeonPalette.inkMid)
             }
         }
     }
 }
 
-// MARK: - Settings card
+// MARK: - Row (matches the popover menu row)
 
-struct SettingsCard<Content: View>: View {
-    var title: String
-    var icon: String
-    var tinkle: Color
-    @ViewBuilder var content: () -> Content
+private struct Row: View {
+    enum Role { case normal, destructive }
+    let title: String
+    let icon: String
+    var role: Role = .normal
+    let action: () -> Void
+    @State private var isHovered: Bool = false
+
+    init(_ title: String, icon: String, role: Role = .normal, action: @escaping () -> Void) {
+        self.title = title; self.icon = icon; self.role = role; self.action = action
+    }
+
+    private var accent: Color { role == .destructive ? .red : BreakingDad.toxicGreen }
+    private var baseTitle: Color { role == .destructive ? .red : .primary }
+    private var baseIcon: Color { role == .destructive ? .red : BreakingDad.toxicGreen }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
+        Button(action: action) {
+            HStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(tinkle)
-                Text(title.uppercased())
-                    .font(NeonFont.monoCaps(11))
-                    .foregroundStyle(.primary)
-                Spacer()
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 20, alignment: .center)
+                    .foregroundStyle(isHovered ? Color.white : baseIcon)
+                Text(title)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(isHovered ? Color.white : baseTitle)
+                Spacer(minLength: 8)
             }
-            content()
-                .padding(.horizontal, 4)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isHovered ? accent : Color.clear))
+            .contentShape(Rectangle())
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [tinkle.opacity(0.7), tinkle.opacity(0.15)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        )
-        .modifier(NeonGlow.outer(tinkle, radius: 14, opacity: 0.35))
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+}
+
+// MARK: - Toggle row
+
+private struct ToggleRow: View {
+    let title: String
+    let icon: String
+    @Binding var isOn: Bool
+    @State private var isHovered: Bool = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 20, alignment: .center)
+                .foregroundStyle(isHovered ? Color.white : BreakingDad.toxicGreen)
+            Text(title)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(isHovered ? Color.white : .primary)
+            Spacer(minLength: 8)
+            Toggle("", isOn: $isOn).toggleStyle(BdToggleStyle()).labelsHidden()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isHovered ? BreakingDad.toxicGreen : Color.clear))
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+}
+
+// MARK: - Breaking Dad toggle style
+
+struct BdToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 7) {
+            configuration.label
+            Spacer()
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { configuration.isOn.toggle() }
+            } label: {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(configuration.isOn ? BreakingDad.toxicGreen : BreakingDad.chalk.opacity(0.22))
+                    .frame(width: 34, height: 20)
+                    .overlay(
+                        Circle()
+                            .fill(configuration.isOn ? Color.black.opacity(0.85) : BreakingDad.chalk.opacity(0.7))
+                            .frame(width: 14, height: 14)
+                            .offset(x: configuration.isOn ? 7 : -7)
+                    )
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isOn)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - One-time intro (framer-motion-style fly-in / scale-up / fade)
+
+private struct IntroReveal: ViewModifier {
+    let index: Int
+    let appeared: Bool
+    func body(content: Content) -> some View {
+        content
+            .opacity(appeared ? 1 : 0)
+            .scaleEffect(appeared ? 1 : 0.94)
+            .offset(y: appeared ? 0 : 10)
+            .animation(.spring(response: 0.44, dampingFraction: 0.78).delay(Double(index) * 0.04), value: appeared)
+    }
+}
+
+private extension View {
+    func introReveal(_ index: Int, appeared: Bool) -> some View {
+        modifier(IntroReveal(index: index, appeared: appeared))
     }
 }

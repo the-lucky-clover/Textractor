@@ -133,8 +133,7 @@ Sources/Textractor/
 │   ├── ToastWindowController.swift
 │   └── UpdateService.swift        # local-only version check (no remote channel)
 ├── Theme/
-│   ├── BeakerIcon.swift           # vector beaker + floating "T·X·T"
-│   └── NeonTheme.swift            # color, gradient, motion tokens
+│   └── BreakingDadTheme.swift     # Breaking Dad HUD: color, font, motion tokens
 └── Views/
     ├── BannerView.swift           # wordmark banner + shimmer
     ├── CaptureOverlayView.swift   # full-screen crosshair + window picker

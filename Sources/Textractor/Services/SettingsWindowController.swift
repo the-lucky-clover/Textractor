@@ -26,8 +26,11 @@ final class SettingsWindowController: NSObject {
             )
             // Start at a sane size; we resize to the SwiftUI content below so
             // the whole panel fits with no internal scroll.
+            // Width matches the settings content (same 232pt as the popover
+            // banner); height is taken from the SwiftUI content, capped so it
+            // never exceeds the screen.
             let win = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 900, height: 760),
+                contentRect: NSRect(x: 0, y: 0, width: 246, height: 600),
                 styleMask: [.titled, .closable, .miniaturizable],
                 backing: .buffered,
                 defer: false
@@ -35,11 +38,11 @@ final class SettingsWindowController: NSObject {
             win.title = "Textractor Settings"
             win.contentViewController = hosting
             win.isReleasedWhenClosed = false
-            // Size the window to the SwiftUI content so nothing is clipped.
             hosting.view.layoutSubtreeIfNeeded()
             let size = hosting.preferredContentSize
-            let height = size.height > 0 ? size.height : 760
-            win.setContentSize(NSSize(width: 900, height: height))
+            let w = size.width > 0 ? size.width : 246
+            let h = min(size.height > 0 ? size.height : 600, 600)
+            win.setContentSize(NSSize(width: w, height: h))
             win.center()
             window = win
         }

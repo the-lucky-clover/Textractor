@@ -20,6 +20,12 @@ public enum StorageMode: String, Codable, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
+    /// Modes offered in Settings. `.ask` is intentionally excluded — the app
+    /// now defaults to auto-delete and the per-capture prompt is not surfaced.
+    public static var visibleInSettings: [StorageMode] {
+        [.autoDelete, .safe, .safeOnlyScreenshot]
+    }
+
     public var label: String {
         switch self {
         case .ask:                return "Ask each time"
@@ -61,6 +67,12 @@ public enum QuickShareTarget: String, Codable, CaseIterable, Identifiable, Senda
 
     public var id: String { rawValue }
 
+    /// Modes offered in Settings. `.ask` is intentionally excluded — the app
+    /// now defaults to auto-delete and the per-capture prompt is not surfaced.
+    public static var visibleInSettings: [StorageMode] {
+        [.autoDelete, .safe, .safeOnlyScreenshot]
+    }
+
     public var label: String {
         switch self {
         case .email:   return "Mail"
@@ -89,19 +101,11 @@ public struct AppSettings: Codable, Sendable {
     /// Weirdness 0% = strict, 100% = lenient / creative correction.
     public var weirdness: Double
 
-    /// When `true`, after a successful extraction Textractor synthesises ⌘V
-    /// into the frontmost app.  **Default is OFF** — manual paste remains the
-    /// baseline behaviour.  Requires Accessibility permission.
-    public var autoPasteEnabled: Bool
-
     /// Quick-action chips visible in the toast (Mail / Message / AirDrop).
     public var quickShareTargets: Set<QuickShareTarget>
 
     /// User-vocab correction bias — Vision language-correction will favour these tokens.
     public var customVocabulary: [String]
-
-    /// If true, show a celebratory “streak”/“addictive” toast animation each capture.
-    public var festiveFeedback: Bool
 
     /// If true, allow contributions of anonymous usage stats to local disk only.
     /// (No network is ever used — this just controls local logging.)
@@ -139,6 +143,15 @@ public struct AppSettings: Codable, Sendable {
     /// pasting into apps that don't render attributed string cleanly.
     public var pasteAsPlainText: Bool
 
+    /// When `true`, captured text is flattened — single carriage returns and
+    /// newlines are removed so lists/captured lines become a single paragraph of
+    /// running text. Default OFF.
+    public var flattenText: Bool
+
+    /// When `true`, the banner shimmer and intro fly-in animations are disabled
+    /// (accessibility / calm UI). Default OFF.
+    public var reduceMotion: Bool
+
     /// When `true`, captured text is word-wrapped (flattened) before being
     /// written to the clipboard or shared. Default OFF — most users prefer
     /// original line breaks from the OCR pass.
@@ -152,10 +165,8 @@ public struct AppSettings: Codable, Sendable {
         saveFolderBookmark: Data? = nil,
         saveFolderPath: String? = nil,
         weirdness: Double = 0.45,
-        autoPasteEnabled: Bool = false,
         quickShareTargets: Set<QuickShareTarget> = [.email, .message, .airDrop],
         customVocabulary: [String] = [],
-        festiveFeedback: Bool = true,
         localTelemetryEnabled: Bool = true,
         openPopoverOnCapture: Bool = false,
         lastUpdateCheckAt: Date? = nil,
@@ -166,16 +177,16 @@ public struct AppSettings: Codable, Sendable {
         pasteAsPlainText: Bool = true,
         wordWrapCaptured: Bool = false,
         windowCaptureAsTable: Bool = true,
+        flattenText: Bool = false,
+        reduceMotion: Bool = false,
         fontScale: Double = 1.0
     ) {
-        self.storageMode = storageMode
+        self.storageMode = storageMode  // default .autoDelete set below in `default`
         self.saveFolderBookmark = saveFolderBookmark
         self.saveFolderPath = saveFolderPath
         self.weirdness = weirdness
-        self.autoPasteEnabled = autoPasteEnabled
         self.quickShareTargets = quickShareTargets
         self.customVocabulary = customVocabulary
-        self.festiveFeedback = festiveFeedback
         self.localTelemetryEnabled = localTelemetryEnabled
         self.openPopoverOnCapture = openPopoverOnCapture
         self.windowCaptureAsTable = windowCaptureAsTable
@@ -187,9 +198,11 @@ public struct AppSettings: Codable, Sendable {
         self.soundEffectsEnabled = soundEffectsEnabled
         self.pasteAsPlainText = pasteAsPlainText
         self.wordWrapCaptured = wordWrapCaptured
+        self.flattenText = flattenText
+        self.reduceMotion = reduceMotion
     }
 
-    public static let `default` = AppSettings()
+    public static let `default` = AppSettings(storageMode: .autoDelete)
 }
 
 extension AppSettings {

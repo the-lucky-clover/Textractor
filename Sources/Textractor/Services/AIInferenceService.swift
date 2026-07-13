@@ -56,7 +56,7 @@ public final class AIInferenceService {
             return .neutral
         }
 
-        public var colorHint: String {  // textual hint for the UI; NeonPalette maps to a concrete color
+        public var colorHint: String {  // textual hint the UI maps to a concrete color
             switch self {
             case .positive: return "lime"
             case .neutral:  return "cyan"
