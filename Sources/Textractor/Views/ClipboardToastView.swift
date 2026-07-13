@@ -72,12 +72,16 @@ public struct ClipboardToastView: View {
     @ViewBuilder private var header: some View {
         HStack(spacing: 10) {
             ZStack {
-                Circle().fill(borderColor.opacity(0.16)).frame(width: 32, height: 32)
-                Image(systemName: toast.kind == .success ? "checkmark.seal.fill"
-                                    : (toast.kind == .failure ? "exclamationmark.triangle.fill"
-                                                               : "doc.on.clipboard.fill"))
-                    .foregroundStyle(borderColor)
-                    .font(.system(size: 16, weight: .black))
+                if toast.kind == .success {
+                    // Animated green checkmark confirming image→OCR success.
+                    AnimatedCheckmark(size: 34, lineWidth: 3.5)
+                } else {
+                    Circle().fill(borderColor.opacity(0.16)).frame(width: 32, height: 32)
+                    Image(systemName: toast.kind == .failure ? "exclamationmark.triangle.fill"
+                                                            : "doc.on.clipboard.fill")
+                        .foregroundStyle(borderColor)
+                        .font(.system(size: 16, weight: .black))
+                }
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(toast.headline)
