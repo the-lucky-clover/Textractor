@@ -144,6 +144,19 @@ public final class AppCoordinator: ObservableObject {
         let pasteAsPlainText = appState.settings.pasteAsPlainText
         let wordWrapCaptured = appState.settings.wordWrapCaptured
 
+        // "Save raw image only" is a privacy mode: skip OCR / AI / clipboard
+        // entirely and just persist the screenshot. Nothing about the text is
+        // ever read, analysed, or placed on the pasteboard.
+        if appState.settings.storageMode == .safeOnlyScreenshot {
+            appState.pipelinePhase = .completed
+            _ = try? StorageService.shared.saveToDefaultFolder(capture)
+            TelemetryService.shared.record(
+                TelemetryEvent(kind: .storageSaved, success: true, meta: ["mode": "safeOnlyScreenshot"]),
+                telemetryEnabled: telemetryEnabled
+            )
+            return
+        }
+
         // OCR
         appState.pipelinePhase = .ocr
         let cgImage: CGImage

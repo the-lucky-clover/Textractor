@@ -17,8 +17,7 @@ public final class OCRService {
     public func recognizeText(
         in cgImage: CGImage,
         weirdness: Double = 0.45,
-        customVocabulary: [String] = [],
-        telemetryEnabled: Bool = true
+        customVocabulary: [String] = []
     ) async -> OCRResult {
         let started = Date()
         let normalized = max(0.0, min(1.0, weirdness))
@@ -43,7 +42,7 @@ public final class OCRService {
         if observations.isEmpty {
             TelemetryService.shared.record(
                 TelemetryEvent(kind: .ocrRetry, success: false, meta: ["reason": "empty-accurate"]),
-                telemetryEnabled: telemetryEnabled
+                telemetryEnabled: TelemetryService.shared.isEnabled
             )
             observations = await Task.detached(priority: .userInitiated) {
                 Self.runSync(
@@ -77,7 +76,7 @@ public final class OCRService {
         if observations.isEmpty && !customVocabulary.isEmpty {
             TelemetryService.shared.record(
                 TelemetryEvent(kind: .ocrRetry, success: false, meta: ["reason": "vocab-fallback"]),
-                telemetryEnabled: telemetryEnabled
+                telemetryEnabled: TelemetryService.shared.isEnabled
             )
             observations = await Task.detached(priority: .userInitiated) {
                 Self.runSync(
@@ -109,7 +108,7 @@ public final class OCRService {
                     "attempts": "\(revisionsUsed.count)"
                 ]
             ),
-            telemetryEnabled: telemetryEnabled
+            telemetryEnabled: TelemetryService.shared.isEnabled
         )
 
         return result
