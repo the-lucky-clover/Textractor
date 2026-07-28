@@ -2,110 +2,31 @@ import Foundation
 import SwiftUI
 import Carbon.HIToolbox
 
-// MARK: - StorageMode
-
-/// Where captured screenshots are persisted.
-public enum StorageMode: String, Codable, CaseIterable, Identifiable, Sendable {
-    /// After OCR, show a toast with `Keep` / `Delete` buttons. Default after timeout = delete.
-    case ask
-
-    /// Always move screenshot to Trash after text extraction.
-    case autoDelete
-
-    /// Always save to `defaultFolder`. Defaults to `~/Pictures/Textractor Screenshots/`.
-    case safe
-
-    /// Skip OCR / clipboard entirely — just save the screenshot file. Useful privacy mode.
-    case safeOnlyScreenshot
-
-    public var id: String { rawValue }
-
-    /// Modes offered in Settings. `.ask` is intentionally excluded — the app
-    /// now defaults to auto-delete and the per-capture prompt is not surfaced.
-    public static var visibleInSettings: [StorageMode] {
-        [.autoDelete, .safe, .safeOnlyScreenshot]
-    }
-
-    public var label: String {
-        switch self {
-        case .ask:                return "Ask each time"
-        case .autoDelete:         return "Auto-delete"
-        case .safe:               return "Save to folder"
-        case .safeOnlyScreenshot: return "Save raw image only (no extraction)"
-        }
-    }
-
-    public var description: String {
-        switch self {
-        case .ask:
-            return "Show Save / Delete choices in the toast after each capture"
-        case .autoDelete:
-            return "Trash the screenshot the moment text is copied"
-        case .safe:
-            return "Permanently write every screenshot to the chosen folder"
-        case .safeOnlyScreenshot:
-            return "Save the image and skip text extraction entirely"
-        }
-    }
-
-    public var symbolName: String {
-        switch self {
-        case .ask:                return "questionmark.circle"
-        case .autoDelete:         return "trash"
-        case .safe:               return "folder.fill"
-        case .safeOnlyScreenshot: return "photo.fill"
-        }
-    }
-}
-
-// MARK: - QuickShareTarget
-
-public enum QuickShareTarget: String, Codable, CaseIterable, Identifiable, Sendable {
-    case email
-    case message     // macOS Messages / SMS
-    case airDrop
-
-    public var id: String { rawValue }
-
-    /// Modes offered in Settings. `.ask` is intentionally excluded — the app
-    /// now defaults to auto-delete and the per-capture prompt is not surfaced.
-    public static var visibleInSettings: [StorageMode] {
-        [.autoDelete, .safe, .safeOnlyScreenshot]
-    }
-
-    public var label: String {
-        switch self {
-        case .email:   return "Mail"
-        case .message: return "Message"
-        case .airDrop: return "AirDrop"
-        }
-    }
-
-    public var sfSymbol: String {
-        switch self {
-        case .email:   return "envelope.fill"
-        case .message: return "message.fill"
-        case .airDrop: return "antenna.radiowaves.left.and.right"
-        }
-    }
-}
-
 // MARK: - AppSettings
 
 /// User-facing configuration. Persisted with `UserDefaults` via `SettingsStore`.
+///
+/// Privacy posture (post-2.0): Textractor **always** runs OCR and discards the
+/// screenshot. The user can opt into keeping failed-OCR screenshots for
+/// recovery, but there is no "save every screenshot" mode. There is also no
+/// "where should I save?" picker; failed screenshots land in
+/// `~/Pictures/Textractor Screenshots/` so the user can still use macOS's
+/// built-in screen capture if they want different storage.
 public struct AppSettings: Codable, Sendable {
-    public var storageMode: StorageMode
-    public var saveFolderBookmark: Data?       // security-scoped or absolute path
-    public var saveFolderPath: String?         // resolved for display (non-Authoritative)
-
     /// Weirdness 0% = strict, 100% = lenient / creative correction.
     public var weirdness: Double
 
-    /// Quick-action chips visible in the toast (Mail / Message / AirDrop).
-    public var quickShareTargets: Set<QuickShareTarget>
-
     /// User-vocab correction bias — Vision language-correction will favour these tokens.
     public var customVocabulary: [String]
+
+    /// Single source of truth for both UI localization and OCR preference.
+    /// Empty means "Automatic" — OCRService builds a multi-language superset.
+    /// Non-empty selects that language for both UI and OCR.
+    public var uiLanguage: String
+/// Deprecated: use `uiLanguage` instead. Kept for backwards-compatible
+/// decoding of older persisted settings.
+@available(*, deprecated, message: "Use uiLanguage instead")
+public var ocrLanguages: [String] = []
 
     /// If true, allow contributions of anonymous usage stats to local disk only.
     /// (No network is ever used — this just controls local logging.)
@@ -140,7 +61,7 @@ public struct AppSettings: Codable, Sendable {
 
     /// When `true` (default), Textractor writes only plain text to the
     /// pasteboard — the rich typography formatting is skipped. Useful for
-    /// pasting into apps that don't render attributed string cleanly.
+    /// pasting into apps that don"t render attributed string cleanly.
     public var pasteAsPlainText: Bool
 
     /// When `true`, captured text is flattened — single carriage returns and
@@ -156,17 +77,51 @@ public struct AppSettings: Codable, Sendable {
     /// written to the clipboard or shared. Default OFF — most users prefer
     /// original line breaks from the OCR pass.
     public var wordWrapCaptured: Bool
-    
+
     /// Font scale factor for accessibility (0.75 to 2.5).
     public var fontScale: Double
 
+    // MARK: - Dock / Menu bar presence
+    
+    /// Controls whether Textractor appears in the Dock, the menu bar, or both.
+    /// - `menuBarOnly`: Traditional accessory app (no Dock icon, default)
+    /// - `dockOnly`: Regular app with Dock icon, no menu bar item
+    /// - `both`: Regular app with Dock icon AND menu bar item
+    public var dockPresence: DockPresence
+
+    // MARK: - Privacy
+
+    /// PII redaction toggle. **Default ON** — passwords / credit-cards / SSNs /
+    /// API keys etc. detected in the extracted text are replaced with
+    /// `[REDACTED:KIND]` before the text ever reaches the pasteboard or the
+    /// history store. Set to `false` ("Permit PII", a.k.a. **PPI**) to allow
+    /// sensitive data through verbatim. The toast surfaces the current mode
+    /// prominently so the user always knows which path was taken.
+    public var piiRedactionEnabled: Bool
+
+    // MARK: - History
+
+    /// Maximum number of records retained in the persistent history.
+    /// Slider-clamped to `10…1000` in the Settings UI.
+    public var historyEntryLimit: Int
+
+    // MARK: - Knowledge Mode
+
+    /// When enabled, every capture is saved to the visual knowledge library
+    /// with full image, OCR text, metadata, and AI-generated insights.
+    /// Disabled by default to preserve the lightweight clipboard-only workflow.
+    public var knowledgeModeEnabled: Bool
+
+    // MARK: - Extended Logging
+
+    /// When enabled, writes verbose logs to a file in `~/Library/Caches/Textractor/Logs/`.
+    /// Useful for debugging OCR pipeline issues.
+    public var extendedLoggingEnabled: Bool
+
     public init(
-        storageMode: StorageMode = .ask,
-        saveFolderBookmark: Data? = nil,
-        saveFolderPath: String? = nil,
         weirdness: Double = 0.45,
-        quickShareTargets: Set<QuickShareTarget> = [.email, .message, .airDrop],
         customVocabulary: [String] = [],
+        uiLanguage: String = "",
         localTelemetryEnabled: Bool = true,
         openPopoverOnCapture: Bool = false,
         lastUpdateCheckAt: Date? = nil,
@@ -179,14 +134,16 @@ public struct AppSettings: Codable, Sendable {
         windowCaptureAsTable: Bool = true,
         flattenText: Bool = false,
         reduceMotion: Bool = false,
-        fontScale: Double = 1.0
+        fontScale: Double = 1.0,
+        piiRedactionEnabled: Bool = true,
+        historyEntryLimit: Int = 200,
+        dockPresence: DockPresence = .menuBarOnly,
+        knowledgeModeEnabled: Bool = false,
+        extendedLoggingEnabled: Bool = false
     ) {
-        self.storageMode = storageMode  // default .autoDelete set below in `default`
-        self.saveFolderBookmark = saveFolderBookmark
-        self.saveFolderPath = saveFolderPath
         self.weirdness = weirdness
-        self.quickShareTargets = quickShareTargets
         self.customVocabulary = customVocabulary
+        self.uiLanguage = uiLanguage
         self.localTelemetryEnabled = localTelemetryEnabled
         self.openPopoverOnCapture = openPopoverOnCapture
         self.windowCaptureAsTable = windowCaptureAsTable
@@ -200,10 +157,116 @@ public struct AppSettings: Codable, Sendable {
         self.wordWrapCaptured = wordWrapCaptured
         self.flattenText = flattenText
         self.reduceMotion = reduceMotion
+        self.piiRedactionEnabled = piiRedactionEnabled
+        self.historyEntryLimit = historyEntryLimit
+        self.dockPresence = dockPresence
+        self.knowledgeModeEnabled = knowledgeModeEnabled
+        self.extendedLoggingEnabled = extendedLoggingEnabled
     }
 
-    public static let `default` = AppSettings(storageMode: .autoDelete)
+    // MARK: - Codable migration
+
+private enum CodingKeys: String, CodingKey {
+        case weirdness, customVocabulary, uiLanguage, localTelemetryEnabled, openPopoverOnCapture, lastUpdateCheckAt
+        case customHotkeyKeyCode, customHotkeyModifiers, customHotkeyLabel, soundEffectsEnabled
+        case pasteAsPlainText, wordWrapCaptured, windowCaptureAsTable, flattenText, reduceMotion
+        case fontScale, piiRedactionEnabled, historyEntryLimit, ocrLanguages, dockPresence, knowledgeModeEnabled, extendedLoggingEnabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        weirdness = try container.decode(Double.self, forKey: .weirdness)
+        customVocabulary = try container.decode([String].self, forKey: .customVocabulary)
+        var decodedUiLanguage = try container.decode(String.self, forKey: .uiLanguage)
+        // Migration: older builds stored the OCR language list in `ocrLanguages`.
+        // If `uiLanguage` is empty but legacy `ocrLanguages` has entries, promote
+        // the first one so the user does not lose their language preference.
+        if decodedUiLanguage.isEmpty,
+           let legacyLangs = try container.decodeIfPresent([String].self, forKey: .ocrLanguages),
+           let first = legacyLangs.first,
+           !first.isEmpty {
+            decodedUiLanguage = first
+        }
+        self.uiLanguage = decodedUiLanguage
+        localTelemetryEnabled = try container.decode(Bool.self, forKey: .localTelemetryEnabled)
+        openPopoverOnCapture = try container.decode(Bool.self, forKey: .openPopoverOnCapture)
+        lastUpdateCheckAt = try container.decodeIfPresent(Date.self, forKey: .lastUpdateCheckAt)
+        customHotkeyKeyCode = try container.decodeIfPresent(UInt32.self, forKey: .customHotkeyKeyCode)
+        customHotkeyModifiers = try container.decodeIfPresent(UInt32.self, forKey: .customHotkeyModifiers)
+        customHotkeyLabel = try container.decodeIfPresent(String.self, forKey: .customHotkeyLabel)
+        soundEffectsEnabled = try container.decode(Bool.self, forKey: .soundEffectsEnabled)
+        pasteAsPlainText = try container.decode(Bool.self, forKey: .pasteAsPlainText)
+        wordWrapCaptured = try container.decode(Bool.self, forKey: .wordWrapCaptured)
+        windowCaptureAsTable = try container.decode(Bool.self, forKey: .windowCaptureAsTable)
+        flattenText = try container.decode(Bool.self, forKey: .flattenText)
+        reduceMotion = try container.decode(Bool.self, forKey: .reduceMotion)
+        fontScale = try container.decode(Double.self, forKey: .fontScale)
+        piiRedactionEnabled = try container.decode(Bool.self, forKey: .piiRedactionEnabled)
+        historyEntryLimit = try container.decode(Int.self, forKey: .historyEntryLimit)
+        dockPresence = try container.decodeIfPresent(DockPresence.self, forKey: .dockPresence) ?? .menuBarOnly
+        knowledgeModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .knowledgeModeEnabled) ?? false
+        extendedLoggingEnabled = try container.decodeIfPresent(Bool.self, forKey: .extendedLoggingEnabled) ?? false
+        self.ocrLanguages = [] // deprecated; cleared after migration
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(weirdness, forKey: .weirdness)
+        try container.encode(customVocabulary, forKey: .customVocabulary)
+        try container.encode(uiLanguage, forKey: .uiLanguage)
+        try container.encode(localTelemetryEnabled, forKey: .localTelemetryEnabled)
+        try container.encode(openPopoverOnCapture, forKey: .openPopoverOnCapture)
+        try container.encodeIfPresent(lastUpdateCheckAt, forKey: .lastUpdateCheckAt)
+        try container.encodeIfPresent(customHotkeyKeyCode, forKey: .customHotkeyKeyCode)
+        try container.encodeIfPresent(customHotkeyModifiers, forKey: .customHotkeyModifiers)
+        try container.encodeIfPresent(customHotkeyLabel, forKey: .customHotkeyLabel)
+        try container.encode(soundEffectsEnabled, forKey: .soundEffectsEnabled)
+        try container.encode(pasteAsPlainText, forKey: .pasteAsPlainText)
+        try container.encode(wordWrapCaptured, forKey: .wordWrapCaptured)
+        try container.encode(windowCaptureAsTable, forKey: .windowCaptureAsTable)
+        try container.encode(flattenText, forKey: .flattenText)
+        try container.encode(reduceMotion, forKey: .reduceMotion)
+        try container.encode(fontScale, forKey: .fontScale)
+        try container.encode(piiRedactionEnabled, forKey: .piiRedactionEnabled)
+        try container.encode(historyEntryLimit, forKey: .historyEntryLimit)
+        try container.encode(dockPresence, forKey: .dockPresence)
+        try container.encode(knowledgeModeEnabled, forKey: .knowledgeModeEnabled)
+        try container.encode(extendedLoggingEnabled, forKey: .extendedLoggingEnabled)
+        // `ocrLanguages` is deprecated and intentionally omitted from new encodes.
+    }
+
+    /// Backwards-compatible decoder: 2.x dropped `storageMode`, `saveFolder*`
+    /// entirely. Older plists still decode fine because the synthesized
+    /// `Decodable` ignores absent keys; this is here purely for the
+    /// documentation breadcrumb.
+    public static let `default` = AppSettings(
+        weirdness: 0.45,
+        customVocabulary: [],
+        uiLanguage: "",
+        localTelemetryEnabled: true,
+        openPopoverOnCapture: false,
+        lastUpdateCheckAt: nil,
+        customHotkeyKeyCode: nil,
+        customHotkeyModifiers: nil,
+        customHotkeyLabel: nil,
+        soundEffectsEnabled: true,
+        pasteAsPlainText: true,
+        wordWrapCaptured: false,
+        windowCaptureAsTable: true,
+        flattenText: false,
+        reduceMotion: false,
+        fontScale: 1.0,
+        piiRedactionEnabled: true,
+        historyEntryLimit: 200,
+        dockPresence: .menuBarOnly,
+        knowledgeModeEnabled: false,
+        extendedLoggingEnabled: false
+    )
 }
+
+
+
+// MARK: - Hotkey
 
 extension AppSettings {
     /// Default screen-capture hotkey: ⌘⇧2 (`kVK_ANSI_2` with cmdKey|shiftKey).
@@ -222,13 +285,51 @@ extension AppSettings {
     }
 }
 
-// MARK: - Sensible defaults
+// MARK: - OCR languages
 
 public extension AppSettings {
-    /// ~/Pictures/Textractor Screenshots/  — created lazily on first save.
-    static func defaultSaveFolder() -> URL {
-        let pics = (FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first)
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Pictures")
-        return pics.appendingPathComponent("Textractor Screenshots", isDirectory: true)
+    /// Curated list of OCR languages offered in the Settings UI. Apple Vision
+    /// supports many more, this list covers the most commonly requested.
+    static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
+        ("en-US", "English (US)", "🇺🇸"),
+        ("en-GB", "English (UK)", "🇬🇧"),
+        ("es-ES", "Spanish", "🇪🇸"),
+        ("fr-FR", "French", "🇫🇷"),
+        ("de-DE", "German", "🇩🇪"),
+        ("it-IT", "Italian", "🇮🇹"),
+        ("pt-BR", "Portuguese (Brazil)", "🇧🇷"),
+        ("nl-NL", "Dutch", "🇳🇱"),
+        ("ru-RU", "Russian", "🇷🇺"),
+        ("ja-JP", "Japanese", "🇯🇵"),
+        ("ko-KR", "Korean", "🇰🇷"),
+        ("zh-Hans", "Chinese (Simplified)", "🇨🇳"),
+        ("zh-Hant", "Chinese (Traditional)", "🇹🇼"),
+        ("ar-SA", "Arabic", "🇸🇦"),
+    ]
+
+    /// Bounded range exposed in the Settings slider.
+    static let historyLimitRange: ClosedRange<Int> = 10...1000
+
+    /// Convenience alias for the OCR language catalog tuple.
+    typealias CatalogEntry = (code: String, name: String, flag: String)
+    
+    // MARK: - Dock Presence
+
+    /// Controls where Textractor appears in the system UI.
+    enum DockPresence: String, Codable, CaseIterable, Sendable {
+        /// Menu bar only (traditional accessory app, no Dock icon).
+        case menuBarOnly
+        /// Dock only (regular app with Dock icon, no menu bar item).
+        case dockOnly
+        /// Both Dock and menu bar.
+        case both
+
+        public var displayName: String {
+            switch self {
+            case .menuBarOnly: return T.s("settings.dock.menuBarOnly")
+            case .dockOnly: return T.s("settings.dock.dockOnly")
+            case .both: return T.s("settings.dock.both")
+            }
+        }
     }
 }

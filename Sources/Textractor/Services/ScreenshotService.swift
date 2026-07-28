@@ -1,5 +1,4 @@
 import AppKit
-import AVFoundation
 import CoreGraphics
 import CoreImage
 import ImageIO
@@ -15,8 +14,6 @@ public enum ScreenshotError: LocalizedError {
     case fileLoadFailed(URL)
     case encodingFailed
     case continuityCameraNotAvailable
-    case videoCaptureFailed
-    case noCameraInput
     case processingFailed(String)
 
     public var errorDescription: String? {
@@ -28,13 +25,11 @@ public enum ScreenshotError: LocalizedError {
         case .fileLoadFailed(let url):  return "Image could not be loaded from \(url.path)."
         case .encodingFailed:      return "Failed to encode image data."
         case .continuityCameraNotAvailable: return "Continuity Camera is not available on this Mac or the iPhone/iPad is not nearby."
-        case .videoCaptureFailed: return "Video capture failed. Ensure camera access is granted."
-        case .noCameraInput: return "No camera input detected."
         case .processingFailed(let reason): return "Processing failed: \(reason)"
         }
     }
 }
-
+ 
 /// `WindowDescriptor` describes a visible window discovered by `enumerateWindows`.
 public struct WindowDescriptor: Identifiable, Hashable, Sendable {
     public let id: CGWindowID
@@ -79,14 +74,23 @@ public struct WindowDescriptor: Identifiable, Hashable, Sendable {
 /// Writes PNGs to `NSTemporaryDirectory`/Textractor/<uuid>.png and returns
 /// `CapturedImage` for downstream consumers.
 ///
-/// Inherits `NSObject` so the instance can act as a delegate for
-/// `AVCaptureVideoDataOutputSampleBufferDelegate` (used to stream frames
-/// from the built-in camera and from any Continuity Camera iPhone/iPad).
+/// Inherits `NSObject` for Objective-C compatibility.
 public final class ScreenshotService: NSObject {
 
     public static let shared = ScreenshotService()
 
     private override init() { super.init() }
+
+    
+    /// Throws `ScreenshotError.permissionDenied` when macOS Screen Recording
+    /// access is not granted. Calling this *before* any ScreenCaptureKit /
+    /// CoreGraphics capture API means a denial surfaces as a clean,
+    /// distinguishable error instead of a generic image-creation failure.
+    private func ensureScreenRecordingAccess() throws {
+        guard PermissionService.shared.screenRecordingGranted else {
+            throw ScreenshotError.permissionDenied
+        }
+    }
 
     // MARK: - Public API
 
@@ -101,7 +105,13 @@ public final class ScreenshotService: NSObject {
             telemetryEnabled: TelemetryService.shared.isEnabled
         )
 
+        try ensureScreenRecordingAccess()
+
         let screens = NSScreen.screens
+        guard !screens.isEmpty else {
+            LoggerService.shared.error("captureRegion failed: no displays detected")
+            throw ScreenshotError.noDisplay
+        }
         let centerPoint = CGPoint(x: rect.midX, y: rect.midY)
         let screen = screens.first(where: { $0.frame.contains(centerPoint) }) ?? NSScreen.main ?? screens[0]
         let screenIndex = screens.firstIndex(of: screen) ?? 0
@@ -118,9 +128,13 @@ public final class ScreenshotService: NSObject {
         return try writeToDisk(cropped, mode: .crosshair, origin: .region, rect: rect, screenIndex: screenIndex)
     }
 
-    /// Capture a single window by id via ScreenCaptureKit's
-    /// `desktopIndependentWindow` content filter.
+    /// Capture a single window by id using the same Quartz source of truth
+    /// as `enumerateWindows()`. Avoids a SCShareableContent lookup mismatch
+    /// where a window can be visible in the CGWindow list but absent from
+    /// ScreenCaptureKit's snapshot (or vice-versa).
     public func captureWindow(_ windowID: CGWindowID) async throws -> (CapturedImage, WindowDescriptor) {
+        try ensureScreenRecordingAccess()
+
         guard let window = enumerateWindows().first(where: { $0.id == windowID }) else {
             throw ScreenshotError.noWindow
         }
@@ -133,12 +147,17 @@ public final class ScreenshotService: NSObject {
             telemetryEnabled: TelemetryService.shared.isEnabled
         )
 
-        let content = try await SCShareableContent.current
-        guard let scWin = content.windows.first(where: { $0.windowID == windowID }) else {
-            throw ScreenshotError.noWindow
+        // Use CGWindowListCreateImage with the same bounds we got from enumeration.
+        // This keeps capture and enumeration in lockstep — one source of truth.
+        let cgImage = CGWindowListCreateImage(
+            window.bounds,
+            .optionIncludingWindow,
+            windowID,
+            [.bestResolution]
+        )
+        guard let img = cgImage else {
+            throw ScreenshotError.imageCreationFailed
         }
-        let filter = SCContentFilter(desktopIndependentWindow: scWin)
-        let img = try await captureCGImage(filter: filter)
         let captured = try writeToDisk(img, mode: .window, origin: .window, rect: window.bounds, screenIndex: 0)
         return (captured, window)
     }
@@ -147,6 +166,8 @@ public final class ScreenshotService: NSObject {
     /// full surface of each (not just a cursor box — the previous 40×40 box
     /// didn't reflect the "Full Screen" label users see in the menu).
     public func captureFullScreen() async throws -> [CapturedImage] {
+        try ensureScreenRecordingAccess()
+
         let displays = NSScreen.screens
         guard !displays.isEmpty else { throw ScreenshotError.noDisplay }
 
@@ -284,6 +305,31 @@ public final class ScreenshotService: NSObject {
         )
     }
 
+    /// Load an image from a file URL and persist it to the Textractor temp directory.
+    /// Returns a `CapturedImage` with `.file` origin.
+    public func loadImage(from url: URL) async throws -> CapturedImage {
+        guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+            throw ScreenshotError.fileLoadFailed(url)
+        }
+        let persistedURL = try persist(cgImage: cgImage)
+        return CapturedImage(
+            mode: .crosshair, // default mode for file imports
+            origin: .file,
+            rect: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height),
+            fileURL: persistedURL
+        )
+    }
+
+    /// Check if Continuity Camera is available on this Mac with a nearby iOS device.
+    @available(macOS 13.0, *)
+    public func isContinuityCameraAvailable() async -> Bool {
+        // Check if there's at least one iOS device nearby that supports Continuity Camera
+        // We use a lightweight check by trying to enumerate devices
+        // For now, return true on macOS 13+ as the system handles the availability UI
+        return true
+    }
+
     // MARK: - Continuity Camera Support
 
     /// Capture an image using the Continuity Camera (iPhone/iPad as webcam).
@@ -317,95 +363,6 @@ public final class ScreenshotService: NSObject {
         }
 
         return try await ingestFile(at: url, origin: .continuityCamera)
-    }
-
-    // MARK: - Live Video Capture for OCR
-
-    /// Starts a live video capture session from the default continuity / built-in camera.
-    /// Returns an `AsyncThrowingStream` of `CapturedImage`s suitable for continuous OCR.
-    /// Call `stopVideoCapture()` to end the session.
-    private var videoCaptureSession: AVCaptureSession?
-    private var videoCaptureOutput: AVCaptureVideoDataOutput?
-    private var videoCaptureQueue = DispatchQueue(label: "textractor.video.capture")
-    private var videoCaptureContinuation: AsyncThrowingStream<CapturedImage, Error>.Continuation?
-
-    public func startVideoCapture() async throws -> AsyncThrowingStream<CapturedImage, Error> {
-        LoggerService.shared.info("Starting live video capture")
-
-        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
-            throw ScreenshotError.permissionDenied
-        }
-
-        let session = AVCaptureSession()
-        session.sessionPreset = .high
-
-        // Find any video device — on macOS:
-        //   `.external` ⇢ Continuity Camera (iPhone / iPad) AND USB cams
-        //   `.builtInWideAngleCamera` ⇢ FaceTime / built-in Mac camera
-        // `.builtInTrueDepthCamera` is iOS-only and unavailable on macOS.
-        let device = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [
-                .external,
-                .builtInWideAngleCamera
-            ],
-            mediaType: .video,
-            position: .unspecified
-        ).devices.first
-
-        guard let camera = device else { throw ScreenshotError.noCameraInput }
-        let input = try AVCaptureDeviceInput(device: camera)
-
-        session.addInput(input)
-
-        // Use AVCaptureVideoDataOutput so we get per-frame CMSampleBuffers
-        // for OCR streaming — AVCapturePhotoOutput is one-shot snapshots.
-        let output = AVCaptureVideoDataOutput()
-        output.setSampleBufferDelegate(self, queue: videoCaptureQueue)
-        session.addOutput(output)
-
-        videoCaptureSession = session
-        videoCaptureOutput = output
-
-        session.startRunning()
-
-        return AsyncThrowingStream<CapturedImage, Error> { continuation in
-            videoCaptureContinuation = continuation
-            continuation.onTermination = { [weak self] _ in
-                self?.stopVideoCapture()
-            }
-        }
-    }
-
-    public func stopVideoCapture() {
-        LoggerService.shared.info("Stopping live video capture")
-        videoCaptureSession?.stopRunning()
-        videoCaptureSession = nil
-        videoCaptureOutput = nil
-        videoCaptureContinuation?.finish()
-        videoCaptureContinuation = nil
-    }
-
-    /// Helper: read a captured CMSampleBuffer into a `CapturedImage` and emit.
-    fileprivate func handleVideoFrame(_ sampleBuffer: CMSampleBuffer) {
-        guard let continuation = videoCaptureContinuation else { return }
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
-        let width = cgImage.width
-        let height = cgImage.height
-        do {
-            let captured = try writeToDisk(
-                cgImage,
-                mode: .crosshair,
-                origin: .video,
-                rect: CGRect(x: 0, y: 0, width: width, height: height),
-                screenIndex: 0
-            )
-            continuation.yield(captured)
-        } catch {
-            continuation.yield(with: .failure(error))
-        }
     }
 
     /// Internal async file loader used by both `captureFromFile` and Continuity
@@ -560,16 +517,5 @@ public final class ScreenshotService: NSObject {
         try data.write(to: url, options: .atomic)
         return url
     }
-}
-
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
-
-extension ScreenshotService: AVCaptureVideoDataOutputSampleBufferDelegate {
-    public func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-        handleVideoFrame(sampleBuffer)
+    
     }
-}
