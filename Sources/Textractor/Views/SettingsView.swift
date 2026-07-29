@@ -2,26 +2,25 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-/// Settings window styled to match the menubar popover: same 232pt width, same
-/// system typography (10pt section labels / 13pt rows), same dark rounded
-/// background. Branded with the shimmer banner (no second header) and Breaking
-/// Dad toxic-green accents. Elements fly in once with a framer-motion-style
-/// intro (disabled when Reduce Motion is on). All prefs bind to `AppState`.
+/// Settings window styled to match the menubar popover: same 252pt width, same
+/// system typography, same dark rounded background. Branded with the shimmer
+/// banner (no second header) and Breaking Dad toxic-green accents. Elements fly
+/// in once with a framer-motion-style intro (disabled when Reduce Motion is on).
 public struct SettingsView: View {
 
     @EnvironmentObject var appState: AppState
-    @State private var aiVocabText: String = ""
-    /// Drives the one-time fly-in / scale-up / fade intro.
     @State private var firstLoad: Bool = false
 
     public init() {}
 
     private static let headerBackground = textractorHeaderBackground
-    private var animate: Bool { !appState.settings.reduceMotion && firstLoad }
+    private var appeared: Bool { firstLoad }
+    private var reduceMotion: Bool { appState.settings.reduceMotion }
+    private var screenRecordingGranted: Bool { PermissionService.shared.screenRecordingGranted }
 
-    // MARK: - Banner (identical geometry to the menubar popover)
+    // MARK: - Banner
 
-    private let bannerWidth: CGFloat = 232
+    private let bannerWidth: CGFloat = 252
     private var bannerAspect: CGFloat { 344.0 / 1280.0 }
     private var bannerDisplayWidth: CGFloat { bannerWidth * 1.05 }
     private var bannerHeight: CGFloat { bannerWidth * bannerAspect * 0.95 }
@@ -43,50 +42,125 @@ public struct SettingsView: View {
         VStack(spacing: 0) {
             banner
                 .background(Self.headerBackground)
-                .introReveal(0, appeared: animate)
+                .introReveal(0, appeared: firstLoad, animate: !reduceMotion)
 
-            ScrollView {
+            ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 1) {
-                    sectionLabel("AI & Extraction").introReveal(1, appeared: animate)
-                    weirdnessBlock.introReveal(1, appeared: animate)
-                    vocabularyBlock.introReveal(1, appeared: animate)
-                    Row("Reset to defaults", icon: "arrow.counterclockwise.circle.fill") { resetDefaults() }
-                        .introReveal(1, appeared: animate)
-
-                    sectionLabel("Sharing").introReveal(2, appeared: animate)
-                    ToggleRow(title: "Paste as plain text", icon: "doc.on.clipboard", isOn: pasteAsPlainTextBinding)
-                        .introReveal(2, appeared: animate)
-                    Text("QUICK-SHARE CHIPS")
-                        .font(.system(size: 9, weight: .black, design: .monospaced))
-                        .kerning(0.6).foregroundStyle(.tertiary)
-                        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 2)
-                        .introReveal(2, appeared: animate)
-                    ForEach(QuickShareTarget.allCases) { target in
-                        ToggleRow(title: target.label, icon: target.sfSymbol, isOn: quickShareBinding(target))
-                            .introReveal(2, appeared: animate)
+                    // Permissions at top ONLY if not yet granted — critical for capture to work
+                    if !screenRecordingGranted {
+                        sectionLabel(T.s("section.permissions")).introReveal(1, appeared: firstLoad, animate: !reduceMotion)
+                        permissionRow(open: { PermissionService.shared.openScreenRecordingSettings() })
+                            .introReveal(1, appeared: firstLoad, animate: !reduceMotion)
                     }
 
-                    sectionLabel("Window Captures").introReveal(3, appeared: animate)
-                    ToggleRow(title: "Convert to markdown tables", icon: "tablecells", isOn: windowCaptureBinding)
-                        .introReveal(3, appeared: animate)
+                    sectionLabel(T.s("section.ai")).introReveal(screenRecordingGranted ? 1 : 2, appeared: firstLoad, animate: !reduceMotion)
+                    weirdnessBlock.introReveal(screenRecordingGranted ? 1 : 2, appeared: firstLoad, animate: !reduceMotion)
+                    Row(T.s("reset.defaults"), icon: "arrow.counterclockwise.circle.fill") { resetDefaults() }
+                        .introReveal(screenRecordingGranted ? 1 : 2, appeared: firstLoad, animate: !reduceMotion)
 
-                    sectionLabel("Updates").introReveal(4, appeared: animate)
-                    updatesBlock.introReveal(4, appeared: animate)
+                    sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
+                    languagePicker.introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
 
-                    sectionLabel("History").introReveal(5, appeared: animate)
-                    Row("Open History", icon: "clock.arrow.circlepath") { AppCoordinator.shared.showHistoryWindow() }
-                        .introReveal(5, appeared: animate)
+                    sectionLabel(T.s("section.formatting")).introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
+                    ToggleRow(title: T.s("paste.plain"), icon: "doc.on.clipboard", isOn: pasteAsPlainTextBinding)
+                        .introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
+                    ToggleRow(title: T.s("flatten.text"), icon: "paragraph", isOn: flattenBinding)
+                        .introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
+                    ToggleRow(title: T.s("table.markdown"), icon: "tablecells", isOn: windowCaptureBinding)
+                        .introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
 
-                    sectionLabel("Behaviour").introReveal(6, appeared: animate)
-                    ToggleRow(title: "Flatten text (no line breaks)", icon: "paragraph", isOn: flattenBinding)
-                        .introReveal(6, appeared: animate)
-                    ToggleRow(title: "Reduce motion", icon: "decrease.quote.glass", isOn: reduceMotionBinding)
-                        .introReveal(6, appeared: animate)
-                    ToggleRow(title: "Local telemetry log", icon: "chart.bar", isOn: telemetryBinding)
-                        .introReveal(6, appeared: animate)
+                    sectionLabel(T.s("section.updates")).introReveal(screenRecordingGranted ? 4 : 5, appeared: firstLoad, animate: !reduceMotion)
+                    updatesBlock.introReveal(screenRecordingGranted ? 4 : 5, appeared: firstLoad, animate: !reduceMotion)
 
-                    sectionLabel("About").introReveal(7, appeared: animate)
-                    aboutBlock.introReveal(7, appeared: animate)
+                    sectionLabel(T.s("section.privacy")).introReveal(screenRecordingGranted ? 5 : 6, appeared: firstLoad, animate: !reduceMotion)
+                    ToggleRow(title: T.s("privacy.pii"), icon: "eye.slash", isOn: piiBinding)
+                        .introReveal(screenRecordingGranted ? 5 : 6, appeared: firstLoad, animate: !reduceMotion)
+                    piiStatusRow.introReveal(screenRecordingGranted ? 5 : 6, appeared: firstLoad, animate: !reduceMotion)
+
+                    sectionLabel(T.s("section.history")).introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    Row(T.s("history.open"), icon: "clock.arrow.circlepath") { AppCoordinator.shared.showHistoryWindow() }
+                        .introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    historyLimitBlock.introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    Row(T.s("history.clear"), icon: "trash", role: .destructive) { HistoryStore.shared.clearAll() }
+                        .introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    Row(T.s("history.cache.clear"), icon: "tray.2", role: .destructive) { CacheService.shared.clearCache() }
+                        .introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    cacheSizeRow.introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
+
+                    // Permissions section — shown alphabetically when already granted
+                    if screenRecordingGranted {
+                        sectionLabel(T.s("section.permissions")).introReveal(7, appeared: firstLoad, animate: !reduceMotion)
+                        permissionRow(open: { PermissionService.shared.openScreenRecordingSettings() })
+                            .introReveal(7, appeared: firstLoad, animate: !reduceMotion)
+                    }
+
+                    sectionLabel(T.s("section.behaviour")).introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    ToggleRow(title: T.s("reduce.motion"), icon: "decrease.quote.glass", isOn: reduceMotionBinding)
+                        .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    ToggleRow(title: T.s("telemetry"), icon: "chart.bar", isOn: telemetryBinding)
+                        .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    ToggleRow(title: T.s("knowledge.mode"), icon: "brain.head.profile", isOn: knowledgeModeBinding)
+                        .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    ToggleRow(title: T.s("extended.logging"), icon: "doc.text.magnifyingglass", isOn: extendedLoggingBinding)
+                        .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    
+                    // Open log folder button
+                    if appState.settings.extendedLoggingEnabled {
+                        Row(T.s("settings.open.log.folder"), icon: "folder.badge.gearshape") {
+                            openLogFolder()
+                        }
+                        .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    }
+
+    // Dock Presence picker — label on row 1, picker menu below and to the right
+    VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 10) {
+            Image(systemName: "macwindow.on.rectangle")
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 20, alignment: .center)
+                .foregroundStyle(BreakingDad.toxicGreen)
+            Text(T.s("settings.dock.title"))
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+        }
+        HStack(spacing: 10) {
+            Spacer(minLength: 20) // indent: icon placeholder
+            Menu {
+                ForEach(AppSettings.DockPresence.allCases, id: \.self) { presence in
+                    Button(presence.displayName) {
+                        dockPresenceBinding.wrappedValue = presence
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(appState.settings.dockPresence.displayName)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.primary)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.secondary.opacity(0.1))
+                )
+            }
+            .menuStyle(.borderlessButton)
+        }
+    }
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.secondary.opacity(0.04))
+                    )
+                    .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+
+                    sectionLabel(T.s("section.about")).introReveal(screenRecordingGranted ? 9 : 8, appeared: firstLoad, animate: !reduceMotion)
+                    aboutBlockV2.introReveal(screenRecordingGranted ? 9 : 8, appeared: firstLoad, animate: !reduceMotion)
                 }
                 .padding(.horizontal, 8)
                 .padding(.top, 0)
@@ -98,8 +172,7 @@ public struct SettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .frame(width: bannerWidth)
         .onAppear {
-            aiVocabText = appState.settings.customVocabulary.joined(separator: ", ")
-            if !appState.settings.reduceMotion { firstLoad = true }
+            firstLoad = true
         }
     }
 
@@ -110,6 +183,7 @@ public struct SettingsView: View {
             .font(.system(size: 10, weight: .semibold, design: .rounded))
             .kerning(0.6)
             .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 10)
             .padding(.top, 6)
             .padding(.bottom, 2)
@@ -124,7 +198,7 @@ public struct SettingsView: View {
                 Image(systemName: "waveform.path.ecg")
                     .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
                     .foregroundStyle(BreakingDad.toxicGreen)
-                Text("Inference weirdness")
+                Text(T.s("weirdness.label"))
                     .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
                 Spacer(minLength: 8)
                 Text("\(Int(appState.settings.weirdness * 100))%")
@@ -133,32 +207,92 @@ public struct SettingsView: View {
             .padding(.horizontal, 10).padding(.vertical, 5)
             Slider(value: weirdnessBinding, in: 0...1).accentColor(BreakingDad.toxicGreen)
                 .padding(.horizontal, 10)
-            Text("0% strict · 100% aggressive correction & more retries.")
+            Text(T.s("weirdness.help"))
                 .font(.system(size: 9, weight: .regular)).foregroundStyle(.secondary)
                 .padding(.horizontal, 10).padding(.bottom, 4)
         }
     }
 
-    private var vocabularyBlock: some View {
-        VStack(alignment: .leading, spacing: 4) {
+    // MARK: - Language (single source of truth for UI + OCR)
+
+    private var languagePicker: some View {
+        Picker(selection: languageBinding) {
+            Text(T.s("language.automatic")).tag("")
+            ForEach(Localization.catalog) { loc in
+                Text(loc.displayName).tag(loc.code)
+            }
+        } label: {
             HStack(spacing: 10) {
-                Image(systemName: "textformat")
+                Image(systemName: "globe")
                     .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
                     .foregroundStyle(BreakingDad.toxicGreen)
-                Text("Custom vocabulary (comma-separated)")
+                Text(T.s("language"))
                     .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
+                Spacer(minLength: 8)
             }
-            .padding(.horizontal, 10).padding(.top, 4)
-            TextField("e.g. Textractor, visionOS, FRC", text: $aiVocabText)
-                .textFieldStyle(.roundedBorder)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 4)
+        .pickerStyle(.menu)
+    }
+
+    // MARK: - History & Privacy blocks
+
+    private var piiStatusRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: appState.settings.piiRedactionEnabled ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+                .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
+                .foregroundStyle(appState.settings.piiRedactionEnabled ? Color.green : Color.red)
+            Text(appState.settings.piiRedactionEnabled
+                 ? T.s("privacy.pii.redacted")
+                 : T.s("privacy.pii.permit"))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(appState.settings.piiRedactionEnabled ? Color.green : Color.red)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 2)
+    }
+
+    private var historyLimitBlock: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 10) {
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
+                    .foregroundStyle(BreakingDad.toxicGreen)
+                Text(String(format: T.s("history.limit"), appState.settings.historyEntryLimit))
+                    .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 8)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            Slider(value: historyLimitBinding,
+                   in: Double(AppSettings.historyLimitRange.lowerBound)...Double(AppSettings.historyLimitRange.upperBound),
+                   step: 10)
+                .accentColor(BreakingDad.toxicGreen)
                 .padding(.horizontal, 10)
-            Row("Save vocabulary", icon: "checkmark") { commitVocab() }
         }
     }
 
-    private func resetDefaults() {
-        appState.resetSettingsToDefaults()
-        aiVocabText = ""
+    private var cacheSizeRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "tray.2")
+                .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
+                .foregroundStyle(BreakingDad.toxicGreen)
+            Text("\(T.s("history.cache.label")) \(cacheSizeDescription)")
+                .font(.system(size: 11, weight: .regular)).foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 2)
+    }
+
+    private var cacheSizeDescription: String {
+        let bytes = CacheService.shared.byteCount
+        if bytes < 1024 { return "\(bytes) B" }
+        let kb = Double(bytes) / 1024
+        if kb < 1024 { return String(format: "%.0f KB", kb) }
+        let mb = kb / 1024
+        return String(format: "%.1f MB", mb)
     }
 
     // MARK: - Updates
@@ -170,14 +304,14 @@ public struct SettingsView: View {
                     .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
                     .foregroundStyle(BreakingDad.toxicGreen)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Version  \(UpdateService.versionDescription)")
+                    Text("\(T.s("version.label"))  \(UpdateService.versionDescription)")
                         .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
-                    Text("Last checked: \(UpdateService.relativeLastChecked(appState.settings.lastUpdateCheckAt))")
+                    Text("\(T.s("version.last_checked")) \(UpdateService.relativeLastChecked(appState.settings.lastUpdateCheckAt))")
                         .font(.system(size: 9, weight: .regular)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
                 Button { checkForUpdates() } label: {
-                    Text("Check now").font(.system(size: 11, weight: .semibold)).foregroundStyle(BreakingDad.toxicGreen)
+                    Text(T.s("version.check_now")).font(.system(size: 11, weight: .semibold)).foregroundStyle(BreakingDad.toxicGreen)
                 }
                 .buttonStyle(.plain)
             }
@@ -190,27 +324,72 @@ public struct SettingsView: View {
         UpdateService.shared.presentUpToDateAlert()
     }
 
-    // MARK: - About
+    // MARK: - About (footer)
 
-    private var aboutBlock: some View {
-        HStack(spacing: 10) {
+private var aboutBlockV2: some View {
+        VStack(spacing: 16) {
+            Divider()
+                .foregroundStyle(.white.opacity(0.08))
+
+            // 1) Pulsing heart icon — centered, its own row
             Image(systemName: "heart.fill")
-                .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(BreakingDad.toxicGreen)
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Textractor · on-device OCR").font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
-                Text("Built for your privacy and your eyes.").font(.system(size: 9, weight: .regular)).foregroundStyle(.secondary)
+                .symbolEffect(.pulse, options: .repeat(3), value: firstLoad)
+
+            // 2) Tagline + sub — stacked vertically, full width breathing room
+            VStack(alignment: .leading, spacing: 4) {
+                Text(T.s("about.tagline"))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(T.s("about.sub"))
+                    .font(.system(size: 9, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 8)
-            Button {
-                NSWorkspace.shared.open(URL(string: "https://soundcloud.com/lucky-clover")!)
-            } label: {
-                Text("by Lucky Clover").font(.system(size: 11, weight: .semibold)).foregroundStyle(BreakingDad.toxicGreen).underline()
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // 3) Credits — "Made with <3 by Lucky Clover" (Lucky Clover links to SoundCloud)
+            HStack(spacing: 6) {
+                Text("Made with ")
+                    .font(.system(size: 10, weight: .regular, design: .rounded))
+                    .foregroundStyle(.secondary)
+
+                Text("<3")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(BreakingDad.cautionOrange)
+
+                Text("by ")
+                    .font(.system(size: 10, weight: .regular, design: .rounded))
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    if let url = URL(string: "https://soundcloud.com/lucky-clover") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    Text("Lucky Clover")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(BreakingDad.toxicGreen)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .onHover { inside in if inside { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() } }
             }
-            .buttonStyle(.plain)
-            .onHover { inside in if inside { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() } }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 2)
+
+            // 4) Version footer — its own row, full width
+            Text(T.s("about.version"))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .kerning(0.5)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 10).padding(.vertical, 5)
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
     }
 
     // MARK: - Bindings
@@ -239,34 +418,80 @@ public struct SettingsView: View {
         Binding(get: { appState.settings.localTelemetryEnabled },
                 set: { v in appState.updateSettings { $0.localTelemetryEnabled = v } })
     }
-    private func quickShareBinding(_ target: QuickShareTarget) -> Binding<Bool> {
-        Binding(
-            get: { appState.settings.quickShareTargets.contains(target) },
-            set: { v in appState.updateSettings { current in
-                if v { current.quickShareTargets.insert(target) } else { current.quickShareTargets.remove(target) }
-            } }
-        )
+    private var piiBinding: Binding<Bool> {
+        Binding(get: { appState.settings.piiRedactionEnabled },
+                set: { v in appState.updateSettings { $0.piiRedactionEnabled = v } })
+    }
+    private var historyLimitBinding: Binding<Double> {
+        Binding(get: { Double(appState.settings.historyEntryLimit) },
+                set: { v in
+                    let clamped = max(AppSettings.historyLimitRange.lowerBound,
+                                      min(AppSettings.historyLimitRange.upperBound, Int(v)))
+                    appState.updateSettings { $0.historyEntryLimit = clamped }
+                    HistoryStore.shared.enforceLimit(clamped)
+                })
+    }
+    private var languageBinding: Binding<String> {
+        Binding(get: { appState.settings.uiLanguage },
+                set: { v in appState.updateSettings { $0.uiLanguage = v } })
+    }
+    private var dockPresenceBinding: Binding<AppSettings.DockPresence> {
+        Binding(get: { appState.settings.dockPresence },
+                set: { v in appState.updateSettings { $0.dockPresence = v } })
+    }
+    private var knowledgeModeBinding: Binding<Bool> {
+        Binding(get: { appState.settings.knowledgeModeEnabled },
+                set: { v in appState.updateSettings { $0.knowledgeModeEnabled = v } })
+    }
+    private var extendedLoggingBinding: Binding<Bool> {
+        Binding(get: { appState.settings.extendedLoggingEnabled },
+                set: { v in appState.updateSettings { $0.extendedLoggingEnabled = v } })
+    }
+    
+    private func openLogFolder() {
+        LoggerService.shared.openLogFolder()
+    }
+    
+    private func resetDefaults() {
+        appState.resetSettingsToDefaults()
     }
 
-    private func commitVocab() {
-        let tokens = aiVocabText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        appState.updateSettings { $0.customVocabulary = tokens }
-    }
+    // MARK: - Permissions
 
-    private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.begin { resp in
-            if resp == .OK, let url = panel.url {
-                appState.updateSettings {
-                    $0.saveFolderPath = url.path
-                    $0.saveFolderBookmark = try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
-                }
+    @State private var screenGranted = PermissionService.shared.screenRecordingGranted
+    private let permissionTicker = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+
+    @ViewBuilder private func permissionRow(open: @escaping () -> Void) -> some View {
+        let granted = screenRecordingGranted
+        let tint: Color = granted ? Color.green : Color.red
+        let statusText = granted ? T.s("permission.granted") : T.s("permission.denied")
+        HStack(spacing: 10) {
+            ZStack {
+                Circle().fill(tint.opacity(0.25)).frame(width: 16, height: 16)
+                Circle().fill(tint).frame(width: 9, height: 9)
+                    .shadow(color: tint.opacity(0.95), radius: granted ? 5 : 2)
+                    .shadow(color: tint.opacity(0.7), radius: granted ? 9 : 3)
             }
+            VStack(alignment: .leading, spacing: 0) {
+                Text(T.s("permission.screen_recording")).font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
+                Text(statusText).font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(tint)
+            }
+            Spacer(minLength: 8)
+            Button(T.s("permission.open"), action: open)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+                .buttonStyle(.plain)
+                .padding(.horizontal, 9).padding(.vertical, 4)
+                .background(Capsule().fill(.secondary.opacity(0.15)))
+                .overlay(Capsule().stroke(.secondary.opacity(0.5), lineWidth: 0.8))
         }
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(granted ? Color.green.opacity(0.06) : Color.red.opacity(0.06))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(tint.opacity(0.35), lineWidth: 0.8))
+        )
     }
 }
 
@@ -298,6 +523,9 @@ private struct Row: View {
                 Text(title)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(isHovered ? Color.white : baseTitle)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.8)
                 Spacer(minLength: 8)
             }
             .padding(.horizontal, 10)
@@ -324,16 +552,24 @@ private struct ToggleRow: View {
     @State private var isHovered: Bool = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 20, alignment: .center)
-                .foregroundStyle(isHovered ? Color.white : BreakingDad.toxicGreen)
-            Text(title)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(isHovered ? Color.white : .primary)
-            Spacer(minLength: 8)
-            Toggle("", isOn: $isOn).toggleStyle(BdToggleStyle()).labelsHidden()
+        VStack(alignment: .leading, spacing: 4) {
+            // Row 1: icon + label (full width, no truncation)
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 20, alignment: .center)
+                    .foregroundStyle(isHovered ? Color.white : BreakingDad.toxicGreen)
+                Text(title)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(isHovered ? Color.white : .primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+            }
+            // Row 2: toggle indented to the right (below and to the right)
+            HStack(spacing: 10) {
+                Spacer(minLength: 20) // indent: icon placeholder
+                Toggle("", isOn: $isOn).toggleStyle(BdToggleStyle()).labelsHidden()
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -379,17 +615,18 @@ struct BdToggleStyle: ToggleStyle {
 private struct IntroReveal: ViewModifier {
     let index: Int
     let appeared: Bool
+    let animate: Bool
     func body(content: Content) -> some View {
         content
             .opacity(appeared ? 1 : 0)
             .scaleEffect(appeared ? 1 : 0.94)
             .offset(y: appeared ? 0 : 10)
-            .animation(.spring(response: 0.44, dampingFraction: 0.78).delay(Double(index) * 0.04), value: appeared)
+            .animation(animate ? .spring(response: 0.44, dampingFraction: 0.78).delay(Double(index) * 0.04) : nil, value: appeared)
     }
 }
 
 private extension View {
-    func introReveal(_ index: Int, appeared: Bool) -> some View {
-        modifier(IntroReveal(index: index, appeared: appeared))
+    func introReveal(_ index: Int, appeared: Bool, animate: Bool) -> some View {
+        modifier(IntroReveal(index: index, appeared: appeared, animate: animate))
     }
 }

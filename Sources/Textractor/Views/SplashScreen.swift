@@ -75,60 +75,76 @@ private struct SplashView: View {
 @MainActor
 final class SplashWindowController {
 
-    private var panel: NSPanel?
+    /// One panel per connected display so the splash appears everywhere at once.
+    private var panels: [NSPanel] = []
 
-    /// Shows the splash. `completion` is called on the main thread after the
-    /// fade-out finishes.
+    /// Shows the splash on **every connected display**, each centered on its own
+    /// screen. `completion` is called on the main thread once the last splash
+    /// has fully faded out.
     func show(image: NSImage, completion: @escaping () -> Void) {
-        let splash = SplashView(image: image) { [weak self] in
-            self?.close()
-            completion()
+        let screens = NSScreen.screens
+        let size = NSSize(width: 540, height: 540)
+
+        // Reference-counted finish: completion fires after the final panel
+        // reports that its fade-out completed.
+        let group = DispatchGroup()
+        var remaining = screens.count
+        let finishIfLast: () -> Void = {
+            remaining -= 1
+            if remaining == 0 {
+                completion()
+            }
         }
 
-        // Panel is larger than the 460pt graphic to leave room for the soft
-        // 3D drop shadow (it would otherwise be clipped at the window edges).
-        let size = NSSize(width: 540, height: 540)
-        let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        // System-top level so the splash sits above every other window and
-        // app, including full-screen ones.
-        panel.level = .screenSaver
-        panel.isMovableByWindowBackground = false
-        // Stay on screen even if the user switches to another application.
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
-        panel.animationBehavior = .none
-        panel.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
+        for screen in screens {
+            group.enter()
+            let splash = SplashView(image: image) {
+                group.leave()
+                finishIfLast()
+            }
 
-        let hosting = NSHostingView(rootView: splash)
-        hosting.frame = NSRect(origin: .zero, size: size)
-        panel.contentView = hosting
+            let panel = NSPanel(
+                contentRect: NSRect(origin: .zero, size: size),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            // System-top level so the splash sits above every other window and
+            // app, including full-screen ones.
+            panel.level = .screenSaver
+            panel.isMovableByWindowBackground = false
+            // Stay on screen even if the user switches to another application.
+            panel.hidesOnDeactivate = false
+            panel.isReleasedWhenClosed = false
+            panel.animationBehavior = .none
+            panel.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
 
-        if let screen = NSScreen.main {
+            let hosting = NSHostingView(rootView: splash)
+            hosting.frame = NSRect(origin: .zero, size: size)
+            panel.contentView = hosting
+
+            // Center the splash on THIS display.
             let frame = screen.frame
             let origin = NSPoint(
                 x: frame.midX - size.width / 2,
                 y: frame.midY - size.height / 2
             )
             panel.setFrameOrigin(origin)
+
+            panel.makeKeyAndOrderFront(nil)
+            panels.append(panel)
         }
 
-        // Bring the app forward, then show the splash above everything.
+        // Bring the app forward so the splash is visible above everything.
         NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
-        self.panel = panel
     }
 
     func close() {
-        panel?.orderOut(nil)
-        panel = nil
+        for panel in panels { panel.orderOut(nil) }
+        panels.removeAll()
     }
 
     // MARK: - Image resolution

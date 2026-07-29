@@ -25,7 +25,6 @@ public struct TelemetryEvent: Codable, Identifiable, Sendable {
         case shareOther
         case permissionMissing
         case settingsChanged
-        case festiveNudge           // psychological-addictiveness hook
     }
 
     public let id: UUID

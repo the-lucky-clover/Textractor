@@ -40,8 +40,6 @@
     <string>Textractor</string>
     <key>NSScreenCaptureUsageDescription</key>
     <string>Textractor needs Screen Recording access to extract text from selected regions and windows on your screen. All processing is performed locally on your Mac</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>Textractor may send the keyboard shortcut Cmd-V after extracting text in order to paste it into the active app</string>
     <key>NSCameraUsageDescription</key>
     <string>Textractor needs Camera access so Continuity Camera photos you take with your iPhone can be ingested for text extraction. All processing stays on this Mac</string>
     <key>NSHumanReadableCopyright</key>

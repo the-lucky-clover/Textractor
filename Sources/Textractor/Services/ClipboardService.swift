@@ -1,9 +1,8 @@
 import AppKit
-import Carbon.HIToolbox
 
 /// Writes extracted text to the pasteboard, optionally with rich-text
-/// formatting. Can also synthesise ⌘V to auto-paste into the frontmost app when
-/// the user opts in.
+/// formatting.
+@MainActor
 public final class ClipboardService {
 
     public static let shared = ClipboardService()
@@ -64,57 +63,5 @@ public final class ClipboardService {
             telemetryEnabled: TelemetryService.shared.isEnabled
         )
         return success
-    }
-
-    // MARK: - Snapshot
-
-    /// Snapshot the previous pasteboard (used for restore-on-confirm flows).
-    public func snapshot() -> [NSPasteboardItem] {
-        let pb = NSPasteboard.general
-        return pb.pasteboardItems ?? []
-    }
-
-    // MARK: - Auto-paste
-
-    /// Synthesise ⌘V into the frontmost app's key window to paste whatever is on the
-    /// general pasteboard. Convenience wrapper around `synthesizePaste()`.
-    /// Returns `true` if the keystroke was dispatched, `false` if accessibility is
-    /// not granted or the frontmost app can't accept input.
-    @discardableResult
-    public func autoPasteIntoFrontmostApp() -> Bool {
-        guard AXIsProcessTrusted() else {
-            LoggerService.shared.warning("Auto-paste skipped — Accessibility permission not granted")
-            return false
-        }
-        guard let frontmost = NSWorkspace.shared.frontmostApplication,
-              frontmost.bundleIdentifier != Bundle.main.bundleIdentifier else {
-            return false
-        }
-        synthesizePaste()
-        return true
-    }
-
-    /// Synthesise a ⌘V keystroke into whatever app is now frontmost, so the
-    /// freshly-copied text pastes automatically. Requires Accessibility
-    /// permission; silently no-ops if it isn't granted. Posted after a short
-    /// delay so the previously-active app has time to regain focus once our
-    /// capture overlay / popover has dismissed.
-    public func synthesizePaste() {
-        guard AXIsProcessTrusted() else {
-            LoggerService.shared.warning("Auto-paste skipped — Accessibility permission not granted")
-            return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            let source = CGEventSource(stateID: .combinedSessionState)
-            let vKey = CGKeyCode(kVK_ANSI_V)
-            guard
-                let down = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true),
-                let up = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false)
-            else { return }
-            down.flags = .maskCommand
-            up.flags = .maskCommand
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
-        }
     }
 }

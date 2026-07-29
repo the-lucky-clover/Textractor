@@ -18,8 +18,6 @@
 | **Drop file / pick…** | Process any image (PNG / JPG / HEIC / TIFF) — works seamlessly with Continuity Camera |
 | **SPACE** | Inside overlay: toggle crosshair ↔ window mode |
 | **ESC** | Cancel a capture |
-| **Auto ⌘V** | After extraction, synthesise Cmd-V into the frontmost app (Accessibility) |
-| **Mail / Message / AirDrop** | One-click share — wired through `NSSharingService` |
 | **Toast** | "Selected text was successfully added to clipboard." neon confirmation |
 
 ### Storage modes (per user choice, set in Settings → Screenshots)
@@ -85,7 +83,7 @@ Or install to /Applications:
 ### Required permissions (one time only)
 
 > **System Settings → Privacy & Security → Screen Recording → enable Textractor**
-> **System Settings → Privacy & Security → Accessibility → enable Textractor** *(for auto-⌘V)*
+> **System Settings → Privacy & Security → Camera → enable Textractor** *(for Continuity Camera)*
 
 Without these, OCR returns empty and the toast surfaces a "Permissions" card.
 
@@ -103,7 +101,6 @@ Sources/Textractor/
 │   ├── AppState.swift             # @Published state, ToastState, StorageDecision
 │   ├── CaptureMode.swift
 │   ├── CapturedImage.swift
-│   ├── CaptureMode.swift
 │   ├── ExtractionRecord.swift
 │   ├── HistoryRecord.swift
 │   ├── OCRResult.swift            # TextObservation + joined text

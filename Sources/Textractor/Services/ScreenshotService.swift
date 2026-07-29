@@ -147,18 +147,19 @@ public final class ScreenshotService: NSObject {
             telemetryEnabled: TelemetryService.shared.isEnabled
         )
 
-        // Use CGWindowListCreateImage with the same bounds we got from enumeration.
-        // This keeps capture and enumeration in lockstep — one source of truth.
-        let cgImage = CGWindowListCreateImage(
-            window.bounds,
-            .optionIncludingWindow,
-            windowID,
-            [.bestResolution]
-        )
-        guard let img = cgImage else {
-            throw ScreenshotError.imageCreationFailed
+        let content = try await SCShareableContent.current
+        guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
+            throw ScreenshotError.noWindow
         }
-        let captured = try writeToDisk(img, mode: .window, origin: .window, rect: window.bounds, screenIndex: 0)
+        let targetDisplayScreen: NSScreen = (NSScreen.screens.first { $0.frame.intersects(window.bounds) } ?? NSScreen.main)!
+        guard let display = scDisplay(for: targetDisplayScreen, in: content) ?? content.displays.first else {
+            throw ScreenshotError.noDisplay
+        }
+        let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [scWindow])
+        let fullImage = try await captureCGImage(filter: filter)
+        let scale = CGFloat(fullImage.width) / max(targetDisplayScreen.frame.width, 1)
+        let cropped = cropDisplayImage(fullImage, displaySizePoints: targetDisplayScreen.frame.size, scale: scale, toLocalRect: window.bounds)
+        let captured = try writeToDisk(cropped, mode: .window, origin: .window, rect: window.bounds, screenIndex: 0)
         return (captured, window)
     }
 

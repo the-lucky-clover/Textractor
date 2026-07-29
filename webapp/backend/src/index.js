@@ -19,12 +19,7 @@ import { Ai } from '@cloudflare/ai'
 const MAX_BODY_BYTES = 10 * 1024 * 1024 // 10 MB
 const MAX_TEXT_LEN = 4000
 
-function corsHeaders(request, env) {
-  const allowed = (env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
-  const requestOrigin = request.headers.get('Origin') || ''
-  const origin = allowed.length === 0
-    ? '*'
-    : (allowed.includes(requestOrigin) ? requestOrigin : allowed[0])
+function corsHeaders(request, env, origin) {
   const needCredentials = !!env.API_TOKEN
   const headers = {
     'Access-Control-Allow-Origin': origin,
@@ -57,25 +52,54 @@ function jsonError(headers, message, status = 400) {
   })
 }
 
+async function enforceBodyLimit(request, maxBytes) {
+  // Stream the body and count bytes; abort if over limit.
+  // This works even when Content-Length is missing (chunked encoding).
+  const reader = request.body.getReader()
+  let total = 0
+  const chunks = []
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > maxBytes) {
+      reader.cancel()
+      return { tooLarge: true, body: null }
+    }
+    chunks.push(value)
+  }
+  // Reconstruct body for JSON parsing
+  const combined = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    combined.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return { tooLarge: false, body: combined }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url)
-    const headers = corsHeaders(request, env)
 
-    // Preflight
+    // Parse allowed origins once
+    const allowList = (env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+    const requestOrigin = request.headers.get('Origin') || ''
+    const isAllowedOrigin = allowList.length === 0 || allowList.includes(requestOrigin)
+    const corsOrigin = isAllowedOrigin ? requestOrigin : (allowList.length === 0 ? '*' : null)
+    const headers = corsHeaders(request, env, corsOrigin)
+
+    // Preflight — return CORS headers only for allowed origins
     if (request.method === 'OPTIONS') {
+      if (!isAllowedOrigin) {
+        return new Response(null, { status: 403, headers })
+      }
       return new Response(null, { headers })
     }
 
-    // Origin allow-list enforcement: if we know which origins are allowed,
-    // reject any request whose Origin doesn't match. We don't reject requests
-    // without an Origin header (curl, server-to-server).
-    const allowList = (env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
-    if (allowList.length > 0) {
-      const requestOrigin = request.headers.get('Origin') || ''
-      if (requestOrigin && !allowList.includes(requestOrigin)) {
-        return jsonError(headers, 'Origin not allowed', 403)
-      }
+    // Origin allow-list enforcement: reject non-allowed origins for all other methods
+    if (!isAllowedOrigin && allowList.length > 0) {
+      return jsonError(headers, 'Origin not allowed', 403)
     }
 
     // Health endpoint — public, no credentials.
@@ -107,17 +131,19 @@ export default {
       if (!isAuthorized(request, env)) {
         return jsonError(headers, 'Unauthorized', 401)
       }
-      const len = Number(request.headers.get('Content-Length') || '0')
-      if (len && len > MAX_BODY_BYTES) {
+      // Enforce body size limit via streaming (works even without Content-Length)
+      const { tooLarge, body } = await enforceBodyLimit(request, MAX_BODY_BYTES)
+      if (tooLarge) {
         return jsonError(headers, 'Payload too large', 413)
       }
-      let body
+      let parsedBody
       try {
-        body = await request.json()
+        const text = new TextDecoder().decode(body)
+        parsedBody = JSON.parse(text)
       } catch {
         return jsonError(headers, 'Invalid JSON body', 400)
       }
-      const { image, text } = body || {}
+      const { image, text } = parsedBody || {}
       if (!image && !text) {
         return jsonError(headers, 'Missing image or text', 400)
       }

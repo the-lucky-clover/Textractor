@@ -123,17 +123,37 @@ public final class CaptureStore: ObservableObject {
     // MARK: - Keychain Keys
     private let keychain = Keychain()
     private let encryptionKeyIdentifier = "com.example.textractor.encryption.key"
+    private let keyVersionIdentifier = "com.example.textractor.encryption.keyVersion"
     
-    // Simplified direct key access for this implementation
+    /// Current encryption key version derived from app bundle version.
+    /// Incrementing this triggers re-encryption of all stored records.
+    private var currentKeyVersion: String {
+        // Derive version from Info.plist to avoid importing AppKit here
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0.0"
+        return "v\(version)"
+    }
+    
+    // Simplified direct key access with version-based rotation
     private func getEncryptionKey() throws -> SymmetricKey {
-        // Try to get from keychain first
-        if let keyData = keychain.data(forKey: encryptionKeyIdentifier) {
+        let storedVersion = keychain.data(forKey: keyVersionIdentifier).flatMap { String(data: $0, encoding: .utf8) }
+        
+        if let keyData = keychain.data(forKey: encryptionKeyIdentifier),
+           let storedVersion = storedVersion,
+           storedVersion == currentKeyVersion {
             return SymmetricKey(data: keyData)
         }
-        // Otherwise generate new key and store
-        let key = SymmetricKey(size: .bits256)
-        try keychain.set(key.withUnsafeBytes { Data($0) }, forKey: encryptionKeyIdentifier)
-        return key
+        
+        // Key rotation: version changed or key missing
+        let newKey = SymmetricKey(size: .bits256)
+        try keychain.set(newKey.withUnsafeBytes { Data($0) }, forKey: encryptionKeyIdentifier)
+        try keychain.set(Data(currentKeyVersion.utf8), forKey: keyVersionIdentifier)
+        
+        // Re-encrypt existing records with new key
+        Task { @MainActor in
+            await rotateAllExistingRecords(oldKeyVersion: storedVersion)
+        }
+        
+        return newKey
     }
     
     private func encrypt(_ text: String) throws -> (ciphertext: Data, nonce: Data) {
@@ -183,6 +203,41 @@ public final class CaptureStore: ObservableObject {
             context.autosaveEnabled = true
         } catch {
             fatalError("Failed to create CaptureStore: \(error)")
+        }
+    }
+    
+    /// Re-encrypt all existing records when key version changes.
+    /// This performs a one-time migration on app launch after a version bump.
+    private func rotateAllExistingRecords(oldKeyVersion: String?) async {
+        guard oldKeyVersion != nil else { return } // First launch, no records to rotate
+        
+        let allRecords = fetchAll()
+        guard !allRecords.isEmpty else { return }
+        
+        do {
+            // Get the current (new) key for re-encryption
+            let newKey = try getEncryptionKey()
+            
+            for record in allRecords {
+                guard !record.ocrText.isEmpty,
+                      let plaintext = try? decrypt(record.ocrText, nonce: record.ocrNonce) else {
+                    continue
+                }
+                
+                // Re-encrypt with the new key
+                let sealedBox = try AES.GCM.seal(plaintext.data(using: .utf8)!, using: newKey)
+                let newNonce = Data(sealedBox.nonce.withUnsafeBytes { $0 })
+                
+                // Update the record
+                record.ocrText = sealedBox.ciphertext
+                record.ocrNonce = newNonce
+                record.decryptedocrText = nil // Clear plaintext cache
+            }
+            
+            try context.save()
+            LoggerService.shared.info("[encryption] Rotated encryption key for \(allRecords.count) records")
+        } catch {
+            LoggerService.shared.error("[encryption] Key rotation failed: \(error)")
         }
     }
     

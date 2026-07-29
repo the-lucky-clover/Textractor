@@ -1,9 +1,13 @@
 import Foundation
 import NaturalLanguage
+import OSLog
 
 /// `AIInferenceService` runs entirely on-device via Apple's NaturalLanguage
 /// framework. It cleans OCR noise, infers sentiment, detects language, and
 /// extracts keywords. Privacy-first.
+/// 
+/// Also supports optional local LLM integration for advanced enrichment
+/// (summarization, QA, entity extraction) via LocalLLMService.
 public final class AIInferenceService {
 
     public static let shared = AIInferenceService()
@@ -16,6 +20,9 @@ public final class AIInferenceService {
         public let language: String?
         public let keywords: [String]
         public let entities: [Entity]
+        public let detailedEntities: [DetailedEntity]
+        public let summary: String?
+        public let keyPoints: [String]
         public let tokens: Int
 
         public init(
@@ -24,6 +31,9 @@ public final class AIInferenceService {
             language: String?,
             keywords: [String],
             entities: [Entity],
+            detailedEntities: [DetailedEntity] = [],
+            summary: String? = nil,
+            keyPoints: [String] = [],
             tokens: Int
         ) {
             self.cleanedText = cleanedText
@@ -31,6 +41,9 @@ public final class AIInferenceService {
             self.language = language
             self.keywords = keywords
             self.entities = entities
+            self.detailedEntities = detailedEntities
+            self.summary = summary
+            self.keyPoints = keyPoints
             self.tokens = tokens
         }
     }
@@ -80,7 +93,7 @@ public final class AIInferenceService {
 
     // MARK: - Public
 
-    public func analyze(_ text: String, weirdness: Double = 0.45) async -> Analysis {
+    public func analyze(_ text: String, weirdness: Double = 0.45, enableAdvanced: Bool = false) async -> Analysis {
         let started = Date()
 
         let cleaned = await Task.detached(priority: .userInitiated) {
@@ -103,6 +116,25 @@ public final class AIInferenceService {
             Self.extractEntities(text: cleaned)
         }.value
 
+        // Advanced enrichment (local LLM)
+        var detailedEntities: [DetailedEntity] = []
+        var summary: String? = nil
+        var keyPoints: [String] = []
+
+        if enableAdvanced && LocalLLMService.shared.isModelLoaded {
+            do {
+                async let detailed = LocalLLMService.shared.extractEntities(text: cleaned)
+                async let summ = LocalLLMService.shared.summarize(text: cleaned, maxLength: 200)
+                async let points = LocalLLMService.shared.keyPoints(text: cleaned, maxPoints: 5)
+
+                detailedEntities = try await detailed
+                summary = try await summ
+                keyPoints = try await points
+            } catch {
+                LoggerService.shared.warning("Local LLM enrichment failed: \(error.localizedDescription)")
+            }
+        }
+
         let tokens = cleaned.split(separator: " ", omittingEmptySubsequences: true).count
 
         let analysis = Analysis(
@@ -111,22 +143,13 @@ public final class AIInferenceService {
             language: language,
             keywords: keywords,
             entities: entities,
+            detailedEntities: detailedEntities,
+            summary: summary,
+            keyPoints: keyPoints,
             tokens: tokens
         )
 
-        TelemetryService.shared.record(
-            TelemetryEvent(
-                kind: .aiAnalysis,
-                success: true,
-                latencyMs: Date().timeIntervalSince(started) * 1000,
-                meta: [
-                    "tokens": "\(tokens)",
-                    "lang": language ?? "?",
-                    "sentiment": sentiment.rawValue
-                ]
-            ),
-            telemetryEnabled: TelemetryService.shared.isEnabled
-        )
+        LoggerService.shared.info("[ai] Analysis complete in \(String(format: "%.2f", Date().timeIntervalSince(started)))s — tokens: \(tokens), entities: \(detailedEntities.count)")
 
         return analysis
     }
@@ -145,6 +168,20 @@ public final class AIInferenceService {
         s = s.replacingOccurrences(of: "\u{FEFF}", with: "")  // BOM
         s = s.replacingOccurrences(of: "\r\n", with: "\n")
         s = s.replacingOccurrences(of: "\t", with: " ")
+
+        // Fix common OCR misrecognitions of checkbox/task list symbols.
+        // Vision often misreads ☐ (BALLOT BOX) as "¿9" or "?9",
+        // and ✓ (CHECK MARK) as "&" or "+".
+        let checkboxFixes: [(String, String)] = [
+            ("¿9", "☐"), ("?9", "☐"), ("¿ 9", "☐"), ("? 9", "☐"),
+            ("&", "✓"), ("+", "✓"), ("✔", "✓"), ("√", "✓"),
+            ("■", "☐"), ("□", "☐"), ("☑", "✓"),
+            ("[ ]", "☐"), ("[x]", "✓"), ("[X]", "✓"),
+            ("( )", "☐"), ("(x)", "✓"), ("(X)", "✓"),
+        ]
+        for (wrong, right) in checkboxFixes {
+            s = s.replacingOccurrences(of: wrong, with: right)
+        }
 
         if weirdness < 0.05 {
             // Strict mode: only collapse 3+ consecutive blanks (no smart-quote
@@ -286,4 +323,5 @@ public final class AIInferenceService {
             make(ns.substring(with: m.range))
         }
     }
+
 }

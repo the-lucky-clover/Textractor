@@ -14,12 +14,20 @@ public struct CaptureOverlayView: View {
     public typealias OnRegionCaptured = (CGRect) -> Void
     public typealias OnWindowCaptured = (CGWindowID) -> Void
     public typealias OnCancel = () -> Void
+    public typealias OnContinuityCapture = () -> Void
+    public typealias OnDisplayChanged = (NSScreen) -> Void
 
     let frame: CGRect
     var initialMode: CaptureMode
+    var initialCursorPoint: CGPoint = .zero
     var onRegionCaptured: OnRegionCaptured
     var onWindowCaptured: OnWindowCaptured
     var onCancel: OnCancel
+    var onContinuityCapture: OnContinuityCapture
+    var onDisplayChanged: OnDisplayChanged
+    /// Live frame provider so `liveFrame()` returns the actual window frame
+    /// even after the window moves to another display.
+    var captureFrameProvider: () -> CGRect = { .zero }
 
     // MARK: State
 
@@ -37,15 +45,23 @@ public struct CaptureOverlayView: View {
     public init(
         frame: CGRect,
         initialMode: CaptureMode = .crosshair,
+        initialCursorPoint: CGPoint = .zero,
         onRegionCaptured: @escaping OnRegionCaptured,
         onWindowCaptured: @escaping OnWindowCaptured,
-        onCancel: @escaping OnCancel
+        onCancel: @escaping OnCancel,
+        onContinuityCapture: @escaping OnContinuityCapture = {},
+        onDisplayChanged: @escaping OnDisplayChanged = { _ in },
+        captureFrameProvider: @escaping () -> CGRect = { .zero }
     ) {
         self.frame = frame
         self.initialMode = initialMode
+        self.initialCursorPoint = initialCursorPoint
         self.onRegionCaptured = onRegionCaptured
         self.onWindowCaptured = onWindowCaptured
         self.onCancel = onCancel
+        self.onContinuityCapture = onContinuityCapture
+        self.onDisplayChanged = onDisplayChanged
+        self.captureFrameProvider = captureFrameProvider
         self._mode = State(initialValue: initialMode)
     }
 
@@ -75,15 +91,10 @@ public struct CaptureOverlayView: View {
 
                 // AR rule-of-thirds 3x3 grid — overlays across the whole screen
                 // when `showsGrid` is on. Toggleable via G key.
-                if showsGrid {
+                if showsGrid && mode == .crosshair {
                     GridOverlayView(size: size)
                         .allowsHitTesting(false)
                 }
-
-                // Top status bar
-                statusBar(size: size)
-                    .frame(width: size.width, height: 36)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
                 // Coordinates readout
                 if mode == .crosshair, let r = currentSelectionRect(size: size) {
@@ -104,6 +115,9 @@ public struct CaptureOverlayView: View {
                 }
             }
             .focusable(true)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Screen capture overlay")
+            .accessibilityHint("Space to toggle capture mode, Escape to cancel, Return to confirm selection, G to toggle grid")
             .onKeyPress(.space) {
                 LoggerService.shared.info("[capture.key] SPACE pressed, was mode=\(mode.rawValue)")
                 mode = (mode == .crosshair) ? .window : .crosshair
@@ -132,49 +146,6 @@ public struct CaptureOverlayView: View {
             }
         }
         .background(Color.black.opacity(0.001).ignoresSafeArea())
-    }
-
-    // MARK: - Status bar
-
-    @ViewBuilder private func statusBar(size: CGSize) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: "flask.fill")
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(BreakingDad.toxicGreen)
-            Text("Textractor Capture")
-                .font(BreakingDadFont.hudCaps(11))
-                .foregroundStyle(.primary)
-            Spacer()
-            Text(mode == .crosshair ? "Region  •  drag" : "Window  •  click")
-                .font(BreakingDadFont.hudCaps(11))
-                .foregroundStyle(mode == .crosshair ? BreakingDad.toxicGreen : BreakingDad.toxicGreen)
-            Text("·").foregroundStyle(.secondary)
-            Text("SPACE: switch").font(BreakingDadFont.hudCaps(11)).foregroundStyle(.secondary)
-            Text("·").foregroundStyle(.secondary)
-            Text("ESC: cancel").font(BreakingDadFont.hudCaps(11)).foregroundStyle(.secondary)
-            Text("·").foregroundStyle(.secondary)
-            Text(showsGrid ? "G: grid  on" : "G: grid  off")
-                .font(BreakingDadFont.hudCaps(11))
-                .foregroundStyle(showsGrid ? BreakingDad.toxicGreen : .secondary)
-            Button(action: { onCancel() }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Cancel capture")
-        }
-        .padding(.horizontal, 14)
-        .frame(maxWidth: 420)
-        .padding(.vertical, 6)
-        .background(
-            Capsule(style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(Capsule().stroke(BreakingDad.toxicGreen.opacity(0.7), lineWidth: 1))
-        )
-        .overlay(neonEdge)
-        .shadow(color: BreakingDad.toxicGreen.opacity(0.35), radius: 14)
-        .padding(.top, 18)
     }
 
 private var neonEdge: some View {

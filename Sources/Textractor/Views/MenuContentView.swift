@@ -57,22 +57,22 @@ public struct MenuContentView: View {
             // The full menu — sized to fit the popover with no internal scroll.
             // Quit is pinned below so it's always visible.
             VStack(alignment: .leading, spacing: 1) {
-                sectionLabel("Capture").introReveal(1, appeared: appeared)
-                MenuRow("Region",      icon: "viewfinder")                     { onClose(); onCaptureRegion() }
+                sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
+                MenuRow(T.s("menu.region"),      icon: "viewfinder")                     { onClose(); onCaptureRegion() }
                     .introReveal(2, appeared: appeared)
-                MenuRow("Window",      icon: "macwindow")                      { onClose(); onCaptureWindow() }
+                MenuRow(T.s("menu.window"),      icon: "macwindow")                      { onClose(); onCaptureWindow() }
                     .introReveal(3, appeared: appeared)
-                MenuRow("Full Screen", icon: "rectangle.dashed.badge.record") { onClose(); onCaptureFullScreen() }
+                MenuRow(T.s("menu.fullscreen"), icon: "rectangle.dashed.badge.record") { onClose(); onCaptureFullScreen() }
                     .introReveal(4, appeared: appeared)
 
-                sectionLabel("Library").introReveal(5, appeared: appeared)
-                MenuRow("Pick Image File…", icon: "photo.on.rectangle") { pickImageFile() }
+                sectionLabel(T.s("menu.library")).introReveal(5, appeared: appeared)
+                MenuRow(T.s("menu.pick_file"), icon: "photo.on.rectangle") { pickImageFile() }
                     .introReveal(6, appeared: appeared)
-                MenuRow("History",          icon: "clock.arrow.circlepath") { onClose(); onShowHistory() }
+                MenuRow(T.s("menu.history"),          icon: "clock.arrow.circlepath") { onClose(); onShowHistory() }
                     .introReveal(7, appeared: appeared)
 
-                sectionLabel("App").introReveal(8, appeared: appeared)
-                MenuRow("Settings…",         icon: "gearshape")         { onClose(); onOpenSettings() }
+                sectionLabel(T.s("menu.app")).introReveal(8, appeared: appeared)
+                MenuRow(T.s("menu.settings"),         icon: "gearshape")         { onClose(); onOpenSettings() }
                     .introReveal(9, appeared: appeared)
             }
             .padding(.horizontal, 8)
@@ -83,7 +83,7 @@ public struct MenuContentView: View {
             // without scrolling.
             Divider().padding(.horizontal, 8).padding(.vertical, 4)
                 .introReveal(10, appeared: appeared)
-            MenuRow("Quit Textractor", icon: "power", role: .destructive) { onClose(); onQuit() }
+            MenuRow(T.s("menu.quit"), icon: "power", role: .destructive) { onClose(); onQuit() }
                 .introReveal(11, appeared: appeared)
                 .padding(.horizontal, 8)
 
@@ -95,6 +95,7 @@ public struct MenuContentView: View {
                 .padding(.top, 4)
                 .padding(.bottom, 8)
                 .introReveal(12, appeared: appeared)
+                .accessibilityLabel("Version \(UpdateService.versionDescription)")
         }
         .background(Self.headerBackground)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -103,17 +104,19 @@ public struct MenuContentView: View {
         .onDisappear { appeared = false }
     }
 
-    // MARK: - Section label
+// MARK: - Section label
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title.uppercased())
             .font(.system(size: 10, weight: .semibold, design: .rounded))
             .kerning(0.6)
             .foregroundStyle(.tertiary)
-        .padding(.horizontal, 10)
-        .padding(.top, 6)
-        .padding(.bottom, 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityLabel(title)
     }
 
     // MARK: - Banner
@@ -199,6 +202,7 @@ private struct MenuRow: View {
                     .font(.system(size: 13, weight: .medium))
                     .frame(width: 20, alignment: .center)
                     .foregroundStyle(isHovered ? Color.white : baseIconColor)
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(isHovered ? Color.white : baseTitleColor)
@@ -219,6 +223,9 @@ private struct MenuRow: View {
             if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
         }
         .animation(.easeOut(duration: 0.12), value: isHovered)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityHint(role == .destructive ? "Destructive action" : "Menu item")
     }
 }
 

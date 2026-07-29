@@ -41,18 +41,44 @@ public struct OCRResult: Sendable {
         self.revisionsUsed = revisionsUsed
     }
 
-    /// Concatenated text, ordered top-to-bottom-left-to-right by Vision bounding-box.
+    /// Concatenated text reconstructed in reading order.
+    ///
+    /// Vision returns one observation per text *block/line* with no paragraph
+    /// or column awareness, and its `minY` values are noisy, so a naive
+    /// `minY` sort joined with newlines both mis-orders and over-splits text.
+    /// Instead we cluster observations into lines by vertical proximity
+    /// (tolerance derived from the average line height, not a fixed constant),
+    /// order lines top-to-bottom, sort each line left-to-right, and join tokens
+    /// within a line with spaces and lines with newlines.
     public var joinedText: String {
-        let sorted = rawObservations.sorted { lhs, rhs in
-            // Vision boundingBox.minY is measured from the bottom-left.
-            // Higher Y = higher on the screen.
-            if abs(lhs.boundingBox.minY - rhs.boundingBox.minY) > 0.01 {
-                return lhs.boundingBox.minY > rhs.boundingBox.minY
+        guard !rawObservations.isEmpty else { return "" }
+
+        let avgHeight = rawObservations.reduce(CGFloat(0)) { $0 + $1.boundingBox.height }
+            / CGFloat(rawObservations.count)
+        let lineTolerance = max(avgHeight * 0.5, 0.005)
+
+        // Bucket observations into reading-order lines (top of screen first).
+        let byY = rawObservations.sorted { $0.boundingBox.minY > $1.boundingBox.minY }
+        var lines: [[TextObservation]] = []
+        var current: [TextObservation] = []
+        var lastMinY: CGFloat?
+        for obs in byY {
+            if let lastY = lastMinY, abs(obs.boundingBox.minY - lastY) > lineTolerance {
+                lines.append(current)
+                current = []
             }
-            return lhs.boundingBox.minX < rhs.boundingBox.minX
+            current.append(obs)
+            lastMinY = obs.boundingBox.minY
         }
-        return sorted.map(\.text).joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !current.isEmpty { lines.append(current) }
+
+        let rendered = lines.map { line in
+            line.sorted { $0.boundingBox.minX < $1.boundingBox.minX }
+                .map(\.text)
+                .joined(separator: " ")
+        }.joined(separator: "\n")
+
+        return rendered.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Average confidence across all observations, 0…1.

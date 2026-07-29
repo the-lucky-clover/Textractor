@@ -35,8 +35,12 @@ final class ToastWindowController: NSObject {
     // MARK: - Presentation
 
     private func present(_ toast: ToastState) {
+        guard let appState = appState else {
+            LoggerService.shared.error("ToastWindowController presented before configure(appState:) was called")
+            return
+        }
         let root = ClipboardToastView(
-            appState: appState!,
+            appState: appState,
             toast: toast,
             onShare: { [weak self] provider in
                 guard let self else { return }

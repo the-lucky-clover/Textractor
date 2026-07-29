@@ -3,19 +3,28 @@ import PackageDescription
 
 let package = Package(
     name: "Textractor",
+    defaultLocalization: "en-US",
     platforms: [
         .macOS(.v14)
     ],
     products: [
         .executable(name: "Textractor", targets: ["Textractor"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "2.0.0")
+    ],
     targets: [
         .executableTarget(
             name: "Textractor",
+            dependencies: [
+                .product(name: "Crypto", package: "swift-crypto")
+            ],
             path: "Sources/Textractor",
             exclude: [
-                "Info.plist",
-                "Resources"
+                "Info.plist"
+            ],
+            resources: [
+                .process("Resources")
             ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])
@@ -29,7 +38,10 @@ let package = Package(
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("AVFoundation"),
-                .linkedFramework("QuartzCore")
+                .linkedFramework("QuartzCore"),
+                .linkedFramework("SwiftData"),
+                .linkedFramework("Security"),
+                .linkedLibrary("sqlite3")
             ]
         )
     ]

@@ -1,12 +1,17 @@
 import Foundation
 import Combine
 
-/// Persists a rolling history of captures (extracted text + a retained copy of
-/// each screenshot PNG) under `~/Library/Application Support/Textractor/History`.
+/// Stores a rolling history of *extracted text only* per capture. Bounded by
+/// `AppSettings.historyEntryLimit` (slider 10…1000).
 ///
-/// The store keeps its own copy of every screenshot so history survives even
-/// when the user's storage mode would otherwise trash the original file. It is
-/// an `ObservableObject` so SwiftUI views can react to changes.
+/// As of Textractor 2.x, capture screenshots are *never* retained — OCR'd text
+/// is the only durable artefact of a capture, and the user's machine is left
+/// with no surprises. The `directory` only ever holds `*.txt` payloads (also
+/// optional — the text lives inline in `records` for instant reads).
+/// "Cache" lifetime data (the screenshots Textractor failed to extract, kept
+/// for the user to retry) is unrelated to history and lives under
+/// `~/Pictures/Textractor Screenshots/`; `CacheService` is responsible for that.
+@MainActor
 public final class HistoryStore: ObservableObject {
 
     public static let shared = HistoryStore()
@@ -15,7 +20,13 @@ public final class HistoryStore: ObservableObject {
 
     private let directory: URL
     private let metadataURL: URL
-    private let maxRecords = 250
+    private let maxRecordsCeiling: Int = 1_000
+
+    /// Cached on reads — the toast's "X clear" button and Settings size
+    /// indicator both poll this.
+    @Published public private(set) var cachedByteCount: Int = 0
+
+    private var cancellables: Set<AnyCancellable> = []
 
     private init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -24,6 +35,15 @@ public final class HistoryStore: ObservableObject {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         metadataURL = directory.appendingPathComponent("history.json")
         load()
+        recomputeSize()
+
+        // Subscribe to settings changes to enforce limit when user lowers it.
+        SettingsStore.shared.$current
+            .receive(on: RunLoop.main)
+            .sink { [weak self] (settings: AppSettings) in
+                self?.enforceLimit(settings.historyEntryLimit)
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Persistence
@@ -39,49 +59,86 @@ public final class HistoryStore: ObservableObject {
     private func save() {
         guard let data = try? JSONEncoder().encode(records) else { return }
         try? data.write(to: metadataURL, options: .atomic)
+        recomputeSize()
+    }
+
+    /// Walk the records and sum the size of every on-disk `.txt` file plus the
+    /// metadata blob. Cheap; runs after every mutation.
+    private func recomputeSize() {
+        var bytes = 0
+        let fm = FileManager.default
+        for record in records {
+            if let p = record.textPath,
+               let attrs = try? fm.attributesOfItem(atPath: p),
+               let size = attrs[.size] as? Int {
+                bytes += size
+            }
+        }
+        if let attrs = try? fm.attributesOfItem(atPath: metadataURL.path),
+           let size = attrs[.size] as? Int {
+            bytes += size
+        }
+        cachedByteCount = bytes
+    }
+
+    // MARK: - Limit
+
+    /// Re-bounds the in-memory history to the requested limit. Drops oldest.
+    public func enforceLimit(_ limit: Int) {
+        let clamped = max(1, min(maxRecordsCeiling, limit))
+        guard records.count > clamped else { return }
+        let overflow = records.suffix(from: clamped)
+        for old in overflow {
+            if let p = old.textPath {
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: p))
+            }
+        }
+        records = Array(records.prefix(clamped))
+        save()
     }
 
     // MARK: - Mutations
 
-    /// Persist the raw extracted text (plus a timestamp) into the history
-    /// directory and prepend a record. Synchronous so the text is captured
-    /// before any per-capture storage decision can delete the original.
-    public func record(capture: CapturedImage, text: String, mode: CaptureMode) {
-        var textPath: String?
-        let dest = directory.appendingPathComponent("\(capture.id.uuidString).txt")
-        try? FileManager.default.removeItem(at: dest)
-        if (try? text.write(to: dest, atomically: true, encoding: .utf8)) != nil {
-            textPath = dest.path
-        }
+    /// Append a new entry. The `CapturedImage` is only used for id / timestamp
+    /// — we never retain a screenshot reference.
+    public func record(capture: CapturedImage,
+                       text: String,
+                       mode: CaptureMode,
+                       limit: Int) {
         let record = HistoryRecord(
             id: capture.id,
             capturedAt: capture.capturedAt,
             textPreview: text,
             mode: mode,
-            textPath: textPath
+            textPath: nil
         )
         records.insert(record, at: 0)
-        if records.count > maxRecords {
-            let overflow = records.suffix(from: maxRecords)
-            for old in overflow {
-                if let p = old.textPath { try? FileManager.default.removeItem(at: URL(fileURLWithPath: p)) }
-            }
-            records = Array(records.prefix(maxRecords))
-        }
+        enforceLimit(limit)
         save()
     }
 
     public func delete(_ record: HistoryRecord) {
-        if let p = record.textPath { try? FileManager.default.removeItem(at: URL(fileURLWithPath: p)) }
+        if let p = record.textPath {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: p))
+        }
         records.removeAll { $0.id == record.id }
         save()
     }
 
-    public func clear() {
-        for r in records where r.textPath != nil {
-            try? FileManager.default.removeItem(at: URL(fileURLWithPath: r.textPath!))
+    /// Wipe every record. Used by Settings → "Clear history".
+    public func clearAll() {
+        for r in records {
+            if let path = r.textPath {
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: path))
+            }
         }
         records.removeAll()
         save()
+        recomputeSize()
+    }
+
+    /// Public accessor — used by RecoverySheet to refresh the published count.
+    public func refresh() {
+        recomputeSize()
     }
 }

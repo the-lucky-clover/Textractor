@@ -21,10 +21,13 @@ public final class UpdateService {
     }
 
     public static var bundleVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        // Build number is the count of launches since inception, not the static
+        // CFBundleVersion — so "build N" tracks how many builds the user has
+        // progressed through.
+        "\(BuildCounter.shared.count)"
     }
 
-    /// Human-readable version string, e.g. `v2.0.0 (build 2000)`.
+    /// Human-readable version string, e.g. `v2.0.0 (build 42)`.
     public static var versionDescription: String {
         "v\(bundleShortVersion) (build \(bundleVersion))"
     }

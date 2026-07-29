@@ -6,6 +6,7 @@ struct TextractorApp: App {
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var coordinator = AppCoordinator.shared
+    @State private var currentLocale: Locale = Locale(identifier: AppSettings.default.uiLanguage)
 
     // NOTE: Do NOT call `AppCoordinator.bootstrap()` here. It is invoked once
     // from `AppDelegate.applicationDidFinishLaunching`. Calling it from both
@@ -26,6 +27,10 @@ struct TextractorApp: App {
         Settings {
             SettingsView()
                 .environmentObject(coordinator.appState)
+                .environment(\.locale, currentLocale)
+                .onChange(of: coordinator.appState.settings.uiLanguage) { _, newCode in
+                    currentLocale = Locale(identifier: newCode)
+                }
         }
     }
 }

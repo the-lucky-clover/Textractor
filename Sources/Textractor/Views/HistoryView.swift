@@ -49,7 +49,7 @@ public struct HistoryView: View {
             Spacer()
             if !store.records.isEmpty {
                 Button {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { store.clear() }
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { store.clearAll() }
                 } label: {
                     Image(systemName: "trash")
                 }

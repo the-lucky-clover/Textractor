@@ -2,14 +2,15 @@ import SwiftUI
 import Combine
 
 /// Shared, observable application state.  Holds the latest capture lifecycle data,
-/// pending storage decisions, and the toast / progress overlay flags that the
-/// menubar UI binds to.
+/// the toast flag that the menubar UI binds to, and the recovery context
+/// surfaced to a failed-OCR toast.
 ///
 /// This view-model intentionally uses `@Published` so any SwiftUI view can react.
 @MainActor
 public final class AppState: ObservableObject {
 
     // MARK: - Capture lifecycle
+    public static let recentCapturesCap = 12
 
     @Published public var lastCapture: CapturedImage?
     @Published public var lastOCR: OCRResult?
@@ -58,9 +59,11 @@ public final class AppState: ObservableObject {
         self.settings = s
     }
 
+    /// Resets every setting on `AppSettings` back to its factory default.
     public func resetSettingsToDefaults() {
-        settingsStore.update(.default)
-        self.settings = .default
+        let defaults = AppSettings.default
+        settingsStore.update(defaults)
+        self.settings = defaults
     }
 
     // MARK: - Capture lifecycle helpers
@@ -79,8 +82,8 @@ public final class AppState: ObservableObject {
             sentiment: analysis?.sentiment
         )
         recentCaptures.insert(preview, at: 0)
-        if recentCaptures.count > 12 {
-            recentCaptures = Array(recentCaptures.prefix(12))
+        if recentCaptures.count > Self.recentCapturesCap {
+            recentCaptures = Array(recentCaptures.prefix(Self.recentCapturesCap))
         }
         streakCount += 1
     }
@@ -99,13 +102,13 @@ public enum PipelinePhase: Equatable {
 
     public var label: String {
         switch self {
-        case .idle:       return "Standby"
-        case .capturing:  return "Capturing…"
-        case .ocr:        return "Reading text…"
-        case .ai:         return "Cleansing & analyzing…"
-        case .clipboard:  return "Pasting…"
-        case .completed:  return "Done"
-        case .failed(let m): return "Failed: \(m)"
+        case .idle:       return T.s("pipeline.idle")
+        case .capturing:  return T.s("pipeline.capturing")
+        case .ocr:        return T.s("pipeline.ocr")
+        case .ai:         return T.s("pipeline.ai")
+        case .clipboard:  return T.s("pipeline.clipboard")
+        case .completed:  return T.s("pipeline.completed")
+        case .failed(let m): return String(format: T.s("pipeline.failed"), m)
         }
     }
 
@@ -148,17 +151,18 @@ public struct RecentCaptureEntry: Identifiable, Sendable, Hashable {
 
 // MARK: - Toast state
 
+/// What the toast exposes. Three kinds:
+///   • `.success` — clean extraction; copy + share chips on the bottom row.
+///   • `.failure` — extraction surface (text missing / image-only fallback).
+///     The toast gets the recovery row instead: image preview, weirdness
+///     slider, Try-Again, Cancel.
+///   • `.info`    — neutral message (e.g. update available, screen-recording
+///     revoked).
 public struct ToastState: Identifiable, Equatable {
     public enum Kind: Equatable {
         case success
         case failure
         case info
-    }
-
-    public enum StorageQuestion: Equatable {
-        case none
-        case askKeepOrDelete
-        case askWhere
     }
 
     public let id: UUID
@@ -168,9 +172,37 @@ public struct ToastState: Identifiable, Equatable {
     public var capture: CapturedImage?
     public var ocr: OCRResult?
     public var analysis: AIInferenceService.Analysis?
-    public var storageQuestion: StorageQuestion
-    /// Resolver callback set by `StorageService`. nil after consumption.
-    public var resolveStorage: ((StorageDecision) -> Void)?
+    /// Path the recovery toast uses to render the screenshot preview. `nil`
+    /// when there is no recovery pending.
+    public var recoveryImagePath: String?
+    /// Why the English-success detector failed (`nil` for non-failure toasts
+    /// or for failures not driven by the detector).
+    public var failureReason: String?
+    /// True iff the most recent pipeline run scrubbed PII from the output
+    /// (because the user is in default-redact mode and matches were found).
+    public var piiWasRedacted: Bool
+    /// Number of PII matches scrubbed in the most recent pipeline run.
+    public var piiRedactionsApplied: Int
+    /// True when the failure is a Screen Recording permission denial. The toast
+    /// then shows a reassurance that no data leaves the device plus an
+    /// "Open Settings" action, instead of a generic error body.
+    public var screenRecordingDenied: Bool
+
+    /// Tap handler for Copy in success mode. The toast controller wires this
+    /// to the clipboard helper (re-copy the extracted text on demand).
+    public var copy: (() -> Void)?
+    /// Tap handler for share chips.
+    public var share: ((ShareService.Provider) -> Void)?
+    /// Tap handler for **Try again** in the failure toast — runs OCR again on
+    /// the saved screenshot at the chosen weirdness.
+    public var tryAgain: (() -> Void)?
+    /// Tap handler for **Cancel** — trashes the screenshot, dismisses toast.
+    public var cancel: (() -> Void)?
+    /// Tap handler for **Open recovery screenshot** (Reveal in Finder).
+    public var revealRecovery: (() -> Void)?
+    /// Tap handler for **Open Settings** — jumps to System Settings → Screen
+    /// Recording when a capture failed due to missing permission.
+    public var openSettings: (() -> Void)?
 
     public init(
         id: UUID = UUID(),
@@ -180,8 +212,17 @@ public struct ToastState: Identifiable, Equatable {
         capture: CapturedImage? = nil,
         ocr: OCRResult? = nil,
         analysis: AIInferenceService.Analysis? = nil,
-        storageQuestion: StorageQuestion = .none,
-        resolveStorage: ((StorageDecision) -> Void)? = nil
+        recoveryImagePath: String? = nil,
+        failureReason: String? = nil,
+        piiWasRedacted: Bool = false,
+        piiRedactionsApplied: Int = 0,
+        screenRecordingDenied: Bool = false,
+        copy: (() -> Void)? = nil,
+        share: ((ShareService.Provider) -> Void)? = nil,
+        tryAgain: (() -> Void)? = nil,
+        cancel: (() -> Void)? = nil,
+        revealRecovery: (() -> Void)? = nil,
+        openSettings: (() -> Void)? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -190,18 +231,20 @@ public struct ToastState: Identifiable, Equatable {
         self.capture = capture
         self.ocr = ocr
         self.analysis = analysis
-        self.storageQuestion = storageQuestion
-        self.resolveStorage = resolveStorage
+        self.recoveryImagePath = recoveryImagePath
+        self.failureReason = failureReason
+        self.piiWasRedacted = piiWasRedacted
+        self.piiRedactionsApplied = piiRedactionsApplied
+        self.screenRecordingDenied = screenRecordingDenied
+        self.copy = copy
+        self.share = share
+        self.tryAgain = tryAgain
+        self.cancel = cancel
+        self.revealRecovery = revealRecovery
+        self.openSettings = openSettings
     }
 
     public static func == (lhs: ToastState, rhs: ToastState) -> Bool {
         lhs.id == rhs.id && lhs.kind == rhs.kind && lhs.headline == rhs.headline
     }
-}
-
-public enum StorageDecision: Equatable {
-    case keepInDefaultFolder
-    case saveTo(URL)
-    case delete
-    case ignored            // user dismissed without deciding → service applies default
 }

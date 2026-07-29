@@ -52,14 +52,20 @@ if [[ -d "Sources/Textractor/Resources/MenuBar" ]]; then
   cp -R "Sources/Textractor/Resources/MenuBar/" "${APP_DIR}/Contents/Resources/MenuBar/"
 fi
 
-# Copy the menubar popover banner image into Contents/Resources.
-if [[ -f "Sources/Textractor/Resources/textractor-type.png" ]]; then
-  cp "Sources/Textractor/Resources/textractor-type.png" "${APP_DIR}/Contents/Resources/textractor-type.png"
-fi
+# Copy .png images into Contents/Resources.
+for img in textractor-type.png textractor-splash.png textractor-navbar-final.png textractor-beaker.png; do
+  if [[ -f "Sources/Textractor/Resources/${img}" ]]; then
+    cp "Sources/Textractor/Resources/${img}" "${APP_DIR}/Contents/Resources/${img}"
+  fi
+done
 
-# Copy the launch splash image into Contents/Resources.
-if [[ -f "Sources/Textractor/Resources/textractor-splash.png" ]]; then
-  cp "Sources/Textractor/Resources/textractor-splash.png" "${APP_DIR}/Contents/Resources/textractor-splash.png"
+# Copy .lproj localization directories into Contents/Resources.
+if [[ -d "Sources/Textractor/Resources" ]]; then
+  for lproj in "Sources/Textractor/Resources/"*.lproj; do
+    [[ -d "$lproj" ]] || continue
+    mkdir -p "${APP_DIR}/Contents/Resources/$(basename "$lproj")"
+    cp -R "${lproj}/" "${APP_DIR}/Contents/Resources/$(basename "$lproj")/"
+  done
 fi
 
 # Ad-hoc sign the bundle so Gatekeeper lets the user open it via right-click → Open

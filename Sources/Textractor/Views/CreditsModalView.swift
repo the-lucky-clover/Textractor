@@ -10,7 +10,7 @@ struct CreditsModalView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    private let soundcloudURL = URL(string: "https://soundcloud.com/lucky-clover")!
+    private static let soundcloudURL = URL(string: "https://soundcloud.com/lucky-clover")!
 
     var body: some View {
         VStack(spacing: 18) {
@@ -39,7 +39,7 @@ struct CreditsModalView: View {
                     .font(.system(size: 22, weight: .regular))
                 Button {
                     SoundManager.playClick()
-                    NSWorkspace.shared.open(soundcloudURL)
+                    NSWorkspace.shared.open(Self.soundcloudURL)
                 } label: {
                     Text("Lucky Clover")
                         .font(.system(size: 22, weight: .semibold))
