@@ -270,7 +270,6 @@ public final class SmartCollectionClassifier {
         for (type, regexes) in patterns {
             var score = 0.0
             for regex in regexes {
-                let range = NSRange(text.startIndex..., in: text)
                 let matches = regex.numberOfMatches(in: text, options: [], range: NSRange(text.startIndex..., in: text))
                 if matches > 0 {
                     score += Double(matches) * 1.5
