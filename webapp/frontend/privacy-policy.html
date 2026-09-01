@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Textractor – Privacy Policy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        accentGreen: '#6BB534',
+                        forestGreen: '#2E5C1C',
+                        brandBlue: '#29ABE0',
+                        amber: '#F5C714',
+                        orangeAccent: '#E67321',
+                        rust: '#B8291F',
+                        ivory: '#E6EADC',
+                        ink: '#0B100A',
+                        primary: '#29ABE0',
+                        secondary: '#6BB534',
+                        accent: '#F5C714',
+                        dark: '#0B100A',
+                        light: '#E6EADC'
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body class="bg-ink text-light font-sans">
+    <header class="container mx-auto px-4 py-6 flex items-center justify-between border-b border-ivory/20">
+        <span class="text-xl font-bold tracking-tight text-accentGreen">Textractor</span>
+        <nav class="text-sm space-x-4">
+            <a href="/" class="hover:text-brandBlue">Home</a>
+            <a href="https://github.com/the-lucky-clover/Textractor" class="hover:text-brandBlue" target="_blank">Source</a>
+       </nav>
+    </header>
+
+    <main class="container mx-auto px-4 py-12 max-w-3xl">
+        <h1 class="text-4xl font-bold mb-8 text-brandBlue">Privacy Policy</h1>
+        <p class="text-ivory/60 mb-8"><strong>Effective Date:</strong> September 1, 2026<br>
+        <strong>Last Updated:</strong> September 1, 2026<br>
+        <strong>Contact:</strong> pounds.1@example.com</p>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">1. Overview</h2>
+            <p class="text-ivory/80 leading-relaxed">
+                Textractor ("the App") is a macOS utility for capturing text from your screen via OCR (Optical Character Recognition). This privacy policy explains what data the App collects, how it is used, and your rights regarding that data.
+            </p>
+            <p class="text-ivory/80 leading-relaxed mt-2"><strong>Key Principle:</strong> Textractor runs entirely on your device. No OCR images, extracted text, or personal data ever leave your Mac unless you explicitly choose to share them.
+            </p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">2. Data We Collect</h2>
+            
+            <h3 class="text-xl font-medium mb-2 text-accentGreen">2.1 Data Processed Locally (Never Transmitted)</h3>
+            <p class="text-ivory/80 leading-relaxed mb-2">
+                The following data is processed <strong>exclusively on your device</strong> and never transmitted to any server:
+            </p>
+            <ul class="list-disc list-inside text-ivory/80 space-y-2 ml-4">
+                <li><strong>Screen captures</strong> — Images captured via Screen Recording permission are processed locally by Apple's Vision framework for OCR. These images are saved only to your local cache directory (<code>~/Library/Caches/Textractor/</code>) and optionally to your chosen export location.</li>
+                <li><strong>Extracted text</strong> — OCR results remain on your device. They are copied to your clipboard (at your direction), stored in your local history database, and optionally exported to files you choose.</li>
+                <li><strong>History records</strong> — Timestamps, text previews, capture modes, and OCR confidence scores are stored in a local SQLite database (<code>~/Library/Application Support/Textractor/History/history.json</code>).</li>
+                <li><strong>Application settings</strong> — Your preferences (hotkeys, language selection, redaction settings, translation target, etc.) are stored in <code>~/Library/Preferences/com.example.textractor.plist</code>.</li>
+            </ul>
+
+            <h3 class="text-xl font-medium mb-2 text-accentGreen mt-6">2.2 Optional Telemetry (Opt-In Only)</h3>
+            <p class="text-ivory/80 leading-relaxed mb-2">
+                If you enable <strong>"Local Telemetry"</strong> in Settings → Behavior, the App collects <strong>anonymous, aggregated usage statistics</strong> stored locally on your device:
+            </p>
+            <ul class="list-disc list-inside text-ivory/80 space-y-2 ml-4">
+                <li>Capture mode used (region, window, full screen)</li>
+                <li>OCR success/failure rates</li>
+                <li>Text length distributions</li>
+                <li>Feature usage (translation, source code mode, PII redaction)</li>
+            </ul>
+            <p class="text-ivory/80 leading-relaxed mt-2"><strong>This data never leaves your device.</strong> It is viewable only in the App's debug log and is deleted when you disable the setting or reset the App.</p>
+
+            <h3 class="text-xl font-medium mb-2 text-accentGreen mt-6">2.3 Data You Explicitly Share</h3>
+            <p class="text-ivory/80 leading-relaxed">
+                When you use the <strong>Share</strong> button in the capture toast, the extracted text is passed to macOS's native share sheet. You choose the destination (Mail, Messages, AirDrop, Notes, etc.). Textractor does not control or monitor what happens after the share sheet receives the data.
+            </p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">3. Data We Do NOT Collect</h2>
+            <ul class="list-disc list-inside text-ivory/80 space-y-2">
+                <li>No personally identifiable information (name, email, Apple ID, etc.)</li>
+                <li>No network requests for analytics, tracking, or advertising</li>
+                <li>No crash reports sent automatically (you can manually share logs if desired)</li>
+                <li>No usage data sent to third parties</li>
+                <li>No cloud synchronization of history or settings</li>
+            </ul>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">4. Third-Party Services</h2>
+            <h3 class="text-xl font-medium mb-2 text-accentGreen">Apple Frameworks (On-Device Only)</h3>
+            <p class="text-ivory/80 leading-relaxed mb-2">
+                Textractor uses the following Apple frameworks <strong>entirely on-device</strong>:
+            </p>
+            <ul class="list-disc list-inside text-ivory/80 space-y-2 ml-4">
+                <li><strong>Vision.framework</strong> — OCR text recognition (runs locally on Apple Silicon Neural Engine or CPU)</li>
+                <li><strong>ScreenCaptureKit</strong> — Screen/window capture (requires your explicit Screen Recording permission)</li>
+                <li><strong>NaturalLanguage.framework</strong> — Language detection for translation (runs locally)</li>
+                <li><strong>CoreML / MLModel</strong> — On-device translation (when available, macOS 14+)</li>
+            </ul>
+            <p class="text-ivory/80 leading-relaxed mt-2">No data is sent to Apple servers by these frameworks during normal operation.</p>
+
+            <h3 class="text-xl font-medium mb-2 text-accentGreen mt-6">Open Source Dependencies</h3>
+            <ul class="list-disc list-inside text-ivory/80 space-y-2 ml-4">
+                <li><strong>swift-crypto</strong> (Apple) — Local AES-GCM encryption for CaptureStore</li>
+                <li><strong>SwiftData</strong> — Local persistence (SQLite on device)</li>
+            </ul>
+            <p class="text-ivory/80 leading-relaxed mt-2">These are compiled into the App binary and operate entirely locally.</p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">5. Permissions</h2>
+            <table class="w-full text-ivory/80 border-collapse">
+                <thead>
+                    <tr class="border-b border-ivory/20">
+                        <th class="text-left py-2 px-4 font-semibold text-brandBlue">Permission</th>
+                        <th class="text-left py-2 px-4 font-semibold text-brandBlue">Purpose</th>
+                        <th class="text-left py-2 px-4 font-semibold text-brandBlue">Required?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="border-b border-ivory/10">
+                        <td class="py-2 px-4"><strong>Screen Recording</strong></td>
+                        <td class="py-2 px-4">Capture screen regions, windows, or full screen for OCR</td>
+                        <td class="py-2 px-4 text-accentGreen"><strong>Yes</strong> (core functionality)</td>
+                    </tr>
+                    <tr class="border-b border-ivory/10">
+                        <td class="py-2 px-4"><strong>Accessibility</strong></td>
+                        <td class="py-2 px-4"><em>Not used</em> — Textractor does not auto-paste or control other apps</td>
+                        <td class="py-2 px-4 text-ivory/60">No</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="text-ivory/80 leading-relaxed mt-4">You can revoke Screen Recording permission at any time in <strong>System Settings → Privacy & Security → Screen Recording</strong>. The App will prompt you to re-grant it when needed.</p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">6. Data Retention</h2>
+            <table class="w-full text-ivory/80 border-collapse">
+                <thead>
+                    <tr class="border-b border-ivory/20">
+                        <th class="text-left py-2 px-4 font-semibold text-brandBlue">Data Type</th>
+                        <th class="text-left py-2 px-4 font-semibold text-brandBlue">Retention</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="border-b border-ivory/10">
+                        <td class="py-2 px-4">Capture images (cache)</td>
+                        <td class="py-2 px-4">7 days (auto-cleaned), or until manually cleared</td>
+                    </tr>
+                    <tr class="border-b border-ivory/10">
+                        <td class="py-2 px-4">History records</td>
+                        <td class="py-2 px-4">Up to your configured limit (default 100, max 1000)</td>
+                    </tr>
+                    <tr class="border-b border-ivory/10">
+                        <td class="py-2 px-4">Exported files</td>
+                        <td class="py-2 px-4">Until you delete them</td>
+                    </tr>
+                    <tr class="border-b border-ivory/10">
+                        <td class="py-2 px-4">Settings / Preferences</td>
+                        <td class="py-2 px-4">Until you delete the App or reset settings</td>
+                    </tr>
+                    <tr class="border-b border-ivory/10">
+                        <td class="py-2 px-4">Telemetry logs</td>
+                        <td class="py-2 px-4">Until you disable Local Telemetry or reset the App</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="text-ivory/80 leading-relaxed mt-4">You can clear all history and cache at any time via <strong>Settings → Clear History</strong> or <strong>Settings → Factory Reset</strong>.</p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">7. Your Rights</h2>
+            <p class="text-ivory/80 leading-relaxed mb-2">
+                Under GDPR, CCPA, and similar regulations, you have the right to:
+            </p>
+            <ul class="list-disc list-inside text-ivory/80 space-y-2 ml-4">
+                <li><strong>Access</strong> — View all data the App stores locally (history, settings, cache)</li>
+                <li><strong>Rectification</strong> — Edit or delete individual history entries</li>
+                <li><strong>Erasure</strong> — Use "Clear History" or "Factory Reset" to delete all App data</li>
+                <li><strong>Portability</strong> — Export history as JSON/CSV via the Structured Export feature</li>
+                <li><strong>Restriction</strong> — Disable features (telemetry, translation, knowledge mode) individually</li>
+                <li><strong>Objection</strong> — Opt out of all data processing by not using the App</li>
+            </ul>
+            <p class="text-ivory/80 leading-relaxed mt-2">To exercise these rights, use the App's built-in controls. No server-side request is needed because all data resides on your device.</p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">8. Children's Privacy (COPPA)</h2>
+            <p class="text-ivory/80 leading-relaxed">
+                Textractor is not directed at children under 13. The App does not knowingly collect personal information from children. If you believe a child has provided personal data, contact us and we will assist with deletion.
+            </p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">9. Security</h2>
+            <ul class="list-disc list-inside text-ivory/80 space-y-2 ml-4">
+                <li><strong>Encryption at rest</strong> — CaptureStore encrypts OCR text using AES-GCM with keys stored in macOS Keychain</li>
+                <li><strong>No network exposure</strong> — The App makes zero outbound network connections for core functionality</li>
+                <li><strong>Sandboxed</strong> — Runs in macOS App Sandbox with minimal entitlements (ScreenCapture, UserSelectedFile)</li>
+                <li><strong>No code injection</strong> — Does not inject code into other processes</li>
+            </ul>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">10. International Transfers</h2>
+            <p class="text-ivory/80 leading-relaxed">Not applicable. All data processing occurs on your device within your jurisdiction.</p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">11. Changes to This Policy</h2>
+            <p class="text-ivory/80 leading-relaxed">
+                We may update this policy for new features or legal requirements. Changes will be posted in the App's release notes and on the GitHub repository. Continued use after changes constitutes acceptance.
+            </p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">12. Contact</h2>
+            <p class="text-ivory/80 leading-relaxed">
+                For questions, concerns, or data requests:<br>
+                <strong>Email:</strong> pounds.1@example.com<br>
+                <strong>GitHub:</strong> <a href="https://github.com/the-lucky-clover/Textractor" class="hover:text-brandBlue" target="_blank">https://github.com/the-lucky-clover/Textractor</a>
+            </p>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold mb-4 text-brandBlue">13. App Store Compliance Notes</h2>
+            <ul class="list-disc list-inside text-ivory/80 space-y-2 ml-4">
+                <li><strong>App Store Review Guidelines § 5.1.1</strong> — This policy is accessible from the App Store product page and within the App (Settings → Privacy Policy)</li>
+                <li><strong>App Store Review Guidelines § 5.1.2</strong> — No user data is transmitted without explicit consent</li>
+                <li><strong>App Store Review Guidelines § 5.1.3</strong> — Data collection is minimal and purpose-limited</li>
+                <li><strong>App Store Review Guidelines § 5.2</strong> — No third-party analytics or advertising SDKs</li>
+                <li><strong>GDPR Art. 13/14</strong> — Information provided at time of data collection (first launch, permission prompts)</li>
+                <li><strong>CCPA § 1798.100-199</strong> — No sale of personal information; opt-out not needed (no collection)</li>
+            </ul>
+        </section>
+
+        <p class="text-ivory/50 text-center mt-12 border-t border-ivory/10 pt-8">
+            Textractor is open source. You can audit the code at: 
+            <a href="https://github.com/the-lucky-clover/Textractor" class="hover:text-brandBlue" target="_blank">https://github.com/the-lucky-clover/Textractor</a>
+        </p>
+    </main>
+
+    <footer class="border-t border-ivory/10 py-8 text-center text-sm text-ivory/50">
+        &copy; 2026 Textractor. Privacy-first, on-device text extraction on macOS.
+    </footer>
+</body>
+</html>
