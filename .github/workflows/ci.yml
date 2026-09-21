@@ -1,0 +1,186 @@
+# Textractor CI Pipeline
+# .github/workflows/ci.yml
+#
+# Runs on: push to main, pull requests
+# Tests: build, unit tests, linting
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  APP_IDENTIFIER: com.textractor.app
+  SCHEME: Textractor
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint & Format
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint & Format
+    runs-on: macos-14
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: SwiftFormat
+        run: |
+          if command -v swiftformat &> /dev/null; then
+            swiftformat --lint Sources/
+          else
+            echo "swiftformat not installed, skipping..."
+          fi
+      
+      - name: SwiftLint
+        run: |
+          if command -v swiftlint &> /dev/null; then
+            swiftlint lint Sources/
+          else
+            echo "swiftlint not installed, skipping..."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Build & Test
+  # ---------------------------------------------------------------------------
+  test:
+    name: Build & Test
+    runs-on: macos-14
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: swift-packages-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            swift-packages-
+      
+      - name: Build
+        run: swift build -c release
+      
+      - name: Run tests
+        run: swift test --parallel
+      
+      - name: Build .app bundle
+        run: ./build.sh
+      
+      - name: Verify build
+        run: |
+          codesign --verify --deep --strict --verbose=2 dist/Textractor.app
+          spctl --assess --type execute --verbose dist/Textractor.app
+
+  # ---------------------------------------------------------------------------
+  # Security Scan
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security Scan
+    runs-on: macos-14
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check for secrets
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: --config=.gitleaks.toml --verbose
+      
+      - name: Dependency audit
+        run: |
+          # Check for vulnerable dependencies
+          if command -v swift package audit &> /dev/null; then
+            swift package audit
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Code Coverage
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: Code Coverage
+    runs-on: macos-14
+    timeout-minutes: 20
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run tests with coverage
+        run: |
+          swift test --parallel --enable-code-coverage
+      
+      - name: Generate coverage report
+        run: |
+          xcrun llvm-cov export \
+            -format="lcov" \
+            .build/debug/TextractorPackageTests.xctest/Contents/MacOS/TextractorPackageTests \
+            -instr-profile .build/debug/codecov/default.profdata \
+            > coverage.lcov
+      
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: coverage.lcov
+          flags: unittests
+          name: textractor-coverage
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # Build Verification (Release Candidate)
+  # ---------------------------------------------------------------------------
+  verify_release:
+    name: Verify Release Build
+    runs-on: macos-14
+    timeout-minutes: 30
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Build release
+        run: ./build.sh
+      
+      - name: Verify signatures
+        run: |
+          codesign --verify --deep --strict --verbose=2 dist/Textractor.app
+          codesign -d -v --entitlements :- dist/Textractor.app
+          spctl --assess --type execute --verbose dist/Textractor.app
+      
+      - name: Check entitlements
+        run: |
+          codesign -d --entitlements :- dist/Textractor.app | grep -E "app-sandbox|files.user-selected|device.camera"
+      
+      - name: Verify version
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" dist/Textractor.app/Contents/Info.plist)
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" dist/Textractor.app/Contents/Info.plist)
+          echo "Version: $VERSION, Build: $BUILD"
+          # Verify tag matches
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "❌ Version mismatch: Info.plist=$VERSION, Tag=$TAG_VERSION"
+            exit 1
+          fi
+          echo "✅ Version matches tag"
+      
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: Textractor-release-candidate
+          path: dist/Textractor.app
+          retention-days: 7

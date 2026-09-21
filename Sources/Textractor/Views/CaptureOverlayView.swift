@@ -11,11 +11,15 @@ public struct CaptureOverlayView: View {
 
     // MARK: Callbacks
 
-    public typealias OnRegionCaptured = (CGRect) -> Void
+    public typealias OnRegionCaptured = ( CGRect) -> Void
     public typealias OnWindowCaptured = (CGWindowID) -> Void
     public typealias OnCancel = () -> Void
     public typealias OnContinuityCapture = () -> Void
     public typealias OnDisplayChanged = (NSScreen) -> Void
+    /// Called when the overlay wants to update the live OCR preview.
+    /// The rect is in screen coordinates. The parent should run OCR and
+    /// call the completion with the recognized text (or nil if nothing found).
+    public typealias OnLiveOCRRequest = ( CGRect, @escaping (String?) -> Void) -> Void
 
     let frame: CGRect
     var initialMode: CaptureMode
@@ -25,11 +29,13 @@ public struct CaptureOverlayView: View {
     var onCancel: OnCancel
     var onContinuityCapture: OnContinuityCapture
     var onDisplayChanged: OnDisplayChanged
-    /// Live frame provider so `liveFrame()` returns the actual window frame
-    /// even after the window moves to another display.
     var captureFrameProvider: () -> CGRect = { .zero }
-
-    // MARK: State
+    let reduceMotion: Bool
+    /// Whether to show live OCR text updating as the user drags the region.
+    var showLivePreview: Bool = false
+    /// Called when the overlay wants to update live OCR text. The parent
+    /// performs the OCR and calls the completion with the recognized text.
+    var onLiveOCRRequest: OnLiveOCRRequest = { _, _ in }
 
     @State private var mode: CaptureMode
     @State private var cursorPoint: CGPoint = .zero
@@ -37,12 +43,15 @@ public struct CaptureOverlayView: View {
     @State private var dragCurrent: CGPoint?
     @State private var hoveredWindow: WindowDescriptor?
     @State private var windows: [WindowDescriptor] = []
-    /// AR rule-of-thirds 3×3 grid overlay. Toggleable via the **G** key while
-    /// the capture overlay is on screen so users can frame the capture region
-    /// to thirds before pressing RETURN.
     @State private var showsGrid: Bool = true
+    @State private var liveOCRText: String? = nil
+    /// Reference to the current debounce-cancellation task so we can cancel it
+    /// when the user starts a new drag movement.
+    @State private var liveOCRCancellable: Task<Void, Never>? = nil
+    /// Track which display the cursor is currently on for multi-display support
+    @State private var currentScreen: NSScreen?
 
-    public init(
+public init(
         frame: CGRect,
         initialMode: CaptureMode = .crosshair,
         initialCursorPoint: CGPoint = .zero,
@@ -51,7 +60,10 @@ public struct CaptureOverlayView: View {
         onCancel: @escaping OnCancel,
         onContinuityCapture: @escaping OnContinuityCapture = {},
         onDisplayChanged: @escaping OnDisplayChanged = { _ in },
-        captureFrameProvider: @escaping () -> CGRect = { .zero }
+        captureFrameProvider: @escaping () -> CGRect = { .zero },
+        reduceMotion: Bool = false,
+        showLivePreview: Bool = false,
+        onLiveOCRRequest: @escaping OnLiveOCRRequest = { _, _ in }
     ) {
         self.frame = frame
         self.initialMode = initialMode
@@ -62,6 +74,9 @@ public struct CaptureOverlayView: View {
         self.onContinuityCapture = onContinuityCapture
         self.onDisplayChanged = onDisplayChanged
         self.captureFrameProvider = captureFrameProvider
+        self.reduceMotion = reduceMotion
+        self.showLivePreview = showLivePreview
+        self.onLiveOCRRequest = onLiveOCRRequest
         self._mode = State(initialValue: initialMode)
     }
 
@@ -85,7 +100,7 @@ public struct CaptureOverlayView: View {
                 switch mode {
                 case .crosshair:
                     crosshairBody(size: size)
-                case .window:
+                case .window, .autoScroll:
                     windowBody(size: size)
                 }
 
@@ -101,6 +116,16 @@ public struct CaptureOverlayView: View {
                     rectReadout(r)
                         .position(x: r.maxX - 64, y: r.maxY + 22)
                 }
+
+                // Live OCR preview — shows recognized text updating in real time
+                // while the user drags the region selection.
+                if showLivePreview && mode == .crosshair, let r = currentSelectionRect(size: size) {
+                    liveOCRPreview(r)
+                        .position(
+                            x: min(max(r.midX, 120), size.width - 120),
+                            y: max(r.minY - 70, 60)
+                        )
+                }
             }
             .frame(width: size.width, height: size.height)
             .contentShape(Rectangle())
@@ -109,7 +134,19 @@ public struct CaptureOverlayView: View {
                 switch phase {
                 case .active(let p):
                     cursorPoint = p
-                    updateHoveredWindow(size: size)
+                    // Multi-display: detect when cursor moves to a different screen
+                    if let newScreen = NSScreen.screens.first(where: { $0.frame.contains(p) }),
+                       newScreen != currentScreen {
+                        currentScreen = newScreen
+                        onDisplayChanged(newScreen)
+                    }
+                    // Debounce hover updates to ~60fps to avoid excessive hit-testing
+                    Task {
+                        try? await Task.sleep(nanoseconds: 16_000_000) // ~16ms
+                        await MainActor.run {
+                            updateHoveredWindow(size: size)
+                        }
+                    }
                 case .ended:
                     hoveredWindow = nil
                 }
@@ -120,7 +157,11 @@ public struct CaptureOverlayView: View {
             .accessibilityHint("Space to toggle capture mode, Escape to cancel, Return to confirm selection, G to toggle grid")
             .onKeyPress(.space) {
                 LoggerService.shared.info("[capture.key] SPACE pressed, was mode=\(mode.rawValue)")
-                mode = (mode == .crosshair) ? .window : .crosshair
+                switch mode {
+                case .crosshair: mode = .window
+                case .window:    mode = .autoScroll
+                case .autoScroll: mode = .crosshair
+                }
                 hoveredWindow = nil
                 LoggerService.shared.info("[capture.key] SPACE handled, now mode=\(mode.rawValue)")
                 return .handled
@@ -143,6 +184,10 @@ public struct CaptureOverlayView: View {
             .onAppear {
                 LoggerService.shared.info("[capture.ui] onAppear; windows=\(ScreenshotService.shared.enumerateWindows().filter { $0.isCaptureEligible }.count)")
                 windows = ScreenshotService.shared.enumerateWindows().filter { $0.isCaptureEligible }
+                // Initialize current screen from initial cursor point
+                if let screen = NSScreen.screens.first(where: { $0.frame.contains(initialCursorPoint) }) ?? NSScreen.main {
+                    currentScreen = screen
+                }
             }
         }
         .background(Color.black.opacity(0.001).ignoresSafeArea())
@@ -263,7 +308,7 @@ private struct GridOverlayView: View {
         // concentric Canvas strokes).
         if let w = hoveredWindow {
             let r = convertToOverlay(bounds: w.bounds, size: size)
-            WindowGlowHighlight(rect: r, color: BreakingDad.toxicGreen)
+            WindowGlowHighlight(rect: r, color: BreakingDad.toxicGreen, reduceMotion: reduceMotion)
                 .id(w.id)
                 .allowsHitTesting(false)
 
@@ -297,6 +342,7 @@ private struct GridOverlayView: View {
     private struct WindowGlowHighlight: View {
         let rect: CGRect
         let color: Color
+        let reduceMotion: Bool
         @State private var pulse = false
 
         var body: some View {
@@ -311,8 +357,10 @@ private struct GridOverlayView: View {
                 .shadow(color: color.opacity(pulse ? 0.6 : 0.22), radius: pulse ? 46 : 22)
                 .position(x: rect.midX, y: rect.midY)
                 .onAppear {
-                    withAnimation(.easeInOut(duration: 0.95).repeatForever(autoreverses: true)) {
-                        pulse = true
+                    if !reduceMotion {
+                        withAnimation(.easeInOut(duration: 0.95).repeatForever(autoreverses: true)) {
+                            pulse = true
+                        }
                     }
                 }
         }
@@ -327,7 +375,7 @@ private struct GridOverlayView: View {
                 .frame(width: r.width, height: r.height)
                 .position(x: r.midX, y: r.midY)
                 .blendMode(.difference)
-        } else if mode == .window, let h = hoveredWindow {
+        } else if (mode == .window || mode == .autoScroll), let h = hoveredWindow {
             let r = convertToOverlay(bounds: h.bounds, size: size)
             Rectangle()
                 .fill(Color.white.opacity(0.001))
@@ -351,6 +399,28 @@ private struct GridOverlayView: View {
         .overlay(Capsule().stroke(.primary.opacity(0.35), lineWidth: 0.6))
     }
 
+    /// Live OCR text preview shown above the selection rectangle while dragging.
+    @ViewBuilder private func liveOCRPreview(_ rect: CGRect) -> some View {
+        if let text = liveOCRText, !text.isEmpty {
+            Text(text)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(BreakingDad.toxicGreen.opacity(0.5), lineWidth: 1)
+                        )
+                )
+                .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+                .lineLimit(5)
+                .frame(maxWidth: 280)
+        }
+    }
+
     // MARK: - Gestures & helpers
 
     private func dragGesture(size: CGSize) -> some Gesture {
@@ -360,15 +430,22 @@ private struct GridOverlayView: View {
                     if dragStart == nil {
                         LoggerService.shared.info("[capture.drag] onChanged START loc=\(NSStringFromPoint(value.location))")
                         dragStart = value.startLocation
+                        // Cancel any pending live OCR task when a new drag starts.
+                        liveOCRCancellable?.cancel()
                     }
                     dragCurrent = value.location
+
+                    // Debounced live OCR: only fire ~4× per second to avoid thrashing.
+                    if showLivePreview {
+                        triggerDebouncedLiveOCR(size: size)
+                    }
                 }
             }
             .onEnded { value in
                 LoggerService.shared.info("[capture.drag] onEnded mode=\(mode.rawValue) loc=\(NSStringFromPoint(value.location))")
-                if mode == .window {
-                    // Use the same hit-test as hover so the highlighted window
-                    // is exactly the one that gets captured.
+                liveOCRCancellable?.cancel()
+                liveOCRText = nil
+                if mode == .window || mode == .autoScroll {
                     if let w = windowAt(point: value.location, size: size) {
                         onWindowCaptured(w.id)
                     }
@@ -381,6 +458,36 @@ private struct GridOverlayView: View {
                     dragCurrent = nil
                 }
             }
+    }
+
+    // MARK: - Live OCR
+
+    // MARK: - Live OCR
+
+    /// Debounced live OCR trigger. Cancels any in-flight task and schedules a
+    /// new one 250ms later. When it fires, it converts the current selection
+    /// rect to screen coordinates and requests OCR from the parent.
+    private func triggerDebouncedLiveOCR(size: CGSize) {
+        guard showLivePreview, let rect = currentSelectionRect(size: size) else { return }
+        guard rect.width > 16 && rect.height > 16 else { return }
+
+        liveOCRCancellable?.cancel()
+        liveOCRCancellable = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: 250_000_000) // 250ms debounce
+                guard !Task.isCancelled else { return }
+                let screenRect = convertToScreen(rect)
+                // Request OCR from parent
+                onLiveOCRRequest(screenRect) { recognizedText in
+                    // Update the live text on main thread
+                    Task { @MainActor in
+                        liveOCRText = recognizedText
+                    }
+                }
+            } catch {
+                // Task was cancelled — ignore
+            }
+        }
     }
 
     private func currentSelectionRect(size: CGSize) -> CGRect? {
@@ -396,7 +503,7 @@ private struct GridOverlayView: View {
     private func handleAccept(size: CGSize) {
         if mode == .crosshair, let r = currentSelectionRect(size: size), r.width > 8, r.height > 8 {
             onRegionCaptured(convertToScreen(r))
-        } else if mode == .window, let h = hoveredWindow {
+        } else if mode == .window || mode == .autoScroll, let h = hoveredWindow {
             onWindowCaptured(h.id)
         }
     }
@@ -404,11 +511,13 @@ private struct GridOverlayView: View {
     // Convert overlay-local CGPoint / CGRect (origin top-left, points down)
     // back to screen-global coordinates consumed by ScreenshotService.
     // Overlay-local space matches the live `NSScreen.frame` of the active
-    // display — read it fresh from `NSApp.keyWindow` so a drag that started
+    // display — read it fresh from `captureFrameProvider` so a drag that started
     // on the MacBook display still maps correctly after the cursor-follow
     // timer animates the overlay onto an external monitor.
     private func liveFrame() -> CGRect {
-        NSApp.keyWindow?.frame ?? frame
+        let providerFrame = captureFrameProvider()
+        // Fallback to initial frame if provider returns empty/zero
+        return providerFrame != .zero ? providerFrame : frame
     }
 
     private func convertToScreen(_ rect: CGRect) -> CGRect {
@@ -454,7 +563,7 @@ private struct GridOverlayView: View {
     }
 
     private func updateHoveredWindow(size: CGSize) {
-        guard mode == .window else { return }
+        guard mode == .window || mode == .autoScroll else { return }
         hoveredWindow = windowAt(point: cursorPoint, size: size)
     }
 }

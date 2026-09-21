@@ -10,6 +10,8 @@ import SwiftUI
 @MainActor
 public final class StatusBarController: NSObject {
 
+    public static var shared: StatusBarController?
+
     public let statusItem: NSStatusItem
     public let popover: NSPopover
     private weak var coordinator: AppCoordinator?
@@ -19,18 +21,45 @@ public final class StatusBarController: NSObject {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.popover = NSPopover()
         super.init()
+        StatusBarController.shared = self
         configureButton()
         configurePopover()
     }
 
     // MARK: - Configuration
-
-    private func configureButton() {
+private func configureButton() {
         guard let button = statusItem.button else { return }
-        button.image = NSImage(
-            systemSymbolName: "text.viewfinder",
-            accessibilityDescription: "Textractor"
-        )
+
+        // Try loading the custom menubar icon from the MenuBar/ directory.
+        // The build script copies the MenuBar/ folder into Contents/Resources/MenuBar/,
+        // so we need to look in the bundle's MenuBar subdirectory.
+        var menubarImage: NSImage?
+
+        if let menubarUrl = Bundle.main.url(forResource: "textractor-menubar", withExtension: "png", subdirectory: "MenuBar"),
+           let img = NSImage(contentsOf: menubarUrl) {
+            menubarImage = img
+        } else if let menubar2xUrl = Bundle.main.url(forResource: "textractor-menubar@2x", withExtension: "png", subdirectory: "MenuBar"),
+                  let img = NSImage(contentsOf: menubar2xUrl) {
+            menubarImage = img
+        } else if let icnsUrl = Bundle.main.url(forResource: "menubar", withExtension: "icns", subdirectory: "MenuBar"),
+                  let img = NSImage(contentsOf: icnsUrl) {
+            menubarImage = img
+        }
+
+        if let menubarImage {
+            // Honor the user's color icon preference. When disabled, the icon
+            // is converted to grayscale template mode so it blends with the
+            // rest of the system chrome.
+            if !AppCoordinator.shared.appState.settings.menubarColorIcon {
+                menubarImage.isTemplate = true
+            }
+            button.image = menubarImage
+        } else {
+            button.image = NSImage(
+                systemSymbolName: "text.viewfinder",
+                accessibilityDescription: "Textractor"
+            )
+        }
         button.imageScaling = .scaleProportionallyDown
         button.imagePosition = .imageOnly
         button.target = self
@@ -56,6 +85,14 @@ public final class StatusBarController: NSObject {
                 onCaptureFullScreen: { [weak self] in
                     self?.closePopover()
                     coordinator.startCaptureFullScreen()
+                },
+                onCaptureContinuityCamera: { [weak self] in
+                    self?.closePopover()
+                    Task { await coordinator.runContinuityCameraCapture() }
+                },
+                onCaptureAutoScroll: { [weak self] in
+                    self?.closePopover()
+                    coordinator.startAutoScrollCapture()
                 },
                 onOpenSettings: { [weak self] in
                     self?.closePopover()
@@ -167,7 +204,18 @@ public final class StatusBarController: NSObject {
 
     deinit {
         // Ensure the status item is removed even if cleanup() wasn't called
-        // explicitly (e.g., when switching to .dockOnly mode).
+        // explicitly (e.g., when switching to .dockOnly mode). Note: we cannot
+        // touch main-actor-isolated `StatusBarController.shared` from a
+        // `deinit`; a different controller (or a fresh app start) will simply
+        // overwrite it. The status item cleanup itself is thread-safe enough
+        // for deinit purposes.
         NSStatusBar.system.removeStatusItem(statusItem)
+    }
+
+    /// Reconfigures the menubar icon to reflect the current color/b&w setting.
+    /// Call this when the user toggles the "menubarColorIcon" preference.
+    @MainActor
+    public func reconfigureIcon() {
+        configureButton()
     }
 }

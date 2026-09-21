@@ -86,6 +86,16 @@ public final class AppState: ObservableObject {
             recentCaptures = Array(recentCaptures.prefix(Self.recentCapturesCap))
         }
         streakCount += 1
+
+        // Also record to history with OCR confidence
+        let confidence = ocr?.averageConfidence
+        HistoryStore.shared.record(
+            capture: capture,
+            text: analysis?.cleanedText ?? ocr?.joinedText ?? "",
+            mode: capture.mode,
+            ocrConfidence: confidence,
+            limit: settings.historyEntryLimit
+        )
     }
 }
 
@@ -204,6 +214,31 @@ public struct ToastState: Identifiable, Equatable {
     /// Recording when a capture failed due to missing permission.
     public var openSettings: (() -> Void)?
 
+    /// Tap handler for the **Translate** quick action. Re-translates the
+    /// captured text to the user's configured target language. Only shown
+    /// when translateAfterCapture is off but a target language is set.
+    public var onTranslate: (() -> Void)?
+
+    /// Tap handler for the **Format as Code** quick action. Wraps the
+    /// captured text in a fenced code block with detected language hint.
+    public var onFormatCode: (() -> Void)?
+
+    /// Tap handler for the **Open URL** quick action. Opens the first
+    /// detected URL in the default browser.
+    public var onOpenURL: (() -> Void)?
+
+    /// Tap handler for the **Compose Email** quick action. Opens the
+    /// default mail client with the first detected email address.
+    public var onComposeEmail: (() -> Void)?
+
+    /// Tap handler for the **Format as Code Block** quick action. Detects
+    /// source code in the text and wraps it in a fenced markdown block.
+    public var onFormatCodeBlock: (() -> Void)?
+
+    /// Tap handler for the **Undo** quick action. Reverts the last capture
+    /// by removing it from history and restoring previous clipboard.
+    public var onUndo: (() -> Void)?
+
     public init(
         id: UUID = UUID(),
         kind: Kind,
@@ -222,7 +257,13 @@ public struct ToastState: Identifiable, Equatable {
         tryAgain: (() -> Void)? = nil,
         cancel: (() -> Void)? = nil,
         revealRecovery: (() -> Void)? = nil,
-        openSettings: (() -> Void)? = nil
+        openSettings: (() -> Void)? = nil,
+        onTranslate: (() -> Void)? = nil,
+        onFormatCode: (() -> Void)? = nil,
+        onOpenURL: (() -> Void)? = nil,
+        onComposeEmail: (() -> Void)? = nil,
+        onFormatCodeBlock: (() -> Void)? = nil,
+        onUndo: (() -> Void)? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -242,9 +283,16 @@ public struct ToastState: Identifiable, Equatable {
         self.cancel = cancel
         self.revealRecovery = revealRecovery
         self.openSettings = openSettings
+        self.onTranslate = onTranslate
+        self.onFormatCode = onFormatCode
+        self.onOpenURL = onOpenURL
+        self.onComposeEmail = onComposeEmail
+        self.onFormatCodeBlock = onFormatCodeBlock
+        self.onUndo = onUndo
     }
 
     public static func == (lhs: ToastState, rhs: ToastState) -> Bool {
         lhs.id == rhs.id && lhs.kind == rhs.kind && lhs.headline == rhs.headline
+            && lhs.bodyText == rhs.bodyText
     }
 }

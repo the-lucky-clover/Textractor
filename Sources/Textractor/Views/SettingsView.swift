@@ -10,18 +10,24 @@ public struct SettingsView: View {
 
     @EnvironmentObject var appState: AppState
     @State private var firstLoad: Bool = false
+    @State private var confirmFactoryReset: Bool = false
+    @State private var lastFactoryReset: FactoryResetService.Report?
 
     public init() {}
 
     private static let headerBackground = textractorHeaderBackground
     private var appeared: Bool { firstLoad }
     private var reduceMotion: Bool { appState.settings.reduceMotion }
-    private var screenRecordingGranted: Bool { PermissionService.shared.screenRecordingGranted }
+    /// Observable binding to `PermissionService`. Drops the previous
+    /// `Timer.publish(...).autoconnect()` poll — the service now updates
+    /// its `@Published` flag in response to display-config events.
+    @ObservedObject private var permissions = PermissionService.shared
+    private var screenRecordingGranted: Bool { permissions.screenRecordingGranted }
 
     // MARK: - Banner
 
     private let bannerWidth: CGFloat = 252
-    private var bannerAspect: CGFloat { 344.0 / 1280.0 }
+    private var bannerAspect: CGFloat { 384.0 / 1171.0 }
     private var bannerDisplayWidth: CGFloat { bannerWidth * 1.05 }
     private var bannerHeight: CGFloat { bannerWidth * bannerAspect * 0.95 }
 
@@ -58,8 +64,35 @@ public struct SettingsView: View {
                     Row(T.s("reset.defaults"), icon: "arrow.counterclockwise.circle.fill") { resetDefaults() }
                         .introReveal(screenRecordingGranted ? 1 : 2, appeared: firstLoad, animate: !reduceMotion)
 
-                    sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
-                    languagePicker.introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
+sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
+            languagePicker.introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
+            
+            // MARK: - Snip-to-translate (auto-detect source, pick target)
+            ToggleRow(
+                title: T.s("translate.after.capture"),
+                icon: "arrow.left.arrow.right",
+                isOn: translateAfterCaptureBinding
+            )
+            .introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
+            
+            Picker(selection: translationTargetBinding) {
+                Text(T.s("translation.target.automatic")).tag("")
+                ForEach(TranslationService.supportedTargets, id: \.code) { loc in
+                    Text("\(loc.name)").tag(loc.code)
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "text.bubble")
+                        .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
+                        .foregroundStyle(BreakingDad.toxicGreen)
+                    Text(T.s("translation.target"))
+                        .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .pickerStyle(.menu)
+            .introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
 
                     sectionLabel(T.s("section.formatting")).introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("paste.plain"), icon: "doc.on.clipboard", isOn: pasteAsPlainTextBinding)
@@ -103,7 +136,39 @@ public struct SettingsView: View {
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("extended.logging"), icon: "doc.text.magnifyingglass", isOn: extendedLoggingBinding)
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
-                    
+                    ToggleRow(title: T.s("menubar.color.icon"), icon: "paintpalette", isOn: menubarColorIconBinding)
+                        .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+
+                    ToggleRow(title: T.s("auto.save.captures"), icon: "square.and.arrow.down", isOn: autoSaveCapturesBinding)
+                        .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+
+                    // Hidden easter-egg: Ahoy Mode. Decorates toasts / menu copy
+                    // with pirate flavor (real OCR + clipboard output untouched).
+                    ToggleRow(
+                        title: PirateStrings.flavor("settings.ahoy.toggle", plain: T.s("settings.ahoy.toggle"), ahoy: appState.settings.ahoyMode),
+                        icon: "sailboat.fill",
+                        isOn: ahoyBinding
+                    )
+                    .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    if appState.settings.ahoyMode {
+                        Text(PirateStrings.flavor("settings.ahoy.help", plain: T.s("settings.ahoy.help"), ahoy: true))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 36)
+                            .padding(.bottom, 4)
+                    }
+
+                    // Factory reset — wipes settings, history, vocab, cache. The
+                    // user must re-grant TCC permissions in System Settings by
+                    // hand; the OS does not let apps re-prompt themselves.
+                    Row(
+                        PirateStrings.flavor("settings.factory.reset", plain: T.s("settings.factory.reset"), ahoy: appState.settings.ahoyMode),
+                        icon: "exclamationmark.octagon.fill",
+                        role: .destructive
+                    ) {
+                        confirmFactoryReset = true
+                    }
+                    .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
                     // Open log folder button
                     if appState.settings.extendedLoggingEnabled {
                         Row(T.s("settings.open.log.folder"), icon: "folder.badge.gearshape") {
@@ -112,8 +177,8 @@ public struct SettingsView: View {
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
                     }
 
-    // Dock Presence picker — label on row 1, picker menu below and to the right
-    VStack(alignment: .leading, spacing: 4) {
+                    // Dock Presence picker — label on row 1, picker menu below and to the right
+                    VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 10) {
             Image(systemName: "macwindow.on.rectangle")
                 .font(.system(size: 13, weight: .medium))
@@ -174,6 +239,21 @@ public struct SettingsView: View {
         .onAppear {
             firstLoad = true
         }
+        .confirmationDialog(
+            Text(PirateStrings.flavor("settings.factory.confirm.title", plain: T.s("settings.factory.confirm.title"), ahoy: appState.settings.ahoyMode)),
+            isPresented: $confirmFactoryReset,
+            titleVisibility: .visible
+        ) {
+            Button(
+                PirateStrings.flavor("settings.factory.confirm.action", plain: T.s("settings.factory.confirm.action"), ahoy: appState.settings.ahoyMode),
+                role: .destructive
+            ) {
+                runFactoryReset()
+            }
+            Button(T.s("settings.factory.confirm.cancel"), role: .cancel) {}
+        } message: {
+            Text(PirateStrings.flavor("settings.factory.confirm.body", plain: T.s("settings.factory.confirm.body"), ahoy: appState.settings.ahoyMode))
+        }
     }
 
     // MARK: - Section label (matches the popover exactly)
@@ -218,8 +298,8 @@ public struct SettingsView: View {
     private var languagePicker: some View {
         Picker(selection: languageBinding) {
             Text(T.s("language.automatic")).tag("")
-            ForEach(Localization.catalog) { loc in
-                Text(loc.displayName).tag(loc.code)
+            ForEach(AppSettings.ocrLanguageCatalog, id: \.code) { loc in
+                Text("\(loc.flag) \(loc.name)").tag(loc.code)
             }
         } label: {
             HStack(spacing: 10) {
@@ -337,8 +417,8 @@ private var aboutBlockV2: some View {
                 .foregroundStyle(BreakingDad.toxicGreen)
                 .symbolEffect(.pulse, options: .repeat(3), value: firstLoad)
 
-            // 2) Tagline + sub — stacked vertically, full width breathing room
-            VStack(alignment: .leading, spacing: 4) {
+// 2) Tagline + sub — stacked vertically, full width breathing room
+            VStack(alignment: .center, spacing: 4) {
                 Text(T.s("about.tagline"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.primary)
@@ -348,21 +428,17 @@ private var aboutBlockV2: some View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
 
-            // 3) Credits — "Made with <3 by Lucky Clover" (Lucky Clover links to SoundCloud)
+            // 3) Credits — "Made with <3 by Lucky Clover"
             HStack(spacing: 6) {
-                Text("Made with ")
+                Text(T.s("about.made_with"))
                     .font(.system(size: 10, weight: .regular, design: .rounded))
                     .foregroundStyle(.secondary)
 
                 Text("<3")
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundStyle(BreakingDad.cautionOrange)
-
-                Text("by ")
-                    .font(.system(size: 10, weight: .regular, design: .rounded))
-                    .foregroundStyle(.secondary)
 
                 Button {
                     if let url = URL(string: "https://soundcloud.com/lucky-clover") {
@@ -381,12 +457,13 @@ private var aboutBlockV2: some View {
             .padding(.vertical, 2)
 
             // 4) Version footer — its own row, full width
-            Text(T.s("about.version"))
+            Text(T.s("about.version", args: UpdateService.versionDescription))
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .kerning(0.5)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, 10)
         .padding(.top, 8)
         .padding(.bottom, 6)
@@ -447,19 +524,44 @@ private var aboutBlockV2: some View {
         Binding(get: { appState.settings.extendedLoggingEnabled },
                 set: { v in appState.updateSettings { $0.extendedLoggingEnabled = v } })
     }
-    
+    private var menubarColorIconBinding: Binding<Bool> {
+        Binding(get: { appState.settings.menubarColorIcon },
+                set: { v in
+                    appState.updateSettings { $0.menubarColorIcon = v }
+                    // Reconfigure the status bar icon immediately
+                    StatusBarController.shared?.reconfigureIcon()
+                })
+    }
+    private var ahoyBinding: Binding<Bool> {
+        Binding(get: { appState.settings.ahoyMode },
+                set: { v in appState.updateSettings { $0.ahoyMode = v } })
+    }
+    private var translateAfterCaptureBinding: Binding<Bool> {
+        Binding(get: { appState.settings.translateAfterCapture },
+                set: { v in appState.updateSettings { $0.translateAfterCapture = v } })
+    }
+    private var translationTargetBinding: Binding<String> {
+        Binding(get: { appState.settings.translationTargetLanguage },
+                set: { v in appState.updateSettings { $0.translationTargetLanguage = v } })
+    }
+    private var autoSaveCapturesBinding: Binding<Bool> {
+        Binding(get: { appState.settings.autoSaveCaptures },
+                set: { v in appState.updateSettings { $0.autoSaveCaptures = v } })
+    }
+
     private func openLogFolder() {
         LoggerService.shared.openLogFolder()
     }
-    
+
     private func resetDefaults() {
         appState.resetSettingsToDefaults()
     }
 
-    // MARK: - Permissions
+    private func runFactoryReset() {
+        lastFactoryReset = FactoryResetService.run(appState: appState)
+    }
 
-    @State private var screenGranted = PermissionService.shared.screenRecordingGranted
-    private let permissionTicker = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    // MARK: - Permissions
 
     @ViewBuilder private func permissionRow(open: @escaping () -> Void) -> some View {
         let granted = screenRecordingGranted

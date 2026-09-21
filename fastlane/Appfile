@@ -1,0 +1,143 @@
+# frozen_string_literal: true
+# Textractor fastlane Appfile
+# Configuration for App Store Connect and code signing
+#
+# This file contains sensitive configuration. For CI/CD, use environment variables instead.
+# See .env.example for required variables.
+
+app_identifier 'com.textractor.app'       # Your app's bundle identifier
+apple_id 'pounds1@gmail.com'              # Your Apple ID (for legacy auth)
+team_id '538QNVLWHG'                      # Your Apple Developer Team ID
+
+# App Store Connect API Key (preferred over apple_id/team_id)
+# Get these from: https://appstoreconnect.apple.com/access/api
+# Set as environment variables in CI:
+#   ASC_API_ISSUER_ID = "d307dd1b-201a-485d-bfa4-4ab522c72413"
+#   ASC_API_KEY_ID = "your-key-id"
+#   ASC_API_KEY_PATH = "/path/to/AuthKey_XXXXXXXXXX.p8"
+#
+# For local development, you can uncomment and fill in:
+# app_store_connect_api_key(
+#   key_id: 'YOUR_KEY_ID',
+#   issuer_id: 'd307dd1b-201a-485d-bfa4-4ab522c72413',
+#   key_filepath: '/path/to/AuthKey_XXXXXXXXXX.p8',
+#   duration: 1200, # optional, max 1200
+#   in_house: false # optional, for enterprise
+# )
+
+# Code signing
+# Use match for certificate management (recommended)
+# match(type: 'appstore', readonly: true)
+#
+# Or specify manually:
+# certificate_id 'YOUR_CERTIFICATE_ID'
+# profile_path './fastlane/profiles/Textractor_AppStore.mobileprovision'
+
+# App metadata
+app_name 'Textractor'
+sku 'textractor'
+category 'public.app-category.utilities' # Primary: Utilities
+secondary_category 'public.app-category.productivity' # Secondary: Productivity
+
+# Version (read from git/Info.plist at runtime)
+# version '2.0.0'
+# build_number '2000'
+
+# Pricing (set in App Store Connect, not here)
+# price_tier 2 # $1.99, use 3 for $2.99, etc.
+
+# Localization
+primary_language 'en-US'
+languages ['en-US']
+
+# Review information
+review_information(
+  first_name: 'Your',
+  last_name: 'Name',
+  phone_number: '+1-555-123-4567',
+  email_address: 'pounds.1@example.com',
+  demo_user: '',
+  demo_password: '',
+  notes: 'Textractor requires Screen Recording permission for core OCR functionality. 
+          The app is fully sandboxed and notarized. No network access for core features.
+          
+          To test: Grant Screen Recording permission in System Settings → Privacy & Security.
+          Then use ⌘⇧2 to capture a region, or click the menu bar icon for window capture.
+          
+          Privacy Policy: https://github.com/the-lucky-clover/Textractor/blob/main/PRIVACY_POLICY.md'
+)
+
+# Copyright
+copyright '© 2026 Textractor'
+
+# Trade representative (if applicable)
+# trade_representative_contact_information(
+#   first_name: '',
+#   last_name: '',
+#   phone_number: '',
+#   email_address: '',
+#   address_line1: '',
+#   address_line2: '',
+#   city_name: '',
+#   state: '',
+#   country_code: '',
+#   postal_code: ''
+# )
+
+# Export compliance (HTTPS/encryption)
+# Uses Apple's CryptoKit/Swift Crypto for local AES-GCM encryption only
+# No custom encryption, qualifies for exemption
+export_compliance(
+  uses_encryption: true,
+  encryption_updated: false,
+  algorithm: 'AES',
+  key_size: 256,
+  algorithm_description: 'AES-GCM for local data encryption only (SwiftData + Keychain)',
+  available_in_france: true
+)
+
+# Content rights
+content_rights_declaration(
+  contains_third_party_content: false,
+  has_legal_rights: true
+)
+
+# Advertising identifier
+# No advertising, no IDFA
+advertising_identifier(
+  uses_idfa: false,
+  tracks_users: false,
+  tracks_in_app: false,
+  serves_ads: false
+)
+
+# App Store Connect users (for team access)
+# user_roles({
+#   'team-member@example.com' => 'admin',
+#   'reviewer@example.com' => 'app_manager'
+# })
+
+# Automatic release
+automatic_release true # Release automatically after approval
+
+# Phased release (rollout over 7 days)
+phased_release true
+
+# Reset ratings on new version
+reset_ratings false
+
+# Age rating (set in App Store Connect)
+# age_rating '4+'
+
+# Pre-release version (TestFlight)
+# distribute_external: false
+# groups: ['Beta Testers']
+# changelog: 'See GitHub releases'
+
+# Submission
+submit_for_review true
+force_submit false # Don't force if warnings
+
+# App Store Connect API key path for CI
+# Use environment variable ASC_API_KEY_PATH
+# api_key_path ENV['ASC_API_KEY_PATH'] if ENV['ASC_API_KEY_PATH']

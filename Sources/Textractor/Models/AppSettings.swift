@@ -89,6 +89,10 @@ public var ocrLanguages: [String] = []
     /// - `both`: Regular app with Dock icon AND menu bar item
     public var dockPresence: DockPresence
 
+    /// When `true` (default), the menubar icon shows in full color.
+    /// When `false`, the menubar icon is rendered as grayscale for a subtle look.
+    public var menubarColorIcon: Bool
+
     // MARK: - Privacy
 
     /// PII redaction toggle. **Default ON** — passwords / credit-cards / SSNs /
@@ -115,8 +119,49 @@ public var ocrLanguages: [String] = []
     // MARK: - Extended Logging
 
     /// When enabled, writes verbose logs to a file in `~/Library/Caches/Textractor/Logs/`.
-    /// Useful for debugging OCR pipeline issues.
+    /// Useful for debugging OCR pipeline issues and ClipboardImageOCR monitoring.
     public var extendedLoggingEnabled: Bool
+
+    // MARK: - Ahoy Mode (easter egg)
+
+    /// Hidden toggle that decorates user-facing UI strings (toasts, hints,
+    /// empty-state copy) with pirate flavor. OCR output is **never** touched
+    /// — this only changes the chrome around the product.
+    public var ahoyMode: Bool
+
+    // MARK: - Phase 1 Improvements
+
+    /// When enabled, translates captured text to the target language before pasting.
+    /// Uses the `translationTargetLanguage` setting.
+    public var translateAfterCapture: Bool
+
+    /// When enabled, detects source code in OCR results and wraps output
+    /// in fenced markdown code blocks with automatic language detection.
+    /// This preserves indentation and adds syntax highlighting hints.
+    public var sourceCodeMode: Bool
+
+    /// Target language for snip-to-translate (BCP-47 like "es", "ja").
+    /// Empty means translation is disabled.
+    public var translationTargetLanguage: String
+
+    /// When enabled, monitors the system pasteboard for copied images and
+    /// automatically runs OCR on them, surfacing the result in the toast.
+    /// This lets users copy a screenshot or photo from any app and get text
+    /// without triggering a capture. Default OFF.
+    public var clipboardImageOCR: Bool
+
+    /// When enabled, shows a confidence badge in the toast and history UI
+    /// so users can see how reliable each OCR result is. Default ON.
+    public var showConfidenceBadge: Bool
+
+    /// When enabled, structured export (JSON/CSV/Markdown) is available
+    /// from the history context menu. Default ON.
+    public var structuredExportEnabled: Bool
+
+    /// When enabled, automatically saves each capture (image + text) to
+    /// `~/Pictures/Textractor Captures/` with timestamped filenames.
+    /// Default OFF — captures are clipboard-only by default.
+    public var autoSaveCaptures: Bool
 
     public init(
         weirdness: Double = 0.45,
@@ -138,8 +183,17 @@ public var ocrLanguages: [String] = []
         piiRedactionEnabled: Bool = true,
         historyEntryLimit: Int = 200,
         dockPresence: DockPresence = .menuBarOnly,
+        menubarColorIcon: Bool = true,
         knowledgeModeEnabled: Bool = false,
-        extendedLoggingEnabled: Bool = false
+        extendedLoggingEnabled: Bool = false,
+        ahoyMode: Bool = false,
+        clipboardImageOCR: Bool = false,
+        showConfidenceBadge: Bool = true,
+        structuredExportEnabled: Bool = true,
+        sourceCodeMode: Bool = false,
+        translateAfterCapture: Bool = false,
+        translationTargetLanguage: String = "",
+        autoSaveCaptures: Bool = false
     ) {
         self.weirdness = weirdness
         self.customVocabulary = customVocabulary
@@ -160,8 +214,17 @@ public var ocrLanguages: [String] = []
         self.piiRedactionEnabled = piiRedactionEnabled
         self.historyEntryLimit = historyEntryLimit
         self.dockPresence = dockPresence
+        self.menubarColorIcon = menubarColorIcon
         self.knowledgeModeEnabled = knowledgeModeEnabled
         self.extendedLoggingEnabled = extendedLoggingEnabled
+        self.ahoyMode = ahoyMode
+        self.clipboardImageOCR = clipboardImageOCR
+        self.showConfidenceBadge = showConfidenceBadge
+        self.structuredExportEnabled = structuredExportEnabled
+        self.sourceCodeMode = sourceCodeMode
+        self.translateAfterCapture = translateAfterCapture
+        self.translationTargetLanguage = translationTargetLanguage
+        self.autoSaveCaptures = autoSaveCaptures
     }
 
     // MARK: - Codable migration
@@ -170,7 +233,8 @@ private enum CodingKeys: String, CodingKey {
         case weirdness, customVocabulary, uiLanguage, localTelemetryEnabled, openPopoverOnCapture, lastUpdateCheckAt
         case customHotkeyKeyCode, customHotkeyModifiers, customHotkeyLabel, soundEffectsEnabled
         case pasteAsPlainText, wordWrapCaptured, windowCaptureAsTable, flattenText, reduceMotion
-        case fontScale, piiRedactionEnabled, historyEntryLimit, ocrLanguages, dockPresence, knowledgeModeEnabled, extendedLoggingEnabled
+        case fontScale, piiRedactionEnabled, historyEntryLimit, ocrLanguages, dockPresence, menubarColorIcon, knowledgeModeEnabled, extendedLoggingEnabled
+        case ahoyMode, clipboardImageOCR, showConfidenceBadge, structuredExportEnabled, sourceCodeMode, translateAfterCapture, translationTargetLanguage, autoSaveCaptures
     }
 
     public init(from decoder: Decoder) throws {
@@ -204,8 +268,17 @@ private enum CodingKeys: String, CodingKey {
         piiRedactionEnabled = try container.decode(Bool.self, forKey: .piiRedactionEnabled)
         historyEntryLimit = try container.decode(Int.self, forKey: .historyEntryLimit)
         dockPresence = try container.decodeIfPresent(DockPresence.self, forKey: .dockPresence) ?? .menuBarOnly
+        menubarColorIcon = try container.decodeIfPresent(Bool.self, forKey: .menubarColorIcon) ?? true
         knowledgeModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .knowledgeModeEnabled) ?? false
         extendedLoggingEnabled = try container.decodeIfPresent(Bool.self, forKey: .extendedLoggingEnabled) ?? false
+        ahoyMode = try container.decodeIfPresent(Bool.self, forKey: .ahoyMode) ?? false
+        clipboardImageOCR = try container.decodeIfPresent(Bool.self, forKey: .clipboardImageOCR) ?? false
+        showConfidenceBadge = try container.decodeIfPresent(Bool.self, forKey: .showConfidenceBadge) ?? true
+        structuredExportEnabled = try container.decodeIfPresent(Bool.self, forKey: .structuredExportEnabled) ?? true
+        sourceCodeMode = try container.decodeIfPresent(Bool.self, forKey: .sourceCodeMode) ?? false
+        translateAfterCapture = try container.decodeIfPresent(Bool.self, forKey: .translateAfterCapture) ?? false
+        translationTargetLanguage = try container.decodeIfPresent(String.self, forKey: .translationTargetLanguage) ?? ""
+        autoSaveCaptures = try container.decodeIfPresent(Bool.self, forKey: .autoSaveCaptures) ?? false
         self.ocrLanguages = [] // deprecated; cleared after migration
     }
 
@@ -230,8 +303,14 @@ private enum CodingKeys: String, CodingKey {
         try container.encode(piiRedactionEnabled, forKey: .piiRedactionEnabled)
         try container.encode(historyEntryLimit, forKey: .historyEntryLimit)
         try container.encode(dockPresence, forKey: .dockPresence)
+        try container.encode(menubarColorIcon, forKey: .menubarColorIcon)
         try container.encode(knowledgeModeEnabled, forKey: .knowledgeModeEnabled)
         try container.encode(extendedLoggingEnabled, forKey: .extendedLoggingEnabled)
+        try container.encode(ahoyMode, forKey: .ahoyMode)
+        try container.encode(clipboardImageOCR, forKey: .clipboardImageOCR)
+        try container.encode(showConfidenceBadge, forKey: .showConfidenceBadge)
+        try container.encode(structuredExportEnabled, forKey: .structuredExportEnabled)
+        try container.encode(autoSaveCaptures, forKey: .autoSaveCaptures)
         // `ocrLanguages` is deprecated and intentionally omitted from new encodes.
     }
 
@@ -259,8 +338,14 @@ private enum CodingKeys: String, CodingKey {
         piiRedactionEnabled: true,
         historyEntryLimit: 200,
         dockPresence: .menuBarOnly,
+        menubarColorIcon: true,
         knowledgeModeEnabled: false,
-        extendedLoggingEnabled: false
+        extendedLoggingEnabled: false,
+        ahoyMode: false,
+        clipboardImageOCR: false,
+        showConfidenceBadge: true,
+        structuredExportEnabled: true,
+        autoSaveCaptures: false
     )
 }
 
@@ -290,7 +375,7 @@ extension AppSettings {
 public extension AppSettings {
     /// Curated list of OCR languages offered in the Settings UI. Apple Vision
     /// supports many more, this list covers the most commonly requested.
-    static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
+static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
         ("en-US", "English (US)", "🇺🇸"),
         ("en-GB", "English (UK)", "🇬🇧"),
         ("es-ES", "Spanish", "🇪🇸"),
@@ -300,11 +385,20 @@ public extension AppSettings {
         ("pt-BR", "Portuguese (Brazil)", "🇧🇷"),
         ("nl-NL", "Dutch", "🇳🇱"),
         ("ru-RU", "Russian", "🇷🇺"),
+        ("pl-PL", "Polish", "🇵🇱"),
+        ("el-GR", "Greek", "🇬🇷"),
+        ("tr-TR", "Turkish", "🇹🇷"),
+        ("th-TH", "Thai", "🇹🇭"),
+        ("vi-VN", "Vietnamese", "🇻🇳"),
+        ("id-ID", "Indonesian", "🇮🇩"),
+        ("ms-MY", "Malay", "🇲🇾"),
+        ("hi-IN", "Hindi", "🇮🇳"),
+        ("he-IL", "Hebrew", "🇮🇱"),
+        ("ar-SA", "Arabic", "🇸🇦"),
         ("ja-JP", "Japanese", "🇯🇵"),
         ("ko-KR", "Korean", "🇰🇷"),
         ("zh-Hans", "Chinese (Simplified)", "🇨🇳"),
         ("zh-Hant", "Chinese (Traditional)", "🇹🇼"),
-        ("ar-SA", "Arabic", "🇸🇦"),
     ]
 
     /// Bounded range exposed in the Settings slider.

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Textractor</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Loading screen -->
+    <div id="loading" class="loading-screen">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Starting Textractor...</p>
+      </div>
+    </div>
+
+    <!-- Toast Notification System -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Capture Overlay (hidden initially) -->
+    <div id="capture-overlay" class="capture-overlay hidden">
+      <div class="capture-instructions">
+        <div class="capture-hint">
+          <i class="fas fa-crosshairs"></i>
+          <span>Drag to select region</span>
+        </div>
+        <div class="capture-hint">
+          <i class="fas fa-keyboard"></i>
+          <span class="hotkey">ESC</span> to cancel
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Window Content -->
+    <main id="main-window" class="main-window hidden">
+      <header class="window-header">
+        <div class="window-titlebar">
+          <div class="window-title">
+            <img src="icon.svg" alt="Textractor" class="window-icon" />
+            <span class="app-name">Textractor</span>
+          </div>
+          <div class="window-controls">
+            <button id="minimize-btn" class="window-btn minimize" title="Minimize">
+              <i class="fas fa-minus"></i>
+            </button>
+            <button id="maximize-btn" class="window-btn maximize" title="Maximize">
+              <i class="fas fa-square"></i>
+            </button>
+            <button id="close-btn" class="window-btn close" title="Close">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+      </header>
+
+      <nav class="sidebar">
+        <div class="sidebar-nav">
+          <a href="#" class="nav-item active" data-tab="history">
+            <i class="fas fa-clock"></i>
+            <span>History</span>
+          </a>
+          <a href="#" class="nav-item" data-tab="settings">
+            <i class="fas fa-cog"></i>
+            <span>Settings</span>
+          </a>
+          <a href="#" class="nav-item" data-tab="about">
+            <i class="fas fa-info-circle"></i>
+            <span>About</span>
+          </a>
+        </div>
+      </nav>
+
+      <div class="content-area">
+        <!-- History Tab -->
+        <section id="tab-history" class="tab-content active">
+          <div class="history-header">
+            <h2 class="history-title">Capture History</h2>
+            <div class="history-toolbar">
+              <div class="search-container">
+                <i class="fas fa-search"></i>
+                <input type="text" id="search-input" placeholder="Search captures..." />
+              </div>
+              <button id="export-btn" class="btn btn-secondary">
+                <i class="fas fa-download"></i> Export
+              </button>
+              <button id="clear-history-btn" class="btn btn-danger">
+                <i class="fas fa-trash"></i> Clear
+              </button>
+            </div>
+          </div>
+
+          <div id="history-list" class="history-list">
+            <div class="empty-history">
+              <i class="fas fa-clipboard-list"></i>
+              <h3>No captures yet</h3>
+              <p>Captured text will appear here.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Settings Tab -->
+        <section id="tab-settings" class="tab-content">
+          <div class="settings-container">
+            <h2>Settings</h2>
+
+            <div class="settings-section">
+              <h3 class="section-title">AI & Extraction</h3>
+              <div class="settings-group">
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-wind"></i>
+                    <span>Inference weirdness</span>
+                  </div>
+                  <div class="setting-control">
+                    <input type="range" id="weirdness-slider" min="0" max="100" value="45" />
+                    <span id="weirdness-value" class="slider-value">45%</span>
+                  </div>
+                </div>
+                <div class="setting-hint">0% strict · 100% aggressive correction & more retries.</div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-label">
+                  <i class="fas fa-language"></i>
+                  <span>OCR Language</span>
+                </div>
+                <div class="setting-control">
+                  <select id="ocr-language" class="select-control">
+                    <option value="">Automatic (system)</option>
+                    <option value="eng">English</option>
+                    <option value="spa">Spanish</option>
+                    <option value="fra">French</option>
+                    <option value="deu">German</option>
+                    <option value="ita">Italian</option>
+                    <option value="jpn">Japanese</option>
+                    <option value="kor">Korean</option>
+                    <option value="zho_sim">Chinese (Simplified)</option>
+                    <option value="zho_tra">Chinese (Traditional)</option>
+                    <option value="ara">Arabic</option>
+                    <option value="rus">Russian</option>
+                    <option value="por">Portuguese</option>
+                    <option value="nld">Dutch</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="section-title">Formatting</h3>
+              <div class="settings-group">
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-paragraph"></i>
+                    <span>Paste as plain text</span>
+                  </div>
+                  <div class="setting-control">
+                    <button id="toggle-paste-plain" class="toggle-switch active"></button>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-compress"></i>
+                    <span>Flatten text (no line breaks)</span>
+                  </div>
+                  <div class="setting-control">
+                    <button id="toggle-flatten" class="toggle-switch"></button>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-table"></i>
+                    <span>Convert tables to markdown</span>
+                  </div>
+                  <div class="setting-control">
+                    <button id="toggle-tables" class="toggle-switch active"></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="section-title">Privacy</h3>
+              <div class="settings-group">
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-eye-slash"></i>
+                    <span>Redact PII (cards, SSN, keys…)</span>
+                  </div>
+                  <div class="setting-control">
+                    <button id="toggle-pii" class="toggle-switch active"></button>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-history"></i>
+                    <span>Keep last</span>
+                  </div>
+                  <div class="setting-control">
+                    <input type="number" id="history-limit" class="number-input" min="10" max="1000" value="200" />
+                    <span class="input-suffix">entries</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="section-title">Integrations</h3>
+              <div class="settings-group">
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-copy"></i>
+                    <span>Auto-OCR from clipboard</span>
+                  </div>
+                  <div class="setting-control">
+                    <button id="toggle-clipboard-ocr" class="toggle-switch"></button>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Show confidence badge</span>
+                  </div>
+                  <div class="setting-control">
+                    <button id="toggle-confidence" class="toggle-switch active"></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="section-title">Behavior</h3>
+              <div class="settings-group">
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-paint-brush"></i>
+                    <span>Color menubar icon</span>
+                  </div>
+                  <div class="setting-control">
+                    <button id="toggle-menubar-color" class="toggle-switch active"></button>
+                  </div>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-label">
+                    <i class="fas fa-tv"></i>
+                    <span>Reduce motion</span>
+                  </div>
+                  <div class="setting-control">
+                    <button id="toggle-reduce-motion" class="toggle-switch"></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="section-title">About</h3>
+              <div class="about-section">
+                <div class="about-logo">
+                  <img src="icon.svg" alt="Textractor" />
+                </div>
+                <div class="about-info">
+                  <h3>Textractor</h3>
+                  <p class="version">v2.0.0 (Windows)</p>
+                  <p class="tagline">On-device text extraction for Windows</p>
+                  <p class="license">© 2026 Textractor. Privacy-first, on-device text extraction.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- About Tab -->
+        <section id="tab-about" class="tab-content">
+          <div class="about-page">
+            <div class="about-header">
+              <img src="icon.svg" alt="Textractor" class="about-logo-large" />
+              <h1>Textractor</h1>
+              <p class="version-string">v2.0.0 (Windows)</p>
+            </div>
+            <p class="about-description">
+              Privacy-first, on-device text extraction. Built for your privacy and your eyes.
+            </p>
+            <div class="about-meta">
+              <p>Built with Tauri + Rust + Tesseract OCR</p>
+              <p>All processing stays local — no data leaves your device.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Floating Action Button (capture) -->
+    <button id="fab-capture" class="fab" title="Capture (Ctrl+Shift+2)">
+      <i class="fas fa-qrcode"></i>
+    </button>
+  </div>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>

@@ -25,10 +25,13 @@ public final class OCRService {
         in cgImage: CGImage,
         weirdness: Double = 0.45,
         customVocabulary: [String] = [],
-        preferredLanguages: [String] = []
+        preferredLanguages: [String] = [],
+        autoWeirdness: Bool = false
     ) async -> OCRResult {
         let started = Date()
-        let normalized = max(0.0, min(1.0, weirdness))
+
+        // Initial normalized weirdness (user setting or default)
+        var currentWeirdness = max(0.0, min(1.0, weirdness))
 
         var revisionsUsed: [(String, Int)] = []
         var observations: [TextObservation] = []
@@ -48,12 +51,17 @@ public final class OCRService {
                 cgImage: cgImage,
                 level: .accurate,
                 languages: ocrLanguages,
-                minTextHeight: Self.threshold(for: normalized),
+                minTextHeight: Self.threshold(for: currentWeirdness),
                 vocab: []
             )
         }.value
         observations = trial1
         revisionsUsed.append(("accurate", 1))
+
+        // Auto-weirdness: analyze first pass confidence to adapt threshold
+        if autoWeirdness && !observations.isEmpty {
+            currentWeirdness = Self.autoWeirdness(from: observations)
+        }
 
         // Dense English text (code, logs, build commands, tables) is frequently
         // corrupted by language correction swapping identifiers/operators for
@@ -68,7 +76,7 @@ public final class OCRService {
                     cgImage: cgImage,
                     level: .accurate,
                     languages: ocrLanguages,
-                    minTextHeight: Self.threshold(for: normalized),
+                    minTextHeight: Self.threshold(for: currentWeirdness),
                     vocab: [],
                     disableLanguageCorrection: true
                 )
@@ -104,8 +112,8 @@ public final class OCRService {
 
         // Self-heal Step 2: explicit language hints + custom vocab (only when
         // weirdness is permissive enough).
-        if observations.isEmpty && normalized > 0.35 {
-            let vocab = normalized > 0.4 ? customVocabulary : []
+        if observations.isEmpty && currentWeirdness > 0.35 {
+            let vocab = currentWeirdness > 0.4 ? customVocabulary : []
             observations = await Task.detached(priority: .userInitiated) {
                 Self.runSync(
                     cgImage: cgImage,
@@ -183,7 +191,25 @@ public final class OCRService {
             // so this list is normally just that one code (keeping language
             // correction within the English lexicon). Explicit non-English
             // captures pass their full language list through here unchanged.
-            let effective: [String] = (level == .fast) ? Array(languages.prefix(1)) : languages
+            //
+            // For the Automatic superset we additionally promote the user's
+            // primary preferred language to the front of the list, so the
+            // fast-path prefix(1) truncation lands on the script the user is
+            // *actually reading* (e.g. a Thai-locale user gets "th-TH" first,
+            // not en-US).
+            let effective: [String]
+            if level == .fast {
+                let primary = Locale.preferredLanguages.first
+                var promoted = languages
+                if let primary,
+                   let idx = promoted.firstIndex(where: { $0.lowercased().hasPrefix(primary.lowercased().prefix(2).description) }),
+                   idx > 0 {
+                    promoted.swapAt(0, idx)
+                }
+                effective = Array(promoted.prefix(1))
+            } else {
+                effective = languages
+            }
             request.recognitionLanguages = effective
         }
         request.minimumTextHeight = Float(minTextHeight)
@@ -228,7 +254,9 @@ public final class OCRService {
     private static let denseObservationMinimum = 10
     private static let denseSymbolRatio = 0.06
 
-    private static func threshold(for weirdness: Double) -> CGFloat {
+    /// Calculate the minimum text height threshold based on weirdness setting.
+    /// 0.0 (strictest) → 0.02, 1.0 (most permissive) → 0.002.
+    public static func threshold(for weirdness: Double) -> CGFloat {
         // 0.0 (strictest) → 0.02, 1.0 (most permissive) → 0.002.
         // Lowered from the previous 0.06 floor so the default pass no longer
         // drops small but legitimate text (e.g. dense UI / code lines on a
@@ -238,14 +266,36 @@ public final class OCRService {
         return 0.002 + (1.0 - clamped) * interval
     }
 
+    /// Automatically compute weirdness from OCR confidence histogram.
+    /// Analyzes the confidence distribution of initial observations to determine
+    /// optimal threshold. Low mean + high variance → increase weirdness.
+    public static func autoWeirdness(from observations: [TextObservation]) -> Double {
+        guard !observations.isEmpty else { return 0.5 } // Default middle
+
+        let confidences = observations.map { Double($0.confidence) }
+        let count = Double(confidences.count)
+        let mean = confidences.reduce(0, +) / count
+        let variance = confidences.map { pow($0 - mean, 2) }.reduce(0, +) / count
+        let stdDev = sqrt(variance)
+
+        // Heuristic: low mean confidence + high variance = difficult text → increase weirdness
+        // Normalize to 0.0-1.0 range
+        let difficulty = (1.0 - mean) * 0.7 + min(stdDev * 2.0, 0.3)
+        return max(0.0, min(1.0, difficulty))
+    }
+
     /// Curated list of Vision-supported BCP-47 codes used when the user
     /// leaves OCR language on "Automatic". Order matters — Vision picks the
     /// first match, so English (the most common Textractor capture) leads.
+    /// Adding a code here also makes it selectable in the Settings picker.
     public static let automaticLanguageCatalog: [String] = [
         "en-US", "en-GB",
         "es-ES", "fr-FR", "de-DE", "it-IT", "pt-BR", "nl-NL",
-        "ru-RU", "ja-JP", "ko-KR",
-        "zh-Hans", "zh-Hant", "ar-SA"
+        "ru-RU", "pl-PL", "el-GR", "tr-TR",
+        "th-TH", "vi-VN", "id-ID", "ms-MY",
+        "hi-IN", "he-IL", "ar-SA",
+        "ja-JP", "ko-KR",
+        "zh-Hans", "zh-Hant"
     ]
 
     /// Build the "Automatic" language set: the curated catalog + any

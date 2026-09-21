@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="400" viewBox="0 0 1200 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6BB534"/>
+      <stop offset="100%" style="stop-color:#29ABE0"/>
+    </linearGradient>
+  </defs>
+  <!-- Icon -->
+  <g transform="translate(60, 60)">
+    <rect x="0" y="0" width="280" height="280" rx="56" fill="#0B100A"/>
+    <g transform="translate(140, 140)">
+      <rect x="-80" y="-64" width="160" height="128" rx="8" fill="none" stroke="url(#accentGrad)" stroke-width="4"/>
+      <g fill="#E6EADC" opacity="0.9">
+        <rect x="-64" y="-40" width="112" height="10" rx="2"/>
+        <rect x="-64" y="-24" width="96" height="10" rx="2"/>
+        <rect x="-64" y="-8" width="120" height="10" rx="2"/>
+        <rect x="-64" y="8" width="80" height="10" rx="2"/>
+        <rect x="-64" y="24" width="104" height="10" rx="2" opacity="0.6"/>
+      </g>
+    </g>
+  </g>
+  <!-- Text -->
+  <text x="380" y="240" font-family="-apple-system, SF Pro Display, sans-serif" 
+        font-size="80" font-weight="700" fill="url(#accentGrad)" 
+        dominant-baseline="middle">Textractor</text>
+  <text x="380" y="290" font-family="-apple-system, SF Pro Text, sans-serif" 
+        font-size="24" fill="#E6EADC" opacity="0.7"
+        dominant-baseline="middle">Privacy-first OCR for Mac</text>
+</svg>

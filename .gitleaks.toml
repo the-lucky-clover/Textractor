@@ -1,0 +1,85 @@
+# .gitleaks.toml
+# Gitleaks configuration for secret detection
+
+[allowlist]
+description = "Allowlist for Textractor"
+paths = [
+  "*.md",
+  "*.txt",
+  "*.example",
+  "*.template",
+  "fastlane/.env.example",
+  ".github/workflows/*.yml",
+  "Package.swift",
+  "Package.resolved",
+  "Sources/Textractor/Info.plist",
+  "Sources/Textractor/Resources/*.entitlements",
+  "Sources/Textractor/Resources/*.icns",
+  "Sources/Textractor/Resources/*.png",
+  "Sources/Textractor/Resources/*.lproj/*",
+  "marketing/**",
+  "scripts/**",
+]
+
+# Allow specific patterns that might look like secrets but aren't
+regexes = [
+  # UUIDs in code
+  '''(?i)(uuid|guid)['"\s:=]+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}''',
+  # Bundle identifiers
+  '''com\.[a-z0-9]+(\.[a-z0-9]+)*''',
+  # Team IDs
+  '''[A-Z0-9]{10}''',
+  # Key IDs
+  '''[A-Z0-9]{20}''',
+  # Issuer IDs
+  '''[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}''',
+]
+
+# Entropy-based detection (skip for common false positives)
+[rule]
+id = "high-entropy-string"
+entropy = 4.5
+min-length = 30
+path = "Sources/**/*.swift"
+tags = ["secret", "token", "key", "password"]
+
+# Specific patterns for common secrets
+[[rules]]
+description = "Apple App Store Connect API Key"
+regex = '''(?i)asc[_-]?api[_-]?key['"\s:=]+[A-Za-z0-9+/=]{32,}'''
+tags = ["api", "key", "appstore"]
+
+[[rules]]
+description = "Generic API Key"
+regex = '''(?i)api[_-]?key['"\s:=]+[A-Za-z0-9+/=]{32,}'''
+tags = ["api", "key"]
+
+[[rules]]
+description = "Generic Secret"
+regex = '''(?i)(secret|token|password)['"\s:=]+[A-Za-z0-9+/=]{20,}'''
+tags = ["secret", "token", "password"]
+
+[[rules]]
+description = "Private Key"
+regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'''
+tags = ["private", "key"]
+
+[[rules]]
+description = "AWS Access Key"
+regex = '''(?i)aws[_-]?access[_-]?key['"\s:=]+[A-Z0-9]{20}'''
+tags = ["aws", "key"]
+
+[[rules]]
+description = "AWS Secret Key"
+regex = '''(?i)aws[_-]?secret[_-]?key['"\s:=]+[A-Za-z0-9+/=]{40}'''
+tags = ["aws", "secret"]
+
+[[rules]]
+description = "GitHub Token"
+regex = '''gh[pousr]_[A-Za-z0-9_]{36,251}'''
+tags = ["github", "token"]
+
+[[rules]]
+description = "Slack Webhook"
+regex = '''https://hooks.slack.com/services/[A-Za-z0-9/]+'''
+tags = ["slack", "webhook"]

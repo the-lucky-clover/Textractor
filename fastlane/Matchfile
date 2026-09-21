@@ -1,0 +1,50 @@
+# frozen_string_literal: true
+# Textractor fastlane Matchfile
+# Certificate and provisioning profile management
+#
+# Setup:
+# 1. Create a private Git repo for certificates: https://github.com/yourorg/certificates
+# 2. Run: fastlane match appstore
+# 3. Enter passphrase when prompted (stored in MATCH_PASSWORD)
+#
+# For CI: Store MATCH_PASSWORD in GitHub Secrets / GitLab CI variables
+
+git_url 'git@github.com:the-lucky-clover/textractor-certificates.git'
+type 'appstore'  # appstore, development, adhoc, enterprise
+
+# Storage
+storage_mode 'git'  # git, google_cloud, s3
+
+# Git branch (default: master)
+git_branch 'main'
+
+# Keychain (for CI)
+keychain_name 'fastlane_tmp_keychain'
+keychain_password 'temp_password'
+
+# Certificate
+# certificate_id 'YOUR_CERTIFICATE_ID'  # Optional: specify if multiple
+
+# App identifier
+app_identifier 'com.textractor.app'
+
+# Username (Apple ID)
+username 'pounds1@gmail.com'
+
+# Team
+team_id '538QNVLWHG'
+
+# Force renewal
+force false  # Set true to force regenerate
+
+# Skip confirmation
+skip_confirmation true
+
+# Verbose
+verbose true
+
+# Derived data path
+# derived_data_path './build/fastlane'
+
+# Output path for profiles
+# output_path './fastlane/profiles'

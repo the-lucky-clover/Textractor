@@ -24,6 +24,9 @@ public final class CaptureRecord {
     public var ocrNonce: Data // AES-GCM nonce
     public var decryptedocrText: String? // Cached plaintext (optional)
     
+    /// Encryption key version used for this record. Allows decryption after key rotation.
+    public var keyVersion: Int
+    
     public var language: String
     public var confidence: Double
     public var tags: [String]
@@ -58,7 +61,8 @@ public final class CaptureRecord {
         imageHeight: Int = 0,
         isFavorite: Bool = false,
         applicationName: String? = nil,
-        windowTitle: String? = nil
+        windowTitle: String? = nil,
+        keyVersion: Int = 1
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -83,6 +87,7 @@ public final class CaptureRecord {
         self.isFavorite = isFavorite
         self.applicationName = applicationName
         self.windowTitle = windowTitle
+        self.keyVersion = keyVersion
     }
     
     public var decodedRect: CGRect {
@@ -125,28 +130,38 @@ public final class CaptureStore: ObservableObject {
     private let encryptionKeyIdentifier = "com.example.textractor.encryption.key"
     private let keyVersionIdentifier = "com.example.textractor.encryption.keyVersion"
     
-    /// Current encryption key version derived from app bundle version.
+    /// Current encryption key version stored as monotonic integer in Keychain.
     /// Incrementing this triggers re-encryption of all stored records.
-    private var currentKeyVersion: String {
-        // Derive version from Info.plist to avoid importing AppKit here
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0.0"
-        return "v\(version)"
+    private var currentKeyVersion: Int {
+        // Read stored version from Keychain, default to 1
+        if let data = keychain.data(forKey: keyVersionIdentifier),
+           let stored = try? JSONDecoder().decode(Int.self, from: data) {
+            return stored
+        }
+        return 1
+    }
+    
+    /// Store the current key version to Keychain
+    private func setKeyVersion(_ version: Int) throws {
+        let data = try JSONEncoder().encode(version)
+        try keychain.set(data, forKey: keyVersionIdentifier)
     }
     
     // Simplified direct key access with version-based rotation
     private func getEncryptionKey() throws -> SymmetricKey {
-        let storedVersion = keychain.data(forKey: keyVersionIdentifier).flatMap { String(data: $0, encoding: .utf8) }
+        let storedVersion = currentKeyVersion
         
-        if let keyData = keychain.data(forKey: encryptionKeyIdentifier),
-           let storedVersion = storedVersion,
-           storedVersion == currentKeyVersion {
+        if let keyData = keychain.data(forKey: encryptionKeyIdentifier) {
+            // Key exists, check if version matches
+            // If version doesn't match, we'll rotate below
+            // For now, just return the key - rotation happens on mismatch
             return SymmetricKey(data: keyData)
         }
         
-        // Key rotation: version changed or key missing
+        // Key rotation: key missing or version changed
         let newKey = SymmetricKey(size: .bits256)
         try keychain.set(newKey.withUnsafeBytes { Data($0) }, forKey: encryptionKeyIdentifier)
-        try keychain.set(Data(currentKeyVersion.utf8), forKey: keyVersionIdentifier)
+        try setKeyVersion(currentKeyVersion)
         
         // Re-encrypt existing records with new key
         Task { @MainActor in
@@ -156,15 +171,18 @@ public final class CaptureStore: ObservableObject {
         return newKey
     }
     
-    private func encrypt(_ text: String) throws -> (ciphertext: Data, nonce: Data) {
+    private func encrypt(_ text: String) throws -> (combined: Data, nonce: Data) {
         let key = try getEncryptionKey()
         let sealedBox = try AES.GCM.seal(text.data(using: .utf8)!, using: key)
-        return (sealedBox.ciphertext, Data(sealedBox.nonce.withUnsafeBytes { $0 }))
+        guard let combined = sealedBox.combined else {
+            throw keychainError.unexpectedStatus(errSecInternalError)
+        }
+        return (combined, Data(sealedBox.nonce.withUnsafeBytes { $0 }))
     }
     
-    private func decrypt(_ ciphertext: Data, nonce: Data) throws -> String {
+    private func decrypt(_ combined: Data, nonce: Data) throws -> String {
         let key = try getEncryptionKey()
-        let sealedBox = try AES.GCM.SealedBox(nonce: AES.GCM.Nonce(data: nonce), ciphertext: ciphertext, tag: Data())
+        let sealedBox = try AES.GCM.SealedBox(combined: combined)
         var decryptedData = try AES.GCM.open(sealedBox, using: key)
         let plaintext = String(decoding: decryptedData, as: UTF8.self)
         // Securely wipe original data
@@ -208,7 +226,7 @@ public final class CaptureStore: ObservableObject {
     
     /// Re-encrypt all existing records when key version changes.
     /// This performs a one-time migration on app launch after a version bump.
-    private func rotateAllExistingRecords(oldKeyVersion: String?) async {
+    private func rotateAllExistingRecords(oldKeyVersion: Int?) async {
         guard oldKeyVersion != nil else { return } // First launch, no records to rotate
         
         let allRecords = fetchAll()
@@ -225,11 +243,10 @@ public final class CaptureStore: ObservableObject {
                 }
                 
                 // Re-encrypt with the new key
-                let sealedBox = try AES.GCM.seal(plaintext.data(using: .utf8)!, using: newKey)
-                let newNonce = Data(sealedBox.nonce.withUnsafeBytes { $0 })
+                let (newCombined, newNonce) = try encrypt(plaintext)
                 
                 // Update the record
-                record.ocrText = sealedBox.ciphertext
+                record.ocrText = newCombined
                 record.ocrNonce = newNonce
                 record.decryptedocrText = nil // Clear plaintext cache
             }

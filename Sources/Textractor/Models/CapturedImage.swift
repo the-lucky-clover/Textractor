@@ -10,8 +10,12 @@ public struct CapturedImage: Identifiable, Sendable {
         case window
         case fullscreen
         case video
+        case videoURL
+        case autoScroll
         case continuityCamera
         case file
+        case clipboard
+        case hotkey
     }
 
     public let id: UUID

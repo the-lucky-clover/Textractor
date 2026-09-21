@@ -1,0 +1,11 @@
+/Users/pounds_1/dev/Textractor/windows/target/debug/deps/either-dd1343670e67d678.d: /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/lib.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/serde_untagged.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/serde_untagged_optional.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/iterator.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/into_either.rs
+
+/Users/pounds_1/dev/Textractor/windows/target/debug/deps/libeither-dd1343670e67d678.rlib: /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/lib.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/serde_untagged.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/serde_untagged_optional.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/iterator.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/into_either.rs
+
+/Users/pounds_1/dev/Textractor/windows/target/debug/deps/libeither-dd1343670e67d678.rmeta: /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/lib.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/serde_untagged.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/serde_untagged_optional.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/iterator.rs /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/into_either.rs
+
+/Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/lib.rs:
+/Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/serde_untagged.rs:
+/Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/serde_untagged_optional.rs:
+/Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/iterator.rs:
+/Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.18.0/src/into_either.rs:

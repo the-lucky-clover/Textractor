@@ -43,6 +43,14 @@ let package = Package(
                 .linkedFramework("Security"),
                 .linkedLibrary("sqlite3")
             ]
+        ),
+        .testTarget(
+            name: "TextractorTests",
+            dependencies: ["Textractor"],
+            path: "Tests/TextractorTests",
+            resources: [
+                .process("Resources")
+            ]
         )
     ]
 )

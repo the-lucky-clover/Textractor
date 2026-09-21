@@ -46,6 +46,33 @@ public final class HistoryStore: ObservableObject {
             .store(in: &cancellables)
     }
 
+    /// Create an in-memory store for testing (no disk persistence).
+    public init(inMemory: Bool) {
+        if inMemory {
+            let base = URL(fileURLWithPath: NSTemporaryDirectory())
+            directory = base.appendingPathComponent("Textractor/History/Test_\(UUID().uuidString)", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            metadataURL = directory.appendingPathComponent("history.json")
+            records = []
+            cachedByteCount = 0
+        } else {
+            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSTemporaryDirectory())
+            directory = base.appendingPathComponent("Textractor/History", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            metadataURL = directory.appendingPathComponent("history.json")
+            load()
+            recomputeSize()
+
+            SettingsStore.shared.$current
+                .receive(on: RunLoop.main)
+                .sink { [weak self] (settings: AppSettings) in
+                    self?.enforceLimit(settings.historyEntryLimit)
+                }
+                .store(in: &cancellables)
+        }
+    }
+
     // MARK: - Persistence
 
     private func load() {
@@ -99,18 +126,21 @@ public final class HistoryStore: ObservableObject {
 
     // MARK: - Mutations
 
-    /// Append a new entry. The `CapturedImage` is only used for id / timestamp
-    /// — we never retain a screenshot reference.
+    /// Append a new entry. The `CapturedImage` is only used for id / timestamp.
     public func record(capture: CapturedImage,
                        text: String,
                        mode: CaptureMode,
+                       ocrConfidence: Float? = nil,
+                       imagePath: String? = nil,
                        limit: Int) {
         let record = HistoryRecord(
             id: capture.id,
             capturedAt: capture.capturedAt,
             textPreview: text,
             mode: mode,
-            textPath: nil
+            ocrConfidence: ocrConfidence,
+            textPath: nil,
+            imagePath: imagePath ?? capture.fileURL.path
         )
         records.insert(record, at: 0)
         enforceLimit(limit)
@@ -135,6 +165,17 @@ public final class HistoryStore: ObservableObject {
         records.removeAll()
         save()
         recomputeSize()
+    }
+
+    /// Undo the most recent capture (for toast undo action).
+    /// Removes the most recent record from history.
+    public func undoLastCapture() {
+        guard !records.isEmpty else { return }
+        let removed = records.removeFirst()
+        if let path = removed.textPath {
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: path))
+        }
+        save()
     }
 
     /// Public accessor — used by RecoverySheet to refresh the published count.

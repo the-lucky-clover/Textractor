@@ -119,17 +119,27 @@ private struct OnboardingTourView: View {
 private var features: [(icon: String, title: String, detail: String)] {
         [
             ("viewfinder",             T.s("onboarding.feature.capture.title"),
-                                                       T.s("onboarding.feature.capture.detail")),
+                                                        T.s("onboarding.feature.capture.detail")),
             ("text.viewfinder",        T.s("onboarding.feature.ocr.title"),
-                                                       T.s("onboarding.feature.ocr.detail")),
+                                                        T.s("onboarding.feature.ocr.detail")),
             ("sparkles",               T.s("onboarding.feature.ai.title"),
-                                                       T.s("onboarding.feature.ai.detail")),
+                                                        T.s("onboarding.feature.ai.detail")),
             ("doc.on.clipboard",       T.s("onboarding.feature.clipboard.title"),
-                                                       T.s("onboarding.feature.clipboard.detail")),
+                                                        T.s("onboarding.feature.clipboard.detail")),
             ("clock.arrow.circlepath", T.s("onboarding.feature.history.title"),
-                                                       T.s("onboarding.feature.history.detail")),
+                                                        T.s("onboarding.feature.history.detail")),
             ("lock.shield",            "Privacy-first & offline",
-                                                       "All OCR runs on your Mac. Zero network calls. Your text never leaves this device.")
+                                                        "All OCR runs on your Mac. Zero network calls. Your text never leaves this device."),
+            ("grid",                   T.s("onboarding.feature.grid.title"),
+                                                        T.s("onboarding.feature.grid.detail")),
+            ("arrow.up.left.and.arrow.down.right", T.s("onboarding.feature.space.title"),
+                                                        T.s("onboarding.feature.space.detail")),
+            ("chevron.left.forwardslash.chevron.right", T.s("onboarding.feature.code.title"),
+                                                        T.s("onboarding.feature.code.detail")),
+            ("arrow.uturn.backward",   T.s("onboarding.feature.undo.title"),
+                                                        T.s("onboarding.feature.undo.detail")),
+            ("arrow.left.arrow.right", T.s("onboarding.feature.translate.title"),
+                                                        T.s("onboarding.feature.translate.detail")),
         ]
     }
 
@@ -327,12 +337,13 @@ private struct OnboardingPermissionsView: View {
     var onDone: () -> Void
     var onBack: () -> Void
 
-    @State private var screenGranted: Bool = PermissionService.shared.screenRecordingGranted
+    @ObservedObject private var permissions = PermissionService.shared
+    private var screenGranted: Bool { permissions.screenRecordingGranted }
     /// A short, transient label rendered after the user lands back from
     /// System Settings (so they can confirm Textractor was added manually).
     @State private var manualGrantHint: String? = nil
 
-    private let refreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    private let manualGrantHintText: String = T.s("onboarding.screen_recording_granted")
 
     var body: some View {
         VStack(spacing: 14) {
@@ -395,13 +406,9 @@ private struct OnboardingPermissionsView: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 14)
         }
-        .onReceive(refreshTimer) { _ in
-            let sgr = PermissionService.shared.screenRecordingGranted
-            if sgr != screenGranted {
-                screenGranted = sgr
-                if sgr && manualGrantHint == nil {
-                    manualGrantHint = T.s("onboarding.screen_recording_granted")
-                }
+        .onChange(of: screenGranted) { newValue in
+            if newValue && manualGrantHint == nil {
+                manualGrantHint = manualGrantHintText
             }
         }
     }

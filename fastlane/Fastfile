@@ -1,0 +1,279 @@
+# frozen_string_literal: true
+# Textractor fastlane configuration
+# Automates Mac App Store builds, notarization, and uploads
+#
+# Usage:
+#   bundle exec fastlane mac release          # Full release pipeline
+#   bundle exec fastlane mac build            # Build only
+#   bundle exec fastlane mac notarize         # Notarize existing build
+#   bundle exec fastlane mac upload           # Upload to App Store Connect
+#   bundle exec fastlane mac screenshots      # Capture screenshots
+#
+# Setup:
+#   1. bundle install
+#   2. fastlane match appstore (for certificates)
+#   3. Configure App Store Connect API key in fastlane/Appfile
+
+default_platform(:mac)
+
+platform :mac do
+  # ---------------------------------------------------------------------------
+  # Configuration
+  # ---------------------------------------------------------------------------
+  APP_IDENTIFIER = ENV['APP_IDENTIFIER'] || 'com.textractor.app'
+  APP_NAME = 'Textractor'
+  SCHEME = 'Textractor'
+  WORKSPACE = './Textractor.xcworkspace' # If using xcworkspace, else use PROJECT
+  PROJECT = './Package.swift'             # SPM project
+  
+  # Paths
+  BUILD_DIR = './dist'
+  OUTPUT_DIR = './build/fastlane'
+  SCREENSHOTS_DIR = './marketing/press_kit/screenshots'
+  
+  # Versioning (read from Info.plist or Git tags)
+  def current_version
+    # Try to read from git tag, fallback to Info.plist
+    version = `git describe --tags --abbrev=0 2>/dev/null`.strip
+    version = `defaults read #{File.expand_path('Sources/Textractor/Info.plist')} CFBundleShortVersionString 2>/dev/null`.strip if version.empty?
+    version.empty? ? '2.0.0' : version.gsub(/^v/, '')
+  end
+  
+  def current_build_number
+    `git rev-list --count HEAD 2>/dev/null`.strip.to_i
+  end
+
+  # ---------------------------------------------------------------------------
+  # Lanes
+  # ---------------------------------------------------------------------------
+  
+  desc 'Full release pipeline: build → sign → notarize → upload'
+  lane :release do
+    ensure_git_status_clean
+    increment_build_number
+    build
+    notarize
+    upload_to_app_store
+    tag_release
+    push_git_tags
+    cleanup
+    slack_notify(message: "🚀 Textractor #{current_version} released to Mac App Store!")
+  end
+
+  desc 'Build the app for release'
+  lane :build do
+    setup_ci_if_needed
+    
+    # Clean previous builds
+    sh("rm -rf #{BUILD_DIR}/#{APP_NAME}.app")
+    sh("rm -rf #{OUTPUT_DIR}")
+    
+    # Build with xcodebuild (SPM)
+    # Note: For SPM projects, we use xcodebuild with -scheme
+    # You may need to generate an Xcode project first: xcodegen generate
+    # Or use the build.sh script which handles SPM → .app bundle
+    
+    UI.message "Building #{APP_NAME} v#{current_version} (build #{current_build_number})..."
+    
+    # Use the existing build.sh script which handles SPM + codesign + entitlements
+    sh("./build.sh")
+    
+    # Verify the build
+    app_path = "#{BUILD_DIR}/#{APP_NAME}.app"
+    UI.user_error!("Build failed: #{app_path} not found") unless File.exist?(app_path)
+    
+    # Verify code signature
+    sh("codesign --verify --deep --strict --verbose=2 #{app_path}")
+    sh("spctl --assess --type execute --verbose #{app_path}")
+    
+    UI.success "Build complete: #{app_path}"
+  end
+
+  desc 'Notarize the built app'
+  lane :notarize do
+    app_path = "#{BUILD_DIR}/#{APP_NAME}.app"
+    zip_path = "#{BUILD_DIR}/#{APP_NAME}.zip"
+    
+    UI.user_error!("App not found: #{app_path}") unless File.exist?(app_path)
+    
+    # Create zip for notarization
+    UI.message "Creating zip for notarization..."
+    sh("ditto -c -k --keepParent #{app_path} #{zip_path}")
+    
+    # Submit for notarization using notarytool (modern)
+    # Requires App Store Connect API key environment variables:
+    # ASC_API_ISSUER_ID, ASC_API_KEY_ID, ASC_API_KEY_PATH
+    UI.message "Submitting for notarization..."
+    
+    if ENV['ASC_API_ISSUER_ID'] && ENV['ASC_API_KEY_ID'] && ENV['ASC_API_KEY_PATH']
+      notarize_result = sh(
+        "xcrun notarytool submit #{zip_path} " \
+        "--issuer #{ENV['ASC_API_ISSUER_ID']} " \
+        "--key-id #{ENV['ASC_API_KEY_ID']} " \
+        "--key #{ENV['ASC_API_KEY_PATH']} " \
+        "--wait --output-format json",
+        log: true
+      )
+    elsif ENV['ASC_APP_PASSWORD']
+      # Legacy Apple ID + app-specific password
+      team_id = sh("security find-identity -v -p codesigning | grep '3rd Party Mac Developer' | head -1 | sed -E 's/.*\\(([^)]+)\\).*/\\1/'").strip
+      notarize_result = sh(
+        "xcrun notarytool submit #{zip_path} " \
+        "--apple-id #{ENV['APPLE_ID']} " \
+        "--password #{ENV['ASC_APP_PASSWORD']} " \
+        "--team-id #{team_id} " \
+        "--wait --output-format json",
+        log: true
+      )
+    else
+      UI.user_error!("Notarization credentials not set. Set ASC_API_ISSUER_ID/ASC_API_KEY_ID/ASC_API_KEY_PATH or ASC_APP_PASSWORD")
+    end
+    
+    # Parse result
+    require 'json'
+    result = JSON.parse(notarize_result)
+    if result['status'] != 'Accepted'
+      UI.user_error!("Notarization failed: #{result['status']} - #{result['logUrl']}")
+    end
+    
+    UI.success "Notarization accepted!"
+    
+    # Staple the notarization ticket
+    UI.message "Stapling notarization ticket..."
+    sh("xcrun stapler staple #{app_path}")
+    sh("xcrun stapler validate #{app_path}")
+    
+    UI.success "Notarization complete and stapled!"
+  end
+
+  desc 'Upload to App Store Connect'
+  lane :upload_to_app_store do
+    zip_path = "#{BUILD_DIR}/#{APP_NAME}.zip"
+    
+    UI.user_error!("Zip not found: #{zip_path}") unless File.exist?(zip_path)
+    
+    UI.message "Uploading to App Store Connect via Transporter..."
+    
+    # Use Transporter (modern replacement for altool)
+    if ENV['ASC_API_ISSUER_ID'] && ENV['ASC_API_KEY_ID'] && ENV['ASC_API_KEY_PATH']
+      sh(
+        "xcrun transporter upload " \
+        "--issuer #{ENV['ASC_API_ISSUER_ID']} " \
+        "--key-id #{ENV['ASC_API_KEY_ID']} " \
+        "--key #{ENV['ASC_API_KEY_PATH']} " \
+        "--file #{zip_path} " \
+        "--output-format json",
+        log: true
+      )
+    else
+      UI.user_error!("App Store Connect API key not configured. Set ASC_API_ISSUER_ID/ASC_API_KEY_ID/ASC_API_KEY_PATH")
+    end
+    
+    UI.success "Upload complete! Check App Store Connect for processing status."
+  end
+
+  desc 'Capture App Store screenshots'
+  lane :screenshots do
+    UI.message "Capturing screenshots..."
+    sh("./scripts/capture_screenshots.sh")
+    
+    # Verify screenshots exist and are correct size
+    required = [
+      '01-capture-overlay.png',
+      '02-window-capture.png',
+      '03-history-grid.png',
+      '04-source-code-mode.png',
+      '05-translation-settings.png',
+      '06-toast-actions.png',
+      '07-pii-redaction.png'
+    ]
+    
+    required.each do |fname|
+      path = File.join(SCREENSHOTS_DIR, fname)
+      UI.user_error!("Missing screenshot: #{path}") unless File.exist?(path)
+      
+      # Verify dimensions (1280x800)
+      dims = `sips -g pixelWidth -g pixelHeight #{path}`.strip
+      UI.message "  #{fname}: #{dims}"
+    end
+    
+    UI.success "All screenshots verified!"
+  end
+
+  desc 'Setup CI environment (GitHub Actions, etc.)'
+  lane :setup_ci_if_needed do
+    if ENV['CI']
+      UI.message "CI environment detected, setting up..."
+      
+      # Create keychain for codesigning
+      create_keychain(
+        name: 'fastlane_tmp_keychain',
+        password: ENV['MATCH_PASSWORD'] || 'temp_password',
+        default_keychain: true,
+        unlock: true,
+        timeout: 3600,
+        lock_when_sleeps: true
+      )
+      
+      # Import certificates if using match
+      # match(type: 'appstore', readonly: true, keychain_name: 'fastlane_tmp_keychain')
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Helper Lanes
+  # ---------------------------------------------------------------------------
+  
+  private_lane :increment_build_number do
+    # Build number from git commit count
+    build_num = current_build_number
+    UI.message "Build number: #{build_num}"
+    
+    # Update Info.plist
+    plist_path = File.expand_path('Sources/Textractor/Info.plist')
+    `/usr/libexec/PlistBuddy -c "Set :CFBundleVersion #{build_num}" "#{plist_path}"`
+  end
+
+  private_lane :tag_release do
+    version = current_version
+    tag = "v#{version}"
+    
+    unless `git tag -l "#{tag}"`.strip.empty?
+      UI.message "Tag #{tag} already exists"
+      next
+    end
+    
+    sh("git tag -a #{tag} -m 'Release #{version}'")
+    UI.success "Tagged release: #{tag}"
+  end
+
+  private_lane :cleanup do
+    sh("rm -rf #{OUTPUT_DIR}")
+    sh("rm -rf #{BUILD_DIR}/#{APP_NAME}.zip")
+    sh("rm -rf #{BUILD_DIR}/#{APP_NAME}.dSYM")
+    UI.message "Cleaned up build artifacts"
+  end
+
+  private_lane :slack_notify do |options|
+    return unless ENV['SLACK_WEBHOOK_URL']
+    
+    require 'net/http'
+    require 'json'
+    
+    uri = URI(ENV['SLACK_WEBHOOK_URL'])
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    
+    request = Net::HTTP::Post.new(uri.path, { 'Content-Type' => 'application/json' })
+    request.body = { text: options[:message] }.to_json
+    http.request(request)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Error Handling
+  # ---------------------------------------------------------------------------
+  error do |lane, exception|
+    UI.error "Lane #{lane} failed: #{exception.message}"
+    slack_notify(message: "❌ Textractor release failed: #{exception.message}") if ENV['SLACK_WEBHOOK_URL']
+  end
+end

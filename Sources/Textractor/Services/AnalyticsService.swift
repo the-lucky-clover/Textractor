@@ -197,6 +197,7 @@ public extension CaptureMode {
         switch self {
         case .crosshair: return "Region"
         case .window: return "Window"
+        case .autoScroll: return "Auto-Scroll"
         }
     }
 }

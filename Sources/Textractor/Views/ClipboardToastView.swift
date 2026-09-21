@@ -60,6 +60,7 @@ public struct ClipboardToastView: View {
             
             // MARK: - Action Row
             Divider().background(Color.secondary.opacity(0.3))
+            quickActionRow
             actionRow
         }
         .padding(14)
@@ -257,6 +258,86 @@ public struct ClipboardToastView: View {
                 .fill(tint.opacity(0.10))
                 .overlay(Capsule().stroke(tint.opacity(0.5), lineWidth: 0.8))
         )
+    }
+
+    // MARK: - Quick action chips (Translate / Format as Code / Smart Actions)
+    @ViewBuilder private var quickActionRow: some View {
+        if toast.kind == .success {
+            let hasSmartActions = toast.onTranslate != nil || toast.onFormatCode != nil || toast.onOpenURL != nil || toast.onComposeEmail != nil || toast.onFormatCodeBlock != nil
+            if hasSmartActions {
+                HStack(spacing: 6) {
+                    if let onTranslate = toast.onTranslate {
+                        quickActionChip(
+                            T.s("toast.translate"),
+                            icon: "arrow.left.arrow.right",
+                            tint: .blue,
+                            action: onTranslate
+                        )
+                    }
+                    if let onFormatCode = toast.onFormatCode {
+                        quickActionChip(
+                            T.s("toast.format_code"),
+                            icon: "chevron.left.forwardslash.chevron.right",
+                            tint: .purple,
+                            action: onFormatCode
+                        )
+                    }
+                    if let onOpenURL = toast.onOpenURL {
+                        quickActionChip(
+                            T.s("toast.open_url"),
+                            icon: "arrow.up.right.square",
+                            tint: .green,
+                            action: onOpenURL
+                        )
+                    }
+                    if let onComposeEmail = toast.onComposeEmail {
+                        quickActionChip(
+                            T.s("toast.compose_email"),
+                            icon: "envelope.badge",
+                            tint: .orange,
+                            action: onComposeEmail
+                        )
+                    }
+                    if let onFormatCodeBlock = toast.onFormatCodeBlock {
+                        quickActionChip(
+                            T.s("toast.format_code_block"),
+                            icon: "chevron.left.forwardslash.chevron.right",
+                            tint: .purple,
+                            action: onFormatCodeBlock
+                        )
+                    }
+                    if let onUndo = toast.onUndo {
+                        quickActionChip(
+                            T.s("toast.undo"),
+                            icon: "arrow.uturn.backward",
+                            tint: .red,
+                            action: onUndo
+                        )
+                    }
+                    Spacer()
+                }
+                .padding(.top, 2)
+            }
+        }
+    }
+
+    private func quickActionChip(_ title: String, icon: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                Text(title)
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(tint.opacity(0.10))
+                    .overlay(Capsule().stroke(tint.opacity(0.5), lineWidth: 0.8))
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Share + Copy (normal mode)

@@ -1,0 +1,5 @@
+/Users/pounds_1/dev/Textractor/windows/target/debug/deps/arg_enum_proc_macro-e152649f3a223f77.d: /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arg_enum_proc_macro-0.3.4/src/lib.rs
+
+/Users/pounds_1/dev/Textractor/windows/target/debug/deps/libarg_enum_proc_macro-e152649f3a223f77.dylib: /Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arg_enum_proc_macro-0.3.4/src/lib.rs
+
+/Users/pounds_1/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arg_enum_proc_macro-0.3.4/src/lib.rs:

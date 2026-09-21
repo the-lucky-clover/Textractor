@@ -2,52 +2,39 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!--
-        Production / App Store entitlements for Textractor v2.0.
-
-        The development entitlements (Textractor.entitlements) intentionally leave
-        sandboxing off, allow JIT, and disable library validation so that
-        `swift run` works during development. This file is the opposite:
-        sandboxed, hardened-runtime-friendly, and stripped of every JIT/dyld
-        escape hatch.
-
-        `build.sh --release` signs the app with the entitlements in this file.
-    -->
-
-    <!-- Sandbox -->
+    <!-- App Sandbox is REQUIRED for Mac App Store -->
     <key>com.apple.security.app-sandbox</key>
     <true/>
-
-    <!-- Outgoing network connection to the Cloudflare Workers OCR backend. -->
-    <key>com.apple.security.network.client</key>
+    
+    <!-- File access for user-selected files (export, import) -->
+    <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
-
-    <!-- Camera (Continuity Camera ingest). -->
+    
+    <!-- Camera access for Continuity Camera (iPhone/iPad photo capture) -->
     <key>com.apple.security.device.camera</key>
     <true/>
-
-    <!--
-        Input Monitoring. Required for Carbon RegisterEventHotKey to receive
-        system-wide hotkey presses. macOS 10.15+ moved this from Accessibility.
-    -->
-    <key>com.apple.security.device.input-monitoring</key>
-    <true/>
-
-    <!--
-        Screen Recording is gated by TCC, not entitlements. The TCC prompt is
-        driven by NSScreenCaptureUsageDescription in Info.plist. We do not add
-        an entitlement here because that would only enable state-restoration
-        privacy hints, which we deliberately avoid for a minimal profile.
-    -->
-
-    <!-- User-selected file reads (e.g. drag-and-drop ingestion). -->
-    <key>com.apple.security.files.user-selected.read-only</key>
-    <true/>
-
-    <!--
-        No JIT, no unsigned executable memory, no library-validation
-        disable, no dyld environment variables. Hardened runtime will reject
-        the binary if any of those slip in.
-    -->
+    
+    <!-- NO network access - all processing is on-device -->
+    <!-- com.apple.security.network.client: false -->
+    <!-- com.apple.security.network.server: false -->
+    
+    <!-- NO unsigned executable memory, JIT, or dyld env vars for App Store -->
+    <!-- These would cause rejection -->
+    <!-- com.apple.security.cs.allow-unsigned-executable-memory: false -->
+    <!-- com.apple.security.cs.allow-jit: false -->
+    <!-- com.apple.security.cs.allow-dyld-environment-variables: false -->
+    <!-- com.apple.security.cs.disable-library-validation: false -->
+    
+    <!-- NO personal information access -->
+    <!-- com.apple.security.personal-information.addressbook: false -->
+    <!-- com.apple.security.personal-information.calendars: false -->
+    
+    <!-- NO microphone access -->
+    <!-- com.apple.security.device.audio-input: false -->
+    
+    <!-- NO USB, Bluetooth, or location access -->
+    <!-- com.apple.security.device.usb: false -->
+    <!-- com.apple.security.device.bluetooth: false -->
+    <!-- com.apple.security.personal-information.location: false -->
 </dict>
 </plist>

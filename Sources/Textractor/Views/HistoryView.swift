@@ -10,6 +10,9 @@ public struct HistoryView: View {
 
     @State private var appeared = false
     @State private var closing = false
+    @State private var searchText = ""
+    @State private var selectedModeFilter: CaptureMode? = nil
+    @State private var showFilters = false
 
     /// Called once the closing animation has finished; the window controller
     /// uses it to actually close the window.
@@ -25,6 +28,8 @@ public struct HistoryView: View {
         VStack(spacing: 0) {
             header
             Divider()
+            searchAndFilters
+            Divider()
             content
         }
         .frame(minWidth: 640, idealWidth: 760, minHeight: 460, idealHeight: 560)
@@ -39,8 +44,8 @@ public struct HistoryView: View {
                 .foregroundStyle(.secondary)
             Text("History")
                 .font(.headline)
-            if !store.records.isEmpty {
-                Text("\(store.records.count)")
+            if !filteredRecords.isEmpty {
+                Text("\(filteredRecords.count)")
                     .font(.caption)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -48,6 +53,12 @@ public struct HistoryView: View {
             }
             Spacer()
             if !store.records.isEmpty {
+                Toggle(isOn: $showFilters) {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 16))
+                }
+                .toggleStyle(.button)
+                .help("Show filters")
                 Button {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { store.clearAll() }
                 } label: {
@@ -68,6 +79,66 @@ public struct HistoryView: View {
         .padding(12)
     }
 
+    // MARK: - Search & Filters
+
+    private var searchAndFilters: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search history...", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 12)
+
+            if showFilters {
+                let modeOptions: [CaptureMode?] = [nil] + CaptureMode.allCases
+                HStack(spacing: 12) {
+                    Text("Mode:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $selectedModeFilter) {
+                        ForEach(modeOptions, id: \.self) { mode in
+                            Text(mode?.label ?? "All").tag(mode)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 150)
+
+                    Text("Date:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    DatePicker("", selection: .constant(Date()), displayedComponents: .date)
+                        .labelsHidden()
+                        .frame(width: 150)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showFilters)
+    }
+
+    /// Filtered records based on search text and filters
+    private var filteredRecords: [HistoryRecord] {
+        store.records.filter { record in
+            // Search text filter
+            if !searchText.isEmpty {
+                let text = record.textPreview.localizedCaseInsensitiveContains(searchText)
+                let date = record.capturedAt.formatted(date: .abbreviated, time: .shortened).localizedCaseInsensitiveContains(searchText)
+                if !text && !date { return false }
+            }
+            // Mode filter
+            if let modeFilter = selectedModeFilter, record.mode != modeFilter {
+                return false
+            }
+            return true
+        }
+    }
+
     // MARK: - Content
 
     @ViewBuilder private var content: some View {
@@ -76,9 +147,9 @@ public struct HistoryView: View {
                 Image(systemName: "tray")
                     .font(.system(size: 42))
                     .foregroundStyle(.tertiary)
-                Text("No captures yet")
+                Text(T.s("history.empty"))
                     .foregroundStyle(.secondary)
-                Text("Captured text and screenshots will appear here.")
+                Text(T.s("history.empty.hint"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -86,7 +157,7 @@ public struct HistoryView: View {
         } else {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(Array(store.records.enumerated()), id: \.element.id) { index, record in
+                    ForEach(Array(filteredRecords.enumerated()), id: \.element.id) { index, record in
                         HistoryCard(
                             record: record,
                             index: index,
@@ -98,6 +169,12 @@ public struct HistoryView: View {
                             },
                             onDelete: {
                                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { store.delete(record) }
+                            },
+                            onReOCR: {
+                                guard let path = record.imagePath else { return }
+                                Task {
+                                    await AppCoordinator.shared.reOCR(imagePath: path)
+                                }
                             }
                         )
                     }
@@ -116,8 +193,9 @@ public struct HistoryView: View {
     }
 }
 
-// MARK: - Card
-
+/// The main "History" window. Shows a grid of past captures as screenshot
+/// thumbnails with their extracted text. On open the cards stagger in; on close
+/// they stagger out before the window actually dismisses.
 private struct HistoryCard: View {
 
     let record: HistoryRecord
@@ -126,6 +204,7 @@ private struct HistoryCard: View {
     let closing: Bool
     let onTap: () -> Void
     let onDelete: () -> Void
+    let onReOCR: () -> Void
 
     @State private var hovered = false
 
@@ -161,12 +240,101 @@ private struct HistoryCard: View {
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
         .onHover { hovered = $0 }
-        .contextMenu { Button("Delete", action: onDelete) }
+        .contextMenu {
+            Button("Delete", action: onDelete)
+            if record.imagePath != nil {
+                Button("Re-OCR", action: onReOCR)
+            }
+            Divider()
+            Button("Export as Markdown") {
+                exportRecord(record, format: .markdown)
+            }
+            Button("Export as JSON") {
+                exportRecord(record, format: .json)
+            }
+            Button("Export as CSV") {
+                exportRecord(record, format: .csv)
+            }
+        }
         .overlay(deleteButton, alignment: .topTrailing)
         .opacity(closing ? 0 : (appeared ? 1 : 0))
         .offset(y: closing ? 8 : (appeared ? 0 : 12))
         .scaleEffect(closing ? 0.96 : 1)
         .animation(.spring(response: 0.42, dampingFraction: 0.8).delay(Double(index) * 0.035), value: animKey)
+    }
+
+    /// Export format options
+    private enum ExportFormat {
+        case markdown, json, csv
+    }
+
+    /// Export a single history record in the specified format
+    private func exportRecord(_ record: HistoryRecord, format: ExportFormat) {
+        let savePanel = NSSavePanel()
+        let timestamp = ISO8601DateFormatter().string(from: record.capturedAt).replacingOccurrences(of: ":", with: "-")
+        savePanel.nameFieldStringValue = "Textractor_\(record.id.uuidString.prefix(8))_\(timestamp)"
+
+        switch format {
+        case .markdown:
+            savePanel.allowedContentTypes = [.text]
+            savePanel.nameFieldStringValue += ".md"
+        case .json:
+            savePanel.allowedContentTypes = [.json]
+            savePanel.nameFieldStringValue += ".json"
+        case .csv:
+            savePanel.allowedContentTypes = [.commaSeparatedText]
+            savePanel.nameFieldStringValue += ".csv"
+        }
+
+        savePanel.begin { response in
+            guard response == .OK, let url = savePanel.url else { return }
+
+            let content: String
+            switch format {
+            case .markdown:
+                content = Self.generateMarkdown(record)
+            case .json:
+                content = Self.generateJSON(record)
+            case .csv:
+                content = Self.generateCSV(record)
+            }
+
+            try? content.write(to: url, atomically: true, encoding: .utf8)
+            SoundManager.playCaptureComplete()
+        }
+    }
+
+    static func generateMarkdown(_ record: HistoryRecord) -> String {
+        var md = ""
+        md += "# Textractor Capture\n\n"
+        md += "**ID:** \(record.id.uuidString)\n"
+        md += "**Date:** \(record.capturedAt.formatted())\n"
+        md += "**Mode:** \(CaptureMode(rawValue: record.mode.rawValue)?.label ?? record.mode.rawValue)\n"
+        md += "**Confidence:** \(String(format: "%.1f%%", (record.ocrConfidence ?? 0) * 100))\n"
+        md += "\n## Extracted Text\n\n"
+        md += "```\n\(record.textPreview)\n```\n"
+        return md
+    }
+
+    static func generateJSON(_ record: HistoryRecord) -> String {
+        let dict: [String: Any] = [
+            "id": record.id.uuidString,
+            "capturedAt": ISO8601DateFormatter().string(from: record.capturedAt),
+            "mode": record.mode.rawValue,
+            "textPreview": record.textPreview,
+            "ocrConfidence": record.ocrConfidence ?? 0,
+            "imagePath": record.imagePath ?? "",
+            "textPath": record.textPath ?? ""
+        ]
+        let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
+        return String(data: data ?? Data(), encoding: .utf8) ?? "{}"
+    }
+
+    static func generateCSV(_ record: HistoryRecord) -> String {
+        let escapedText = record.textPreview.replacingOccurrences(of: "\"", with: "\"\"")
+        let headers = "id,date,mode,textPreview,confidence,imagePath,textPath"
+        let row = "\"\(record.id.uuidString)\",\"\(ISO8601DateFormatter().string(from: record.capturedAt))\",\"\(record.mode.rawValue)\",\"\(escapedText)\",\"\(record.ocrConfidence ?? 0)\",\"\(record.imagePath ?? "")\",\"\(record.textPath ?? "")\""
+        return "\(headers)\n\(row)"
     }
 
     @ViewBuilder private var deleteButton: some View {
@@ -180,5 +348,4 @@ private struct HistoryCard: View {
         .opacity(hovered ? 1 : 0)
         .padding(6)
     }
-
 }

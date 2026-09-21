@@ -18,6 +18,17 @@ public final class HotkeyManager {
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
 
+    /// Last binding we successfully registered. Lets `register(...)` short-circuit
+    /// when called repeatedly with the same combination (e.g. from `wake()`) so
+    /// we don't tear down + reinstall the Carbon handler on every re-entry.
+    private var lastRegisteredKeyCode: UInt32?
+    private var lastRegisteredModifiers: UInt32?
+
+    /// Re-entrancy guard. Carbon dispatches its callback via a global function,
+    /// so if a hotkey fires while `register()` is mid-flight we must not
+    /// stomp on `handlerRef` or `hotKeyRef` from inside the call stack.
+    private var isRegistering: Bool = false
+
     /// Invoked on the main queue when the configured hotkey is pressed
     /// anywhere on the system.
     public var onHotkey: (() -> Void)?
@@ -41,7 +52,29 @@ public final class HotkeyManager {
     /// to the user. We attempt the registration twice (once as a probe for
     /// `isConflicted`, then again as the live binding) because Carbon does
     /// not expose a pre-flight check.
+    ///
+    /// Safe to call repeatedly with the same binding: a no-op idempotent
+    /// short-circuit runs first, so `wake()` and settings-change re-binds do
+    /// not thrash the Carbon handler. A re-entrancy guard protects against a
+    /// hotkey press firing while a new registration is mid-flight.
     public func register(keyCode: UInt32, modifiers: UInt32, label: String) -> RegistrationResult {
+        if isRegistering {
+            LoggerService.shared.warning("HotkeyManager.register called re-entrantly — ignoring.")
+            return RegistrationResult(ok: true, conflict: false, description: label)
+        }
+
+        // Idempotent short-circuit: if the binding matches what we already have
+        // live, there's nothing to do.
+        if hotKeyRef != nil,
+           lastRegisteredKeyCode == keyCode,
+           lastRegisteredModifiers == modifiers {
+            LoggerService.shared.info("Hotkey already registered with same binding; no-op.")
+            return RegistrationResult(ok: true, conflict: false, description: label)
+        }
+
+        isRegistering = true
+        defer { isRegistering = false }
+
         unregister()
 
         // Install event handler once.
@@ -95,10 +128,15 @@ public final class HotkeyManager {
         }
 
         LoggerService.shared.info("Hotkey registered: \(label) (keyCode=\(keyCode), modifiers=\(modifiers))")
+        lastRegisteredKeyCode = keyCode
+        lastRegisteredModifiers = modifiers
         return RegistrationResult(ok: true, conflict: false, description: label)
     }
 
     public func unregister() {
+        // Idempotent: it's safe to call multiple times. Don't touch Carbon
+        // refs if there is nothing live — keeps us safe if a teardown races
+        // with itself across threads.
         if let ref = hotKeyRef {
             UnregisterEventHotKey(ref)
             hotKeyRef = nil
@@ -107,6 +145,8 @@ public final class HotkeyManager {
             RemoveEventHandler(ref)
             handlerRef = nil
         }
+        lastRegisteredKeyCode = nil
+        lastRegisteredModifiers = nil
     }
 
     /// Translate Carbon registration errors into something a user can read.

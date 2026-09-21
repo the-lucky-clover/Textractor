@@ -31,3 +31,4 @@ dist/Textractor.app
 # Local environment overrides
 *.local
 .env
+build/

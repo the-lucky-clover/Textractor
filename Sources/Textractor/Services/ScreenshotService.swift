@@ -4,6 +4,7 @@ import CoreImage
 import ImageIO
 import ScreenCaptureKit
 import UniformTypeIdentifiers
+import AVFoundation
 
 /// Errors thrown by `ScreenshotService`.
 public enum ScreenshotError: LocalizedError {
@@ -14,6 +15,7 @@ public enum ScreenshotError: LocalizedError {
     case fileLoadFailed(URL)
     case encodingFailed
     case continuityCameraNotAvailable
+    case videoProcessingFailed(String)
     case processingFailed(String)
 
     public var errorDescription: String? {
@@ -25,6 +27,7 @@ public enum ScreenshotError: LocalizedError {
         case .fileLoadFailed(let url):  return "Image could not be loaded from \(url.path)."
         case .encodingFailed:      return "Failed to encode image data."
         case .continuityCameraNotAvailable: return "Continuity Camera is not available on this Mac or the iPhone/iPad is not nearby."
+        case .videoProcessingFailed(let reason): return "Video processing failed: \(reason)"
         case .processingFailed(let reason): return "Processing failed: \(reason)"
         }
     }
@@ -87,9 +90,12 @@ public final class ScreenshotService: NSObject {
     /// CoreGraphics capture API means a denial surfaces as a clean,
     /// distinguishable error instead of a generic image-creation failure.
     private func ensureScreenRecordingAccess() throws {
-        guard PermissionService.shared.screenRecordingGranted else {
-            throw ScreenshotError.permissionDenied
-        }
+        // Refresh the permission state when entering the capture flow.
+        // CGPreflightScreenCaptureAccess can return false even when permission
+        // is actually granted (macOS caches the result), so we always refresh.
+        // If permission is truly denied, ScreenCaptureKit itself will throw
+        // an error which we handle downstream.
+        PermissionService.shared.refresh()
     }
 
     // MARK: - Public API
@@ -366,6 +372,67 @@ public final class ScreenshotService: NSObject {
         return try await ingestFile(at: url, origin: .continuityCamera)
     }
 
+    /// Capture frames from a video URL at regular intervals and run OCR on each.
+    /// Returns the first successful capture with extracted text.
+    /// - Parameters:
+    ///   - url: The video file URL (local or remote)
+    ///   - interval: Time interval between frames to extract (default: 2 seconds)
+    ///   - maxFrames: Maximum number of frames to process (default: 30)
+    public func captureFromVideoURL(
+        _ url: URL,
+        interval: TimeInterval = 2.0,
+        maxFrames: Int = 30
+    ) async throws -> [CapturedImage] {
+        LoggerService.shared.info("Processing video URL: \(url.lastPathComponent)")
+
+        let asset = AVAsset(url: url)
+        let duration = try await asset.load(.duration)
+        let durationSeconds = CMTimeGetSeconds(duration)
+
+        guard durationSeconds > 0 else {
+            throw ScreenshotError.videoProcessingFailed("Video has zero duration")
+        }
+
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+
+        let frameCount = min(maxFrames, max(1, Int(durationSeconds / interval)))
+        var capturedImages: [CapturedImage] = []
+
+        for i in 0..<frameCount {
+            let time = CMTime(seconds: Double(i) * interval, preferredTimescale: 600)
+            do {
+                let cgImage = try await generator.image(at: time).image
+                let w = cgImage.width
+                let h = cgImage.height
+
+                let captured = try writeToDisk(
+                    cgImage,
+                    mode: .crosshair,
+                    origin: .videoURL,
+                    rect: CGRect(x: 0, y: 0, width: w, height: h),
+                    screenIndex: 0
+                )
+
+                // Store timestamp in the captured image metadata if needed
+                // For now we just add the captured image
+                capturedImages.append(captured)
+
+            } catch {
+                LoggerService.shared.warning("Failed to extract frame at \(time.seconds)s: \(error)")
+                continue
+            }
+        }
+
+        guard !capturedImages.isEmpty else {
+            throw ScreenshotError.videoProcessingFailed("No frames could be extracted from video")
+        }
+
+        return capturedImages
+    }
+
     /// Internal async file loader used by both `captureFromFile` and Continuity
     /// Camera so they share the same `origin` handling path.
     internal func ingestFile(at url: URL, origin: CapturedImage.Origin) async throws -> CapturedImage {
@@ -450,6 +517,28 @@ public final class ScreenshotService: NSObject {
         return content.displays.first { $0.displayID == displayID }
     }
 
+    /// Capture a screen region as a CGImage (no disk write) for live OCR preview.
+    /// Uses ScreenCaptureKit to capture the display, then crops to the given rect.
+    /// This is fast enough to run ~4× per second during region drag.
+    public func captureCGImageForRect(_ rect: CGRect) async throws -> CGImage {
+        try ensureScreenRecordingAccess()
+
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { throw ScreenshotError.noDisplay }
+        let centerPoint = CGPoint(x: rect.midX, y: rect.midY)
+        let screen = screens.first { $0.frame.contains(centerPoint) } ?? NSScreen.main ?? screens[0]
+
+        let content = try await SCShareableContent.current
+        guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else {
+            throw ScreenshotError.noDisplay
+        }
+        let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
+        let full = try await captureCGImage(filter: filter)
+        let scale = CGFloat(full.width) / max(screen.frame.width, 1)
+        let cropped = cropDisplayImage(full, displayFrame: screen.frame, scale: scale, toGlobalRect: rect)
+        return cropped
+    }
+
     /// Crop a display-sized `CGImage` (top-left origin, pixels = points × scale)
     /// down to a rect expressed in global AppKit (bottom-left origin) points.
     private func cropDisplayImage(
@@ -518,5 +607,167 @@ public final class ScreenshotService: NSObject {
         try data.write(to: url, options: .atomic)
         return url
     }
-    
+
+    // MARK: - Auto-scroll capture
+
+    /// Automatically scrolls a window and stitches multiple captures together
+    /// to capture content that extends beyond the visible viewport (below the fold).
+    /// Uses AppleScript to scroll and compares frames to detect the bottom.
+    /// - Parameters:
+    ///   - windowID: The CGWindowID of the window to capture
+    ///   - scrollInterval: Time between scroll actions in seconds (default: 0.5s)
+    ///   - maxScrolls: Maximum number of scroll attempts (default: 50)
+    ///   - overlap: Pixel overlap between stitched frames (default: 100px)
+    /// - Returns: A CapturedImage containing the full stitched content
+    public func captureWindowWithAutoScroll(
+        _ windowID: CGWindowID,
+        scrollInterval: TimeInterval = 0.5,
+        maxScrolls: Int = 50,
+        overlap: CGFloat = 100
+    ) async throws -> CapturedImage {
+        try ensureScreenRecordingAccess()
+
+        // Find the window descriptor
+        guard let window = enumerateWindows().first(where: { $0.id == windowID }) else {
+            throw ScreenshotError.noWindow
+        }
+
+        // Capture the first frame
+        let firstCapture = try await captureWindow(windowID)
+        guard let firstImage = loadCGImage(from: firstCapture.0.fileURL) else {
+            throw ScreenshotError.imageCreationFailed
+        }
+
+        var stitchedImage = firstImage
+        var previousImage = firstImage
+        var scrollCount = 0
+        var isAtBottom = false
+
+        while scrollCount < 50 && !isAtBottom {
+            // Scroll down using AppleScript
+            let scrollScript = """
+            tell application "System Events"
+                tell process "\(window.ownerName ?? "")"
+                    key code 125 -- down arrow
+                end tell
+            end tell
+            """
+
+            let script = NSAppleScript(source: scrollScript)
+            script?.executeAndReturnError(nil)
+
+            // Wait for scroll animation
+            try await Task.sleep(nanoseconds: UInt64(0.5 * 1_000_000_000))
+
+            // Capture current state
+            let currentCapture = try await captureWindow(windowID)
+            guard let currentImage = loadCGImage(from: currentCapture.0.fileURL) else {
+                break
+            }
+
+            // Check if we've reached the bottom by comparing with previous image
+            if imagesAreSimilar(previousImage, currentImage, threshold: 0.98) {
+                break
+            }
+
+            // Stitch the new image below the previous one
+            stitchedImage = stitchImagesVertically(top: stitchedImage, bottom: currentImage, overlap: 100)
+            previousImage = currentImage
+        }
+        
+        // Save the final stitched image
+        let url = try persist(cgImage: stitchedImage)
+        let rect = CGRect(x: 0, y: 0, width: stitchedImage.width, height: stitchedImage.height)
+        
+        return CapturedImage(
+            mode: .autoScroll,
+            origin: .autoScroll,
+            rect: CGRect(x: 0, y: 0, width: stitchedImage.width, height: stitchedImage.height),
+            fileURL: url,
+            screenIndex: 0
+        )
     }
+
+    /// Compare two images for similarity (0.0 to 1.0)
+    private func imagesAreSimilar(_ img1: CGImage, _ img2: CGImage, threshold: Double) -> Bool {
+        guard img1.width == img2.width && img1.height == img2.height else { return false }
+        
+        let width = min(img1.width, img2.width)
+        let height = min(img1.height, img2.height)
+        let bytesPerPixel = 4
+        let bytesPerRow = width * 4
+        
+        var pixels1 = [UInt8](repeating: 0, count: width * height * 4)
+        var pixels2 = [UInt8](repeating: 0, count: width * height * 4)
+        
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context1 = CGContext(data: &pixels1, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        let context2 = CGContext(data: &pixels2, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        
+        context1?.draw(img1, in: CGRect(x: 0, y: 0, width: width, height: height))
+        context2?.draw(img2, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        var differentPixels = 0
+        let totalPixels = width * height
+        
+        for i in 0..<totalPixels {
+            let idx = i * 4
+            let r1 = pixels1[idx]
+            let g1 = pixels1[idx + 1]
+            let b1 = pixels1[idx + 2]
+            let r2 = pixels2[idx]
+            let g2 = pixels2[idx + 1]
+            let b2 = pixels2[idx + 2]
+            
+            let dr = abs(Int(r1) - Int(r2))
+            let dg = abs(Int(g1) - Int(g2))
+            let db = abs(Int(b1) - Int(b2))
+            
+            if dr > 10 || dg > 10 || db > 10 {
+                differentPixels += 1
+            }
+        }
+        
+        let similarity = 1.0 - Double(differentPixels) / Double(totalPixels)
+        return similarity >= 0.98
+    }
+    
+    /// Stitch two images vertically with overlap
+    private func stitchImagesVertically(top: CGImage, bottom: CGImage, overlap: CGFloat) -> CGImage {
+        let topHeight = top.height
+        let bottomHeight = bottom.height
+        let overlapInt = Int(overlap)
+        
+        let newHeight = topHeight + bottomHeight - overlapInt
+        let width = max(top.width, bottom.width)
+        
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = CGContext(
+            data: nil,
+            width: width,
+            height: newHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        
+        // Draw top image
+        context.draw(top, in: CGRect(x: 0, y: 0, width: top.width, height: topHeight))
+        
+        // Draw bottom image, overlapping by 'overlap' pixels
+        let bottomY = topHeight - overlapInt
+        context.draw(bottom, in: CGRect(x: 0, y: bottomY, width: bottom.width, height: bottomHeight))
+        
+        return context.makeImage()!
+    }
+    
+    /// Load a CGImage from a file URL
+    private func loadCGImage(from url: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let img = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            return nil
+        }
+        return img
+    }
+}

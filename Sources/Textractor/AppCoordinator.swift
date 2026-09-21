@@ -21,8 +21,14 @@ public final class AppCoordinator: ObservableObject {
     public let captureStore = CaptureStore.shared
     public let appState: AppState
 
-    /// Currently presented capture overlay (the fullscreen NSWindow).
-    private var captureWindow: NSWindow?
+  /// Currently presented capture overlay (the fullscreen NSWindow).
+  private var captureWindow: NSWindow?
+
+  /// When `true`, the next window selected by the overlay runs through
+  /// `ScreenshotService.captureWindowWithAutoScroll` instead of plain window
+  /// capture. Toggled by `startAutoScrollCapture()` and consumed by
+  /// `runCaptureWindow(_:)`.
+  private var pendingAutoScrollCapture: Bool = false
 
     /// The menu-bar status item controller (replaces SwiftUI's `MenuBarExtra`).
     public var statusBarController: StatusBarController?
@@ -71,7 +77,9 @@ public final class AppCoordinator: ObservableObject {
         // to the default ⌘⇧2.
         HotkeyManager.shared.onHotkey = { [weak self] in
             SoundManager.playCaptureStartIfEnabled()
-            self?.startCaptureRegion()
+            // Check if Option key is held for per-capture language override
+            let optionHeld = NSEvent.modifierFlags.contains(.option)
+            self?.startCaptureRegion(perCaptureLanguageOverride: optionHeld)
         }
         let s = appState.settings
         let result = HotkeyManager.shared.register(
@@ -92,6 +100,15 @@ public final class AppCoordinator: ObservableObject {
         // Toast window (non-activating panel, top-right of main display).
         ToastWindowController.shared.configure(appState: appState)
 
+        // Phase 1: Clipboard Image OCR monitor
+        ClipboardImageOCRService.shared.configure(coordinator: self)
+
+        // Phase 1: Shortcuts Actions
+        ShortcutsActionService.shared.configure(coordinator: self)
+
+        // Phase 1: Structured Export
+        StructuredExportService.shared.configure(coordinator: self)
+
         // Telemetry
         TelemetryService.shared.record(
             TelemetryEvent(kind: .sessionStart),
@@ -104,19 +121,38 @@ public final class AppCoordinator: ObservableObject {
 
     // MARK: - Capture flows
 
-    public func startCaptureRegion() {
+    public func startCaptureRegion(perCaptureLanguageOverride: Bool = false) {
         guard !appState.isCapturing else { return }
-        presentCaptureOverlay(initialMode: .crosshair)
+        if perCaptureLanguageOverride {
+            // Show language picker for per-capture override
+            showPerCaptureLanguagePicker { [weak self] selectedLanguage in
+                self?.presentCaptureOverlay(initialMode: .crosshair, perCaptureLanguage: selectedLanguage)
+            }
+        } else {
+            presentCaptureOverlay(initialMode: .crosshair, perCaptureLanguage: nil)
+        }
         TelemetryService.shared.record(
             TelemetryEvent(kind: .hotkeyPressed),
             telemetryEnabled: appState.settings.localTelemetryEnabled
         )
     }
 
-    public func startCaptureWindow() {
+public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
         guard !appState.isCapturing else { return }
-        presentCaptureOverlay(initialMode: .window)
+        if perCaptureLanguageOverride {
+            showPerCaptureLanguagePicker { [weak self] selectedLanguage in
+                self?.presentCaptureOverlay(initialMode: .window, perCaptureLanguage: selectedLanguage)
+            }
+        } else {
+            presentCaptureOverlay(initialMode: .window, perCaptureLanguage: nil)
+        }
     }
+
+  public func startAutoScrollCapture() {
+    guard !appState.isCapturing else { return }
+    pendingAutoScrollCapture = true
+    presentCaptureOverlay(initialMode: .autoScroll, perCaptureLanguage: nil)
+  }
 
     public func startCaptureFullScreen() {
         guard !appState.isCapturing else { return }
@@ -138,11 +174,25 @@ public final class AppCoordinator: ObservableObject {
         appState.pipelinePhase = .capturing
         do {
             let capture = try await ScreenshotService.shared.captureFromFile(at: url)
-            await runPipeline(for: capture)
+            await runPipeline(for: capture, perCaptureLanguage: nil)
         } catch {
             handleFailure(error: error, context: "ingestFile")
         }
         appState.isCapturing = false
+    }
+
+    /// Re-run OCR on a previously-captured image file (e.g. from history).
+    /// Loads the image, runs the full pipeline, and replaces the captured text
+    /// in the clipboard. The new result is appended to history.
+    public func reOCR(imagePath: String) async {
+        guard FileManager.default.fileExists(atPath: imagePath) else {
+            handleFailure(
+                error: ScreenshotError.fileLoadFailed(URL(fileURLWithPath: imagePath)),
+                context: "reOCR"
+            )
+            return
+        }
+        await ingestFile(at: URL(fileURLWithPath: imagePath))
     }
 
     private func runFullScreenPipeline() async {
@@ -150,7 +200,7 @@ public final class AppCoordinator: ObservableObject {
         do {
             let captures = try await ScreenshotService.shared.captureFullScreen()
             for capture in captures {
-                await runPipeline(for: capture)
+                await runPipeline(for: capture, perCaptureLanguage: nil)
             }
             appState.pipelinePhase = .completed
         } catch {
@@ -160,29 +210,42 @@ public final class AppCoordinator: ObservableObject {
     }
 
     /// Captures a region via a CG rect (returned by overlay).
-    public func runCaptureRegion(_ rect: CGRect) async {
+    public func runCaptureRegion(_ rect: CGRect, perCaptureLanguage: String? = nil) async {
         appState.isCapturing = true
         appState.pipelinePhase = .capturing
         do {
             let capture = try await ScreenshotService.shared.captureRegion(rect)
-            await runPipeline(for: capture)
+            await runPipeline(for: capture, perCaptureLanguage: perCaptureLanguage)
         } catch {
             handleFailure(error: error, context: "region")
         }
         appState.isCapturing = false
     }
 
-    public func runCaptureWindow(_ windowID: CGWindowID) async {
-        appState.isCapturing = true
-        appState.pipelinePhase = .capturing
-        do {
-            let (capture, _) = try await ScreenshotService.shared.captureWindow(windowID)
-            await runPipeline(for: capture)
-        } catch {
-            handleFailure(error: error, context: "window")
-        }
-        appState.isCapturing = false
+  public func runCaptureWindow(_ windowID: CGWindowID, perCaptureLanguage: String? = nil) async {
+    appState.isCapturing = true
+    appState.pipelinePhase = .capturing
+    let useAutoScroll = pendingAutoScrollCapture
+    pendingAutoScrollCapture = false
+    do {
+      let capture: CapturedImage
+      if useAutoScroll {
+        capture = try await ScreenshotService.shared.captureWindowWithAutoScroll(
+          windowID,
+          scrollInterval: 0.5,
+          maxScrolls: 50,
+          overlap: 120
+        )
+      } else {
+        let windowCapture = try await ScreenshotService.shared.captureWindow(windowID)
+        capture = windowCapture.0
+      }
+      await runPipeline(for: capture, perCaptureLanguage: perCaptureLanguage)
+    } catch {
+      handleFailure(error: error, context: "window")
     }
+    appState.isCapturing = false
+  }
 
     /// Continuity Camera (iPhone / iPad) capture -> OCR pipeline. macOS presents
     /// a native system sheet so the user can Take Photo / Scan Documents; the
@@ -194,7 +257,7 @@ public final class AppCoordinator: ObservableObject {
         do {
             if #available(macOS 13.0, *) {
                 let capture = try await ScreenshotService.shared.captureFromContinuityCamera()
-                await runPipeline(for: capture)
+                await runPipeline(for: capture, perCaptureLanguage: nil)
             } else {
                 throw ScreenshotError.continuityCameraNotAvailable
             }
@@ -221,11 +284,11 @@ public final class AppCoordinator: ObservableObject {
         uiLanguage: String
     ) async -> OCRResult {
         let langs = uiLanguage.isEmpty ? OCRService.automaticLanguages() : [uiLanguage]
-        return await OCRService.shared.recognizeText(
+return await OCRService.shared.recognizeText(
             in: cgImage,
             weirdness: weirdness,
             customVocabulary: vocab,
-            preferredLanguages: langs
+            autoWeirdness: true
         )
     }
 
@@ -346,14 +409,49 @@ public final class AppCoordinator: ObservableObject {
             try? CaptureStore.shared.save(record)
         }
 
-        // History record (text-only) — in-memory recents + persistent store.
-        appState.record(capture: capture, ocr: ocrResult, analysis: analysis)
-        HistoryStore.shared.record(
-            capture: capture,
-            text: outputText,
-            mode: capture.mode,
-            limit: appState.settings.historyEntryLimit
-        )
+// History record (text-only) — in-memory recents + persistent store.
+            appState.record(capture: capture, ocr: ocrResult, analysis: analysis)
+            HistoryStore.shared.record(
+                capture: capture,
+                text: outputText,
+                mode: capture.mode,
+                limit: appState.settings.historyEntryLimit
+            )
+
+            // Auto-save captures to ~/Pictures/Textractor Captures/
+            if appState.settings.autoSaveCaptures {
+                Task.detached(priority: .utility) { [capture, outputText, ocrResult] in
+                    let saveDir = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!
+                        .appendingPathComponent("Textractor Captures", isDirectory: true)
+                    try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
+                    
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+                    let timestamp = formatter.string(from: capture.capturedAt)
+                    let baseName = "Textractor_\(timestamp)"
+                    
+                    // Save image
+                    let imageURL = saveDir.appendingPathComponent("\(baseName).png")
+                    try? FileManager.default.copyItem(at: capture.fileURL, to: imageURL)
+                    
+                    // Save text
+                    let textURL = saveDir.appendingPathComponent("\(baseName).txt")
+                    try? outputText.write(to: textURL, atomically: true, encoding: .utf8)
+                    
+                    // Save metadata JSON
+                    let metadata = [
+                        "id": capture.id.uuidString,
+                        "timestamp": ISO8601DateFormatter().string(from: capture.capturedAt),
+                        "mode": capture.mode.rawValue,
+                        "origin": capture.origin.rawValue,
+                        "confidence": ocrResult.averageConfidence,
+                        "textLength": outputText.count
+                    ]
+                    let jsonData = try? JSONSerialization.data(withJSONObject: metadata, options: .prettyPrinted)
+                    let jsonURL = saveDir.appendingPathComponent("\(baseName).json")
+                    try? jsonData?.write(to: jsonURL, options: .atomic)
+                }
+            }
 
         return (outputText, analysis)
     }
@@ -380,6 +478,70 @@ public final class AppCoordinator: ObservableObject {
         let toastShare: (ShareService.Provider) -> Void = { provider in
             AppCoordinator.shared.share(text: toastText, via: provider)
         }
+        // Quick action: translate on demand (when not auto-translating)
+        let onTranslate: (() -> Void)? = {
+            guard !self.appState.settings.translationTargetLanguage.isEmpty else { return }
+            let targetLang = self.appState.settings.translationTargetLanguage
+            let plainText = self.appState.settings.pasteAsPlainText
+            Task { [targetLang, plainText, toastText] in
+                guard let translated = await TranslationService.shared.translate(
+                    toastText,
+                    to: targetLang
+                ) else { return }
+                _ = ClipboardService.shared.copy(translated, plainTextOnly: plainText)
+                SoundManager.playClick()
+            }
+        }
+        // Quick action: format as code block
+        let onFormatCode: (() -> Void)? = {
+            guard !toastText.isEmpty else { return }
+            let result = SourceCodeDetector.analyze(toastText)
+            let formatted = result.formatted
+            _ = ClipboardService.shared.copy(formatted, plainTextOnly: pasteAsPlainText)
+            SoundManager.playClick()
+        }
+        // Smart action: open first detected URL
+        let onOpenURL: (() -> Void)? = {
+            let urls = MetadataExtractor.shared.extract(from: toastText).values(for: .url)
+            guard let firstURL = urls.first, let url = URL(string: firstURL) else { return }
+            NSWorkspace.shared.open(url)
+        }
+        // Smart action: compose email to first detected email
+        let onComposeEmail: (() -> Void)? = {
+            let emails = MetadataExtractor.shared.extract(from: toastText).values(for: .email)
+            guard let firstEmail = emails.first else { return }
+            let mailtoURL = URL(string: "mailto:\(firstEmail)")!
+            NSWorkspace.shared.open(mailtoURL)
+        }
+        // Smart action: format as code block (with language detection)
+let onFormatCodeBlock: (() -> Void)? = {
+            guard !toastText.isEmpty else { return }
+            let result = SourceCodeDetector.analyze(toastText)
+            let formatted = result.formatted
+            _ = ClipboardService.shared.copy(formatted, plainTextOnly: pasteAsPlainText)
+            SoundManager.playClick()
+        }
+        // Smart action: undo last capture
+        let onUndo: (() -> Void)? = {
+            // Remove last history entry
+            HistoryStore.shared.undoLastCapture()
+            // Show confirmation toast
+            SoundManager.playClick()
+            self.appState.toast = ToastState(
+                id: UUID(),
+                kind: .success,
+                headline: T.s("toast.undone"),
+                body: T.s("toast.undone.body"),
+                copy: nil,
+                share: nil
+            )
+            // Schedule dismissal
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                if self.appState.toast?.id == self.appState.toast?.id {
+                    self.appState.toast = nil
+                }
+            }
+        }
         let copyOk = ClipboardService.shared.copy(outputText, attributed: nil, plainTextOnly: pasteAsPlainText)
         appState.toast = ToastState(
             id: UUID(),
@@ -392,7 +554,13 @@ public final class AppCoordinator: ObservableObject {
             piiWasRedacted: piiRedacted,
             piiRedactionsApplied: piiCount,
             copy: toastCopy,
-            share: toastShare
+            share: toastShare,
+            onTranslate: onTranslate,
+            onFormatCode: onFormatCode,
+            onOpenURL: onOpenURL,
+            onComposeEmail: onComposeEmail,
+            onFormatCodeBlock: onFormatCodeBlock,
+            onUndo: onUndo
         )
         TelemetryService.shared.record(
             TelemetryEvent(
@@ -412,7 +580,7 @@ public final class AppCoordinator: ObservableObject {
     // MARK: - Core pipeline
 
     @MainActor
-    public func runPipeline(for capture: CapturedImage) async {
+    public func runPipeline(for capture: CapturedImage, perCaptureLanguage: String? = nil) async {
 
         let weirdness = appState.settings.weirdness
         let vocab = appState.settings.customVocabulary
@@ -434,13 +602,20 @@ public final class AppCoordinator: ObservableObject {
         // Honor the user's chosen language. Empty = Automatic (english-first
         // multi-language superset); non-empty = that exact language for both
         // UI and OCR.
+        // Per-capture language override (⌥ + capture) takes precedence over settings.
+        let ocrLanguages: [String] = if let override = perCaptureLanguage, !override.isEmpty {
+            [override]
+        } else if appState.settings.uiLanguage.isEmpty {
+            OCRService.automaticLanguages()
+        } else {
+            [appState.settings.uiLanguage]
+        }
         let ocrResult = await OCRService.shared.recognizeText(
             in: cgImage,
             weirdness: weirdness,
             customVocabulary: vocab,
-            preferredLanguages: appState.settings.uiLanguage.isEmpty
-                ? OCRService.automaticLanguages()
-                : [appState.settings.uiLanguage]
+            preferredLanguages: ocrLanguages,
+            autoWeirdness: true
         )
 
         // MARK: - Metadata Extraction ---------------------------------------
@@ -520,6 +695,17 @@ public final class AppCoordinator: ObservableObject {
                 plainTextOnly: pasteAsPlainText
             )
             SoundManager.playCaptureComplete()
+
+            // Post-capture translation (Snip-to-translate)
+            var deliverableText = outputText
+            if appState.settings.translateAfterCapture,
+               !appState.settings.translationTargetLanguage.isEmpty,
+               let translated = await TranslationService.shared.translate(
+                outputText,
+                to: appState.settings.translationTargetLanguage
+               ) {
+                deliverableText = translated
+            }
 
             // Save to CaptureStore (new visual knowledge library)
             if appState.settings.knowledgeModeEnabled {
@@ -646,7 +832,7 @@ let toastText = analysis.cleanedText
                         capturedAt: capture.capturedAt,
                         screenIndex: capture.screenIndex
                     )
-                    Task { await self.runPipeline(for: retryCapture) }
+                    Task { await self.runPipeline(for: retryCapture, perCaptureLanguage: nil) }
                 },
                 cancel: { [weak self] in
                     guard let self else { return }
@@ -703,6 +889,33 @@ let toastText = analysis.cleanedText
         HistoryWindowController.shared.show()
     }
 
+    /// Shows a quick language picker for per-capture OCR language override (⌥ + capture).
+    private func showPerCaptureLanguagePicker(completion: @escaping (String?) -> Void) {
+        let picker = NSPopUpButton()
+        picker.addItems(withTitles: ["Auto"] + AppSettings.ocrLanguageCatalog.map { "\($0.flag) \($0.name)" })
+        picker.selectItem(at: 0)
+        
+        let alert = NSAlert()
+        alert.messageText = "Per-Capture Language Override"
+        alert.informativeText = "Select OCR language for this capture only (hold ⌥ while capturing)"
+        alert.accessoryView = picker
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            let index = picker.indexOfSelectedItem
+            if index == 0 {
+                completion(nil) // Auto
+            } else {
+                let code = AppSettings.ocrLanguageCatalog[index - 1].code
+                completion(code)
+            }
+        } else {
+            completion(nil)
+        }
+    }
+
     public func quitApp() {
         TelemetryService.shared.record(
             TelemetryEvent(kind: .sessionEnd),
@@ -713,7 +926,7 @@ let toastText = analysis.cleanedText
 
     // MARK: - Capture overlay window
 
-    private func presentCaptureOverlay(initialMode: CaptureMode) {
+    private func presentCaptureOverlay(initialMode: CaptureMode, perCaptureLanguage: String?) {
         // Determine which display the cursor is currently on.
         let mouseLocation = NSEvent.mouseLocation
         let activeScreen = NSScreen.screens.first { $0.frame.contains(mouseLocation) }
@@ -727,11 +940,11 @@ let toastText = analysis.cleanedText
             initialCursorPoint: mouseLocation,
             onRegionCaptured: { [weak self] rect in
                 self?.dismissCaptureOverlay()
-                Task { await self?.runCaptureRegion(rect) }
+                Task { await self?.runCaptureRegion(rect, perCaptureLanguage: perCaptureLanguage) }
             },
             onWindowCaptured: { [weak self] windowID in
                 self?.dismissCaptureOverlay()
-                Task { await self?.runCaptureWindow(windowID) }
+                Task { await self?.runCaptureWindow(windowID, perCaptureLanguage: perCaptureLanguage) }
             },
             onCancel: { [weak self] in
                 self?.dismissCaptureOverlay()
@@ -745,6 +958,11 @@ let toastText = analysis.cleanedText
             },
             captureFrameProvider: { [weak self] in
                 self?.captureWindow?.frame ?? screen.frame
+            },
+            reduceMotion: appState.settings.reduceMotion,
+            showLivePreview: true,
+            onLiveOCRRequest: { [weak self] screenRect, completion in
+                self?.handleLiveOCRRequest(screenRect: screenRect, completion: completion)
             }
         )
 
@@ -782,6 +1000,30 @@ let toastText = analysis.cleanedText
         guard let window = captureWindow else { return }
         window.setFrame(screen.frame, display: true, animate: true)
         LoggerService.shared.info("[capture.window] moved to screen=\(screen.frame)")
+    }
+
+    /// Handles live OCR requests from the capture overlay.
+    /// Runs OCR on the given screen rect with fast settings and returns the text.
+    /// This is called ~4×/sec during region drag to update the preview text.
+    @MainActor
+    private func handleLiveOCRRequest(screenRect: CGRect, completion: @escaping (String?) -> Void) {
+        Task { @MainActor in
+            do {
+                let cgImage = try await ScreenshotService.shared.captureCGImageForRect(screenRect)
+                let langs = OCRService.automaticLanguages()
+                let result = try await OCRService.shared.recognizeText(
+                    in: cgImage,
+                    weirdness: appState.settings.weirdness,
+                    customVocabulary: appState.settings.customVocabulary,
+                    preferredLanguages: langs,
+                    autoWeirdness: true
+                )
+                completion(result.isEmpty ? nil : result.joinedText)
+            } catch {
+                // Silently ignore — live OCR failures don't warrant on-screen noise
+                completion(nil)
+            }
+        }
     }
 
     // MARK: - Toast auto-dismiss

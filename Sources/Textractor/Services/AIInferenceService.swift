@@ -183,6 +183,18 @@ public final class AIInferenceService {
             s = s.replacingOccurrences(of: wrong, with: right)
         }
 
+        // Arrow-glyph normalization (SF Symbol misreads from menu-bar captures).
+        // Vision often reads ↗ → "^", ↳ → "•", ↪ → "→", ↴ → "4"
+        // Apply at line starts where list markers appear.
+        if weirdness >= 0.35 {
+            let arrowPattern = "^[\\s]*([\\^•→4])(?=\\s)"
+            s = s.replacingOccurrences(
+                of: arrowPattern,
+                with: "→",
+                options: .regularExpression
+            )
+        }
+
         if weirdness < 0.05 {
             // Strict mode: only collapse 3+ consecutive blanks (no smart-quote
             // rewriting, no aggressive space flattening).
@@ -212,17 +224,22 @@ public final class AIInferenceService {
         s = collapseRuns(of: "\n\n\n", to: "\n\n", in: s)
         s = collapseRuns(of: "\n\n",   to: "\n",  in: s)
 
-        if weirdness >= 0.5 {
+        // Detect script for CJK/RTL guardrails
+        let dominantScript = dominantScriptCode(s)
+
+        if weirdness >= 0.5 && !isCJKScript(dominantScript) && !isRTLScript(dominantScript) {
             // Dehyphenate words split across lines ("extracted-\nword" → "extractedword")
+            // Unicode-aware: \p{L} matches any letter from any script.
             s = s.replacingOccurrences(
-                of: "([A-Za-z])-\\s*\\n\\s*([A-Za-z])",
+                of: "(\\p{L})-\\s*\\n\\s*(\\p{L})",
                 with: "$1$2",
                 options: .regularExpression
             )
             // Collapse ragged single newlines inside what looks like a paragraph.
             // Heuristic: replace 'X\nY' where neither side is blank → "X Y".
+            // Unicode-aware: \p{L} = letters, \p{N} = numbers from any script.
             s = s.replacingOccurrences(
-                of: "([A-Za-z0-9,;:!?\\)\\]\\.\\\"'])\\n([A-Za-z0-9])",
+                of: "([\\p{L}\\p{N},;:!?\\)\\]\\.\\\"'])\\n([\\p{L}\\p{N}])",
                 with: "$1 $2",
                 options: .regularExpression
             )
@@ -233,6 +250,24 @@ public final class AIInferenceService {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .joined(separator: "\n")
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Heuristic: detect dominant script from first 500 chars.
+    private static func dominantScriptCode(_ text: String) -> String {
+        let sample = String(text.prefix(500))
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(sample)
+        return recognizer.dominantLanguage?.rawValue ?? "en"
+    }
+
+    private static func isCJKScript(_ code: String) -> Bool {
+        let cjk = ["zh", "ja", "ko", "zh-Hans", "zh-Hant", "zh-HK", "zh-TW"]
+        return cjk.contains { code.lowercased().hasPrefix($0) }
+    }
+
+    private static func isRTLScript(_ code: String) -> Bool {
+        let rtl = ["ar", "he", "fa", "ur"]
+        return rtl.contains { code.lowercased().hasPrefix($0) }
     }
 
     /// Replace any run of `repeating` (two or more copies) with a single

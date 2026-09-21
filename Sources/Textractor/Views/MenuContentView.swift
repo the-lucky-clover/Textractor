@@ -9,10 +9,12 @@ import UniformTypeIdentifiers
 /// just short rows, system dividers, and the default system font.
 public struct MenuContentView: View {
 
-    @ObservedObject var appState: AppState
+@ObservedObject var appState: AppState
     var onCaptureRegion: () -> Void
     var onCaptureWindow: () -> Void
     var onCaptureFullScreen: () -> Void
+    var onCaptureContinuityCamera: () -> Void
+    var onCaptureAutoScroll: () -> Void
     var onOpenSettings: () -> Void
     var onShowHistory: () -> Void
     var onQuit: () -> Void
@@ -23,6 +25,8 @@ public struct MenuContentView: View {
         onCaptureRegion: @escaping () -> Void,
         onCaptureWindow: @escaping () -> Void,
         onCaptureFullScreen: @escaping () -> Void,
+        onCaptureContinuityCamera: @escaping () -> Void,
+        onCaptureAutoScroll: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
         onShowHistory: @escaping () -> Void,
         onQuit: @escaping () -> Void,
@@ -32,6 +36,8 @@ public struct MenuContentView: View {
         self.onCaptureRegion = onCaptureRegion
         self.onCaptureWindow = onCaptureWindow
         self.onCaptureFullScreen = onCaptureFullScreen
+        self.onCaptureContinuityCamera = onCaptureContinuityCamera
+        self.onCaptureAutoScroll = onCaptureAutoScroll
         self.onOpenSettings = onOpenSettings
         self.onShowHistory = onShowHistory
         self.onQuit = onQuit
@@ -57,23 +63,35 @@ public struct MenuContentView: View {
             // The full menu — sized to fit the popover with no internal scroll.
             // Quit is pinned below so it's always visible.
             VStack(alignment: .leading, spacing: 1) {
-                sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
-                MenuRow(T.s("menu.region"),      icon: "viewfinder")                     { onClose(); onCaptureRegion() }
+sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
+                MenuRow(T.s("menu.region"), icon: "viewfinder") { onClose(); onCaptureRegion() }
                     .introReveal(2, appeared: appeared)
-                MenuRow(T.s("menu.window"),      icon: "macwindow")                      { onClose(); onCaptureWindow() }
+                MenuRow(T.s("menu.window"), icon: "macwindow") { onClose(); onCaptureWindow() }
                     .introReveal(3, appeared: appeared)
                 MenuRow(T.s("menu.fullscreen"), icon: "rectangle.dashed.badge.record") { onClose(); onCaptureFullScreen() }
                     .introReveal(4, appeared: appeared)
-
-                sectionLabel(T.s("menu.library")).introReveal(5, appeared: appeared)
-                MenuRow(T.s("menu.pick_file"), icon: "photo.on.rectangle") { pickImageFile() }
+                MenuRow(T.s("menu.continuity_camera"), icon: "camera.viewfinder") { onClose(); onCaptureContinuityCamera() }
+                    .introReveal(5, appeared: appeared)
+                MenuRow(T.s("menu.auto_scroll"), icon: "arrow.down.doc") { onClose(); onCaptureAutoScroll() }
                     .introReveal(6, appeared: appeared)
-                MenuRow(T.s("menu.history"),          icon: "clock.arrow.circlepath") { onClose(); onShowHistory() }
-                    .introReveal(7, appeared: appeared)
 
-                sectionLabel(T.s("menu.app")).introReveal(8, appeared: appeared)
+                sectionLabel(T.s("menu.library")).introReveal(7, appeared: appeared)
+                MenuRow(T.s("menu.pick_file"), icon: "photo.on.rectangle") { pickImageFile() }
+                    .introReveal(7, appeared: appeared)
+                MenuRow(T.s("menu.history"),          icon: "clock.arrow.circlepath") { onClose(); onShowHistory() }
+                    .introReveal(8, appeared: appeared)
+
+                sectionLabel(T.s("menu.shortcuts")).introReveal(9, appeared: appeared)
+                ShortcutRow(key: "⌘⇧2", label: T.s("shortcut.capture_region")).introReveal(10, appeared: appeared)
+                ShortcutRow(key: "⌥⌘⇧2", label: T.s("shortcut.capture_window")).introReveal(10, appeared: appeared)
+                ShortcutRow(key: "⌃⌘⇧2", label: T.s("shortcut.capture_fullscreen")).introReveal(10, appeared: appeared)
+                ShortcutRow(key: "⌘H", label: T.s("shortcut.history")).introReveal(10, appeared: appeared)
+                ShortcutRow(key: "⌘,", label: T.s("shortcut.settings")).introReveal(10, appeared: appeared)
+                ShortcutRow(key: "⌘Q", label: T.s("shortcut.quit")).introReveal(10, appeared: appeared)
+
+                sectionLabel(T.s("menu.app")).introReveal(11, appeared: appeared)
                 MenuRow(T.s("menu.settings"),         icon: "gearshape")         { onClose(); onOpenSettings() }
-                    .introReveal(9, appeared: appeared)
+                    .introReveal(10, appeared: appeared)
             }
             .padding(.horizontal, 8)
             .padding(.top, 0)
@@ -124,7 +142,7 @@ public struct MenuContentView: View {
     /// The Textractor wordmark banner pinned to the very top. A single banner —
     /// no separate text header — sized to fill the popover width with rounded
     /// corners. This is the only branding element in the popover.
-    private var bannerAspect: CGFloat { 344.0 / 1280.0 }
+    private var bannerAspect: CGFloat { 384.0 / 1171.0 }
     /// Desired banner image width. The banner takes the full popover content
     /// width minus 5 points of horizontal padding on each side (total 10).
     private var bannerWidth: CGFloat { 232 }
@@ -253,5 +271,33 @@ private struct IntroReveal: ViewModifier {
 private extension View {
     func introReveal(_ index: Int, appeared: Bool) -> some View {
         modifier(IntroReveal(index: index, appeared: appeared))
+    }
+}
+
+/// A read-only keyboard shortcut row for the shortcuts cheatsheet section.
+/// Shows a key combination on the left and a descriptive label on the right.
+private struct ShortcutRow: View {
+    let key: String
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(key)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 72, alignment: .trailing)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(Color.primary.opacity(0.06))
+                )
+            Text(label)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.primary)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 2)
     }
 }

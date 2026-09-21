@@ -36,7 +36,9 @@ else
 fi
 
 # Copy entitlements next to the binary so codesign picks them up if available.
-if [[ -f "Sources/Textractor/Resources/Textractor.entitlements" ]]; then
+if [[ "$CONFIG" == "release" && -f "Sources/Textractor/Resources/Textractor.release.entitlements" ]]; then
+  cp "Sources/Textractor/Resources/Textractor.release.entitlements" "${APP_DIR}/Contents/Textractor.entitlements"
+elif [[ -f "Sources/Textractor/Resources/Textractor.entitlements" ]]; then
   cp "Sources/Textractor/Resources/Textractor.entitlements" "${APP_DIR}/Contents/"
 fi
 
