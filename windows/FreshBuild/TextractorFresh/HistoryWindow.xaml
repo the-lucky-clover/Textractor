@@ -1,0 +1,115 @@
+<Window x:Class="Textractor.Windows.Views.HistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="#FF0D100B"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Width="400"
+        Height="600"
+        WindowStartupLocation="CenterScreen">
+
+    <Border Background="#FF0D100B" BorderBrush="#FF6BB534" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Background="#FF0D100B"
+                    Padding="14,10"
+                    BorderBrush="#FF6BB534"
+                    BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="&#xE8AB;" FontFamily="Segoe MDL2 Assets" FontSize="18" FontWeight="Black"
+                               Foreground="#FF6BB534" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="HISTORY" 
+                               FontFamily="Cascadia Mono, Consolas" FontSize="13" FontWeight="Black" 
+                               Foreground="White" VerticalAlignment="Center" Margin="10,0,0,0" />
+                    <Button Grid.Column="2" Style="{StaticResource MenuRowStyle}" Padding="8,4"
+                            Click="CloseButton_Click" ToolTip="Close">
+                        <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="#88888888" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="8,0">
+                <ItemsControl x:Name="HistoryItemsControl">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource BreakingDadCardStyle}" Margin="0,0,0,8" Padding="12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" FontFamily="Segoe MDL2 Assets" FontSize="16" FontWeight="Medium"
+                                               Foreground="#FF6BB534" Width="24" HorizontalAlignment="Center"
+                                               Text="{Binding ModeIcon}" VerticalAlignment="Center" />
+                                     
+                                    <StackPanel Grid.Column="1" Orientation="Vertical" Margin="10,0">
+                                        <TextBlock Text="{Binding PreviewText}"
+                                                   FontFamily="Segoe UI Variable, Segoe UI"
+                                                   FontSize="12"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Timestamp}"
+                                                       FontFamily="Cascadia Mono, Consolas" FontSize="9" Foreground="#88888888" />
+                                            <TextBlock Text="{Binding ModeText}"
+                                                       FontFamily="Cascadia Mono, Consolas" FontSize="9" FontWeight="Black"
+                                                       Foreground="#FFF5C714" Margin="12,0,0,0" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                                        <Button Style="{StaticResource BreakingDadButtonStyle}" Padding="8,4"
+                                                Tag="{Binding}" Click="CopyHistoryItem_Click"
+                                                ToolTip="Copy to clipboard" Margin="0,0,8,0">
+                                            <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="11" />
+                                        </Button>
+                                        <Button Style="{StaticResource BreakingDadButtonStyle}" Padding="8,4"
+                                                Tag="{Binding}" Click="DeleteHistoryItem_Click"
+                                                Foreground="#FFB8291F" BorderBrush="#FFB8291F"
+                                                ToolTip="Delete">
+                                            <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="11" />
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Border Grid.Row="2"
+                    Background="#FF0D100B"
+                    Padding="14,10"
+                    BorderBrush="#FF6BB534"
+                    BorderThickness="0,1,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="CLEAR HISTORY"
+                            Style="{StaticResource BreakingDadButtonStyle}"
+                            Foreground="#FFB8291F" BorderBrush="#FFB8291F"
+                            HorizontalAlignment="Left"
+                            Click="ClearHistory_Click" />
+                    <TextBlock Grid.Column="1" x:Name="VersionFooter"
+                               FontFamily="Cascadia Mono, Consolas" FontSize="9" FontWeight="Medium"
+                               Foreground="#88888888" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

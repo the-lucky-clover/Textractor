@@ -1,0 +1,357 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Textractor.Windows">
+
+    <!-- ============================================================
+         BreakingDad Color Palette (matching macOS exactly)
+         ============================================================ -->
+    
+    <!-- Primary Accent: Toxic Green #6BB534 -->
+    <Color x:Key="BreakingDadToxicGreenColor">#FF6BB534</Color>
+    <SolidColorBrush x:Key="BreakingDadToxicGreenBrush" Color="{StaticResource BreakingDadToxicGreenColor}" />
+    
+    <!-- Deep Green #2E5C1C -->
+    <Color x:Key="BreakingDadDeepGreenColor">#FF2E5C1C</Color>
+    <SolidColorBrush x:Key="BreakingDadDeepGreenBrush" Color="{StaticResource BreakingDadDeepGreenColor}" />
+    
+    <!-- Meth Blue / Crystal Blue #29ABE0 -->
+    <Color x:Key="BreakingDadMethBlueColor">#FF29ABE0</Color>
+    <SolidColorBrush x:Key="BreakingDadMethBlueBrush" Color="{StaticResource BreakingDadMethBlueColor}" />
+    
+    <!-- Hazmat Yellow #F5C714 -->
+    <Color x:Key="BreakingDadHazmatYellowColor">#FFF5C714</Color>
+    <SolidColorBrush x:Key="BreakingDadHazmatYellowBrush" Color="{StaticResource BreakingDadHazmatYellowColor}" />
+    
+    <!-- Caution Orange #E67321 -->
+    <Color x:Key="BreakingDadCautionOrangeColor">#FFE67321</Color>
+    <SolidColorBrush x:Key="BreakingDadCautionOrangeBrush" Color="{StaticResource BreakingDadCautionOrangeColor}" />
+    
+    <!-- Rust Red #B8291F -->
+    <Color x:Key="BreakingDadRustColor">#FFB8291F</Color>
+    <SolidColorBrush x:Key="BreakingDadRustBrush" Color="{StaticResource BreakingDadRustColor}" />
+    
+    <!-- Chalk / Off-white #E6EADC -->
+    <Color x:Key="BreakingDadChalkColor">#FFE6EADC</Color>
+    <SolidColorBrush x:Key="BreakingDadChalkBrush" Color="{StaticResource BreakingDadChalkColor}" />
+    
+    <!-- Green-Black Backdrop #0B100A -->
+    <Color x:Key="BreakingDadGreenBlackColor">#FF0B100A</Color>
+    <SolidColorBrush x:Key="BreakingDadGreenBlackBrush" Color="{StaticResource BreakingDadGreenBlackColor}" />
+    
+    <!-- Header Background (shared with popover) #0D100B -->
+    <Color x:Key="TextractorHeaderBackgroundColor">#FF0D100B</Color>
+    <SolidColorBrush x:Key="TextractorHeaderBackgroundBrush" Color="{StaticResource TextractorHeaderBackgroundColor}" />
+    
+    <!-- Gradient: Toxic Green → Hazmat Yellow -->
+    <LinearGradientBrush x:Key="BreakingDadGradientBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="{StaticResource BreakingDadToxicGreenColor}" Offset="0" />
+        <GradientStop Color="{StaticResource BreakingDadHazmatYellowColor}" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- ============================================================
+         Semantic Colors
+         ============================================================ -->
+    
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource BreakingDadToxicGreenColor}" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#FF4CAF50" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#FFF44336" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FFFF9800" />
+    <SolidColorBrush x:Key="InfoBrush" Color="#FF2196F3" />
+
+    <!-- ============================================================
+         Typography (matching macOS system fonts)
+         ============================================================ -->
+    
+    <!-- HUD Title: SF Pro Rounded, Black, 20pt -->
+    <FontFamily x:Key="HudTitleFontFamily">Segoe UI Variable, Segoe UI</FontFamily>
+    <x:Double x:Key="HudTitleFontSize">20</x:Double>
+    <FontWeight x:Key="HudTitleFontWeight">Black</FontWeight>
+    
+    <!-- HUD Head: SF Pro Rounded, Semibold, 13pt -->
+    <x:Double x:Key="HudHeadFontSize">13</x:Double>
+    <FontWeight x:Key="HudHeadFontWeight">SemiBold</FontWeight>
+    
+    <!-- HUD Mono: SF Mono, Medium, 11pt -->
+    <FontFamily x:Key="HudMonoFontFamily">Cascadia Mono, Consolas, Segoe UI</FontFamily>
+    <x:Double x:Key="HudMonoFontSize">11</x:Double>
+    <FontWeight x:Key="HudMonoFontWeight">Medium</FontWeight>
+    
+    <!-- HUD Caps: SF Mono, Black, SmallCaps, 10pt -->
+    <x:Double x:Key="HudCapsFontSize">10</x:Double>
+    <FontWeight x:Key="HudCapsFontWeight">Black</FontWeight>
+    
+    <!-- Section Label: 10pt, Semibold, Rounded, Kerning 0.6 -->
+    <x:Double x:Key="SectionLabelFontSize">10</x:Double>
+    <FontWeight x:Key="SectionLabelFontWeight">SemiBold</FontWeight>
+    
+    <!-- Body Text: 13pt Regular -->
+    <x:Double x:Key="BodyFontSize">13</x:Double>
+    <FontWeight x:Key="BodyFontWeight">Normal</FontWeight>
+    
+    <!-- Caption: 9pt, Monospace -->
+    <x:Double x:Key="CaptionFontSize">9</x:Double>
+    <FontWeight x:Key="CaptionFontWeight">Medium</FontWeight>
+
+    <!-- ============================================================
+         Corner Radius
+         ============================================================ -->
+    
+    <x:Double x:Key="CardCornerRadius">10</x:Double>
+    <x:Double x:Key="ButtonCornerRadius">7</x:Double>
+    <x:Double x:Key="ToastCornerRadius">16</x:Double>
+    <x:Double x:Key="SplashCornerRadius">28</x:Double>
+    <x:Double x:Key="WindowCornerRadius">12</x:Double>
+    <x:Double x:Key="CapsuleCornerRadius">100</x:Double>
+
+    <!-- ============================================================
+         Opacity Values
+         ============================================================ -->
+    
+    <x:Double x:Key="OverlayScrimOpacity">0.18</x:Double>
+    <x:Double x:Key="CardFillOpacity">0.22</x:Double>
+    <x:Double x:Key="BorderOpacity">0.55</x:Double>
+    <x:Double x:Key="HoverFillOpacity">1.0</x:Double>
+    <x:Double x:Key="WindowGlowOpacity">0.10</x:Double>
+    <x:Double x:Key="WindowStrokeOpacity">1.0</x:Double>
+
+    <!-- ============================================================
+         Shadows
+         ============================================================ -->
+    
+    <DropShadowEffect x:Key="CardShadow" 
+        Color="{StaticResource BreakingDadToxicGreenColor}" 
+        Opacity="0.35" 
+        BlurRadius="14" 
+        ShadowDepth="0" />
+    
+    <DropShadowEffect x:Key="WindowGlowShadow" 
+        Color="{StaticResource BreakingDadToxicGreenColor}" 
+        Opacity="0.6" 
+        BlurRadius="16" 
+        ShadowDepth="0" />
+    
+    <DropShadowEffect x:Key="WindowGlowShadowPulse" 
+        Color="{StaticResource BreakingDadToxicGreenColor}" 
+        Opacity="0.95" 
+        BlurRadius="28" 
+        ShadowDepth="0" />
+    
+    <DropShadowEffect x:Key="SplashShadow" 
+        Color="#FF000000" 
+        Opacity="0.45" 
+        BlurRadius="28" 
+        ShadowDepth="18" 
+        Direction="270" />
+    
+    <DropShadowEffect x:Key="ToastShadow" 
+        Color="#FF000000" 
+        Opacity="0.3" 
+        BlurRadius="20" 
+        ShadowDepth="4" />
+
+    <!-- ============================================================
+         Styles
+         ============================================================ -->
+    
+    <!-- Section Label Style -->
+    <Style x:Key="SectionLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource HudTitleFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource SectionLabelFontSize}" />
+        <Setter Property="FontWeight" Value="{StaticResource SectionLabelFontWeight}" />
+        <Setter Property="CharacterSpacing" Value="60" />
+        <Setter Property="Foreground" Value="{ThemeResource TextControlForegroundSecondary}" />
+        <Setter Property="Padding" Value="10,6,10,2" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="TextTransform" Value="Uppercase" />
+    </Style>
+
+    <!-- HUD Caps TextBlock Style -->
+    <Style x:Key="HudCapsTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource HudMonoFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource HudCapsFontSize}" />
+        <Setter Property="FontWeight" Value="{StaticResource HudCapsFontWeight}" />
+        <Setter Property="CharacterSpacing" Value="120" />
+        <Setter Property="Foreground" Value="{StaticResource BreakingDadChalkBrush}" />
+        <Setter Property="Opacity" Value="0.92" />
+    </Style>
+
+    <!-- Body Text Style -->
+    <Style x:Key="BodyTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource HudTitleFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
+        <Setter Property="FontWeight" Value="{StaticResource BodyFontWeight}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextControlForeground}" />
+    </Style>
+
+    <!-- Caption Text Style -->
+    <Style x:Key="CaptionTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource HudMonoFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource CaptionFontSize}" />
+        <Setter Property="FontWeight" Value="{StaticResource CaptionFontWeight}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextControlForegroundSecondary}" />
+    </Style>
+
+    <!-- BreakingDad Card Style -->
+    <Style x:Key="BreakingDadCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource BreakingDadDeepGreenBrush}" />
+        <Setter Property="Opacity" Value="{StaticResource CardFillOpacity}" />
+        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BreakingDadToxicGreenBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="Effect" Value="{StaticResource CardShadow}" />
+    </Style>
+
+    <!-- BreakingDad Button Style (Pill) -->
+    <Style x:Key="BreakingDadButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{StaticResource BreakingDadToxicGreenBrush}" />
+        <Setter Property="BorderThickness" Value="0.8" />
+        <Setter Property="Foreground" Value="{StaticResource BreakingDadToxicGreenBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource HudMonoFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource HudCapsFontSize}" />
+        <Setter Property="FontWeight" Value="{StaticResource HudCapsFontWeight}" />
+        <Setter Property="CharacterSpacing" Value="120" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root" 
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource CapsuleCornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Menu Row Style (for popover/menu items) -->
+    <Style x:Key="MenuRowStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource TextControlForeground}" />
+        <Setter Property="FontFamily" Value="{StaticResource HudTitleFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
+        <Setter Property="FontWeight" Value="{StaticResource BodyFontWeight}" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{StaticResource ButtonCornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" 
+                                          VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Toast Card Style -->
+    <Style x:Key="ToastCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource SystemControlAcrylicWindowBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource ToastCornerRadius}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="14" />
+        <Setter Property="MaxWidth" Value="360" />
+        <Setter Property="Effect" Value="{StaticResource ToastShadow}" />
+    </Style>
+
+    <!-- Toggle Style (BreakingDad) -->
+    <Style x:Key="BreakingDadToggleStyle" TargetType="ToggleSwitch">
+        <Setter Property="OnContent" Value="" />
+        <Setter Property="OffContent" Value="" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleSwitch">
+                    <Grid x:Name="Root" Height="20" Width="34">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="ToggleStates">
+                                <VisualState x:Name="On">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="14" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Track" Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource BreakingDadToxicGreenBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Off">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="0" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Track" Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{StaticResource BreakingDadChalkBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Border x:Name="Track" 
+                                CornerRadius="10" 
+                                Height="20" 
+                                Width="34" 
+                                Fill="{StaticResource BreakingDadChalkBrush}" 
+                                Opacity="0.22" />
+                        <Ellipse x:Name="Knob" 
+                                 Width="14" Height="14" 
+                                 Fill="{StaticResource BreakingDadChalkBrush}" 
+                                 Opacity="0.7" 
+                                 HorizontalAlignment="Left" 
+                                 Margin="3,3,0,3" 
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Ellipse.RenderTransform>
+                                <TranslateTransform X="0" />
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- TextBox Style -->
+    <Style x:Key="TextBoxStyle" TargetType="TextBox">
+        <Setter Property="Background" Value="{StaticResource BreakingDadGreenBlackBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BreakingDadToxicGreenBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource ButtonCornerRadius}" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="FontFamily" Value="{StaticResource HudTitleFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource BodyFontSize}" />
+        <Setter Property="Foreground" Value="{ThemeResource TextControlForeground}" />
+        <Setter Property="PlaceholderForeground" Value="{ThemeResource TextControlForegroundSecondary}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Root"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource ButtonCornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ScrollViewer x:Name="ContentElement"
+                                      AutomationProperties.AccessibilityView="Raw"
+                                      HorizontalScrollMode="Disabled"
+                                      VerticalScrollMode="Disabled"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      IsTabStop="False"
+                                      ZoomMode="Disabled" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

@@ -1,0 +1,234 @@
+using System;
+using System.Drawing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+using Windows.Foundation;
+using Textractor.Windows.Models;
+using Textractor.Windows.Services;
+using Textractor.Windows.ViewModels;
+
+namespace Textractor.Windows;
+
+public sealed partial class CaptureOverlayWindow : Window
+{
+    private readonly ScreenshotService _screenshotService;
+    private readonly OCRService _ocrService;
+    private readonly AIInferenceService _aiService;
+    private readonly HistoryStore _historyStore;
+    private readonly SoundManager _soundManager;
+    private readonly SettingsStore _settingsStore;
+    private readonly CaptureMode _initialMode;
+    private readonly Action<CapturedImage, CaptureMode, AppSettings> _onCaptureComplete;
+
+    private global::Windows.Foundation.Point _selectionStart;
+    private bool _isSelecting = false;
+    private CaptureOverlayViewModel? _viewModel;
+
+    public CaptureOverlayWindow(
+        ScreenshotService screenshotService,
+        OCRService ocrService,
+        AIInferenceService aiService,
+        HistoryStore historyStore,
+        SoundManager soundManager,
+        SettingsStore settingsStore,
+        CaptureMode initialMode,
+        Action<CapturedImage, CaptureMode, AppSettings> onCaptureComplete)
+    {
+        _screenshotService = screenshotService;
+        _ocrService = ocrService;
+        _aiService = aiService;
+        _historyStore = historyStore;
+        _soundManager = soundManager;
+        _settingsStore = settingsStore;
+        _initialMode = initialMode;
+        _onCaptureComplete = onCaptureComplete;
+
+        this.InitializeComponent();
+        this.ExtendsContentIntoTitleBar = true;
+        this.SetTitleBar(null);
+        
+        // Make window full screen
+        var bounds = GetScreenBounds();
+        this.Width = bounds.Width;
+        this.Height = bounds.Height;
+        
+        // Position at top-left of primary screen
+        this.SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base };
+
+        // Create ViewModel and set DataContext
+        _viewModel = new CaptureOverlayViewModel(
+            _screenshotService, _ocrService, _aiService,
+            _historyStore, _soundManager, _settingsStore,
+            _initialMode, _onCaptureComplete);
+        this.DataContext = _viewModel;
+    }
+
+    private global::Windows.Foundation.Rect GetScreenBounds()
+    {
+        var displays = _screenshotService.GetDisplays();
+        if (displays.Count > 0)
+        {
+            var primary = displays[0];
+            return new global::Windows.Foundation.Rect(primary.Frame.X, primary.Frame.Y, primary.Frame.Width, primary.Frame.Height);
+        }
+        return new global::Windows.Foundation.Rect(0, 0, 1920, 1080);
+    }
+
+    private void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        // Set initial mode
+        _viewModel.Mode = _initialMode;
+        
+        // Update crosshair lines to full canvas size
+        CrosshairH.X2 = Width;
+        CrosshairV.Y2 = Height;
+        
+        // Focus for keyboard input
+        this.Focus(FocusState.Programmatic);
+    }
+
+    private void Window_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Windows.System.VirtualKey.Space:
+                _viewModel?.ToggleModeCommand.Execute(null);
+                e.Handled = true;
+                break;
+            case Windows.System.VirtualKey.Escape:
+                this.Close();
+                e.Handled = true;
+                break;
+            case Windows.System.VirtualKey.F11:
+                _viewModel?.CaptureFullScreenCommand.Execute(null);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void ModeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel?.ToggleModeCommand.Execute(null);
+    }
+
+    private void CaptureFullScreen_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel?.CaptureFullScreenCommand.Execute(null);
+    }
+
+    private void SelectionCanvas_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (_viewModel?.IsWindowMode == true) return;
+        
+        _selectionStart = e.GetCurrentPoint(SelectionCanvas).Position;
+        _isSelecting = true;
+        
+        SelectionRect.Visibility = Visibility.Visible;
+        SelectionRect.Width = 0;
+        SelectionRect.Height = 0;
+        Canvas.SetLeft(SelectionRect, _selectionStart.X);
+        Canvas.SetTop(SelectionRect, _selectionStart.Y);
+        
+        CrosshairH.Visibility = Visibility.Visible;
+        CrosshairV.Visibility = Visibility.Visible;
+        CrosshairH.Y1 = CrosshairH.Y2 = _selectionStart.Y;
+        CrosshairV.X1 = CrosshairV.X2 = _selectionStart.X;
+        
+        e.Handled = true;
+    }
+
+    private void SelectionCanvas_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isSelecting) return;
+        
+        var currentPos = e.GetCurrentPoint(SelectionCanvas).Position;
+        
+        var x = Math.Min(_selectionStart.X, currentPos.X);
+        var y = Math.Min(_selectionStart.Y, currentPos.Y);
+        var width = Math.Abs(currentPos.X - _selectionStart.X);
+        var height = Math.Abs(currentPos.Y - _selectionStart.Y);
+        
+        Canvas.SetLeft(SelectionRect, x);
+        Canvas.SetTop(SelectionRect, y);
+        SelectionRect.Width = width;
+        SelectionRect.Height = height;
+        
+        // Update crosshair
+        CrosshairH.Y1 = CrosshairH.Y2 = currentPos.Y;
+        CrosshairV.X1 = CrosshairV.X2 = currentPos.X;
+        
+        e.Handled = true;
+    }
+
+    private void SelectionCanvas_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isSelecting) return;
+        
+        _isSelecting = false;
+        
+        var currentPos = e.GetCurrentPoint(SelectionCanvas).Position;
+        
+        var x = Math.Min(_selectionStart.X, currentPos.X);
+        var y = Math.Min(_selectionStart.Y, currentPos.Y);
+        var width = Math.Abs(currentPos.X - _selectionStart.X);
+        var height = Math.Abs(currentPos.Y - _selectionStart.Y);
+        
+        // Minimum selection size
+        if (width < 10 || height < 10)
+        {
+            ResetSelection();
+            return;
+        }
+        
+        // Convert to screen coordinates
+        var windowPos = GetWindowScreenPosition();
+        var screenRect = new RectangleF(
+            (float)(windowPos.X + x),
+            (float)(windowPos.Y + y),
+            (float)width,
+            (float)height);
+        
+        ResetSelection();
+        _viewModel?.OnRegionSelected(screenRect);
+        this.Close();
+        
+        e.Handled = true;
+    }
+
+    private void ResetSelection()
+    {
+        _isSelecting = false;
+        SelectionRect.Visibility = Visibility.Collapsed;
+        CrosshairH.Visibility = Visibility.Collapsed;
+        CrosshairV.Visibility = Visibility.Collapsed;
+    }
+
+    private global::Windows.Foundation.Point GetWindowScreenPosition()
+    {
+        return new global::Windows.Foundation.Point(0, 0);
+    }
+
+    private void WindowHighlight_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Border border && border.DataContext is WindowDescriptor window)
+        {
+            _viewModel?.OnWindowHovered(window);
+        }
+    }
+
+    private void WindowHighlight_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        _viewModel?.OnWindowHovered(null);
+    }
+
+    private void WindowHighlight_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (sender is Border border && border.DataContext is WindowDescriptor window)
+        {
+            _viewModel?.SelectWindowCommand.Execute(window);
+        }
+    }
+}

@@ -1,0 +1,21 @@
+<Application xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:Textractor.Windows"
+             xmlns:converters="using:Textractor.Windows.Converters"
+             x:Class="Textractor.Windows.App"
+             RequestedTheme="Dark">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- WinUI 3 Default Styles -->
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Custom Converters -->
+            <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <converters:BoolToStringConverter x:Key="BoolToStringConverter" />
+            <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter" />
+            <converters:CaptureModeToIconConverter x:Key="CaptureModeToIconConverter" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

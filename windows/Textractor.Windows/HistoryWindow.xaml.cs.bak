@@ -1,0 +1,44 @@
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Textractor.Windows.ViewModels;
+
+namespace Textractor.Windows;
+
+public sealed partial class HistoryWindow : Window
+{
+    private readonly HistoryViewModel _viewModel;
+
+    public HistoryWindow()
+    {
+        _viewModel = new HistoryViewModel(HistoryStore.Shared, SettingsStore.Shared.Settings);
+        this.InitializeComponent();
+        this.DataContext = _viewModel;
+        
+        this.ExtendsContentIntoTitleBar = true;
+        this.SetTitleBar(null);
+        
+        CenterOnScreen();
+    }
+
+    private void CenterOnScreen()
+    {
+        var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var displayArea = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(
+            WinRT.Interop.GetWindowIdFromWindow(hWnd), 
+            Microsoft.UI.Windowing.DisplayAreaFallbackOptions.Nearest);
+        
+        if (displayArea != null)
+        {
+            var workArea = displayArea.WorkArea;
+            this.AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(
+                workArea.X + (workArea.Width - (int)Width) / 2,
+                workArea.Y + (workArea.Height - (int)Height) / 2,
+                (int)Width, (int)Height));
+        }
+    }
+
+    private void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        this.Focus(FocusState.Programmatic);
+    }
+}

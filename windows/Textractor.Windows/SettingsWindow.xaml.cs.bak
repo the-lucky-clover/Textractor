@@ -1,0 +1,77 @@
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using System;
+using Windows.Storage.Pickers;
+using Textractor.Windows.ViewModels;
+
+namespace Textractor.Windows;
+
+public sealed partial class SettingsWindow : Window
+{
+    private readonly SettingsViewModel _viewModel;
+
+    public SettingsWindow()
+    {
+        _viewModel = new SettingsViewModel(SettingsStore.Shared, new SoundManager(), new UpdateService());
+        this.InitializeComponent();
+        this.DataContext = _viewModel;
+        
+        this.ExtendsContentIntoTitleBar = true;
+        this.SetTitleBar(null);
+        
+        // Center on screen
+        CenterOnScreen();
+    }
+
+    private void CenterOnScreen()
+    {
+        var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var displayArea = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(
+            WinRT.Interop.GetWindowIdFromWindow(hWnd), 
+            Microsoft.UI.Windowing.DisplayAreaFallbackOptions.Nearest);
+        
+        if (displayArea != null)
+        {
+            var workArea = displayArea.WorkArea;
+            this.AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(
+                workArea.X + (workArea.Width - (int)Width) / 2,
+                workArea.Y + (workArea.Height - (int)Height) / 2,
+                (int)Width, (int)Height));
+        }
+    }
+
+    private void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        // Focus the window
+        this.Focus(FocusState.Programmatic);
+    }
+
+    private void Close_Click(object sender, RoutedEventArgs e)
+    {
+        this.Close();
+    }
+
+    private async void ChooseFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var folderPicker = new FolderPicker();
+        folderPicker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
+        
+        var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        WinRT.Interop.InitializeWithWindow.Initialize(folderPicker, hWnd);
+        
+        var folder = await folderPicker.PickSingleFolderAsync();
+        if (folder != null)
+        {
+            _viewModel.Settings.CustomScreenshotsFolder = folder.Path;
+        }
+    }
+
+    private void OpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var folder = Services.StorageService.GetScreenshotsFolder(_viewModel.Settings);
+        if (System.IO.Directory.Exists(folder))
+        {
+            System.Diagnostics.Process.Start("explorer.exe", folder);
+        }
+    }
+}
