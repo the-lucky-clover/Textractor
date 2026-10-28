@@ -161,7 +161,9 @@ public final class AIInferenceService {
     /// collapse, de-hyphenate line-breaks, and replace smart quotes.
     static func clean(text: String, weirdness: Double) -> String {
         guard !text.isEmpty else { return text }
-        var s = text
+        
+        // First, ensure we have valid UTF-8
+        var s = sanitizeUTF8(text)
 
         // Always: Unicode normalization, strip zero-width space & BOM.
         s = s.replacingOccurrences(of: "\u{200B}", with: "")   // zero-width space
@@ -199,7 +201,7 @@ public final class AIInferenceService {
             // Strict mode: only collapse 3+ consecutive blanks (no smart-quote
             // rewriting, no aggressive space flattening).
             s = collapseRuns(of: "\n\n\n", to: "\n\n", in: s)
-            return s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
         }
 
         // Smart-quote normalisation (always helpful on OCR text) — convert
@@ -233,7 +235,7 @@ public final class AIInferenceService {
             s = s.replacingOccurrences(
                 of: "(\\p{L})-\\s*\\n\\s*(\\p{L})",
                 with: "$1$2",
-                options: .regularExpression
+                options: NSString.CompareOptions.regularExpression
             )
             // Collapse ragged single newlines inside what looks like a paragraph.
             // Heuristic: replace 'X\nY' where neither side is blank → "X Y".
@@ -241,15 +243,15 @@ public final class AIInferenceService {
             s = s.replacingOccurrences(
                 of: "([\\p{L}\\p{N},;:!?\\)\\]\\.\\\"'])\\n([\\p{L}\\p{N}])",
                 with: "$1 $2",
-                options: .regularExpression
+                options: NSString.CompareOptions.regularExpression
             )
         }
 
         // Trim trailing whitespace per line.
         s = s.split(separator: "\n", omittingEmptySubsequences: false)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { $0.trimmingCharacters(in: CharacterSet.whitespaces) }
             .joined(separator: "\n")
-        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
     }
 
     /// Heuristic: detect dominant script from first 500 chars.
@@ -359,4 +361,19 @@ public final class AIInferenceService {
         }
     }
 
+    // MARK: - UTF-8 Sanitization
+
+    /// Sanitize input to ensure valid UTF-8
+    private static func sanitizeUTF8(_ text: String) -> String {
+        // Convert to UTF-8 data and back to strip any invalid sequences
+        guard let data = text.data(using: .utf8),
+              let sanitized = String(data: data, encoding: .utf8) else {
+            // Fallback: keep only valid Unicode scalars
+            return String(text.unicodeScalars
+                .filter { $0.value >= 0x20 || $0 == "\n" || $0 == "\t" || $0 == "\r" }
+                .map { String($0) }
+                .joined())
+        }
+        return sanitized
+    }
 }

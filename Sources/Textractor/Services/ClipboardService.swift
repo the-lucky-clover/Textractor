@@ -25,7 +25,10 @@ public final class ClipboardService {
         let pb = NSPasteboard.general
         pb.clearContents()
 
-        let success = pb.setString(text, forType: .string)
+        // Sanitize text to ensure valid UTF-8 for clipboard
+        let sanitizedText = sanitizeForClipboard(text)
+
+        let success = pb.setString(sanitizedText, forType: .string)
         guard success else {
             TelemetryService.shared.record(
                 TelemetryEvent(kind: .clipboardFailure, success: false, meta: ["stage": "setString"]),
@@ -37,9 +40,13 @@ public final class ClipboardService {
         if !plainTextOnly, let attributed {
             do {
                 let range = NSRange(location: 0, length: attributed.length)
+                // Use UTF-8 RTF variant for better Unicode support
                 let rtfData = try attributed.data(
                     from: range,
-                    documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+                    documentAttributes: [
+                        .documentType: NSAttributedString.DocumentType.rtf,
+                        .characterEncoding: String.Encoding.utf8.rawValue
+                    ]
                 )
                 pb.setData(rtfData, forType: .rtf)
             } catch {
@@ -48,7 +55,7 @@ public final class ClipboardService {
         }
 
         for extraType in extraPasteboardTypes {
-            _ = pb.setString(text, forType: .init(extraType))
+            _ = pb.setString(sanitizedText, forType: .init(extraType))
         }
 
         TelemetryService.shared.record(
@@ -56,12 +63,26 @@ public final class ClipboardService {
                 kind: .clipboardWrite,
                 success: success,
                 meta: [
-                    "len": "\(text.count)",
+                    "len": "\(sanitizedText.count)",
                     "rich": attributed != nil ? "1" : "0"
                 ]
             ),
             telemetryEnabled: TelemetryService.shared.isEnabled
         )
         return success
+    }
+
+    /// Sanitize text for clipboard to ensure valid UTF-8 and remove problematic characters
+    private func sanitizeForClipboard(_ text: String) -> String {
+        // Ensure valid UTF-8 by converting to data and back
+        guard let data = text.data(using: .utf8),
+              let sanitized = String(data: data, encoding: .utf8) else {
+            // Fallback: replace invalid sequences
+            return String(text.unicodeScalars
+                .filter { $0.isASCII || $0.value >= 0x20 || $0 == "\n" || $0 == "\t" }
+                .map { String($0) }
+                .joined())
+        }
+        return sanitized
     }
 }
