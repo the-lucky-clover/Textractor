@@ -87,14 +87,15 @@ public final class OCRService {
             }
         }
 
-        // Vertical CJK lines can be omitted by correction-on recognition even when
-        // another column succeeds. Try correction-off and retain only additional,
-        // spatially distinct observations; do not replace text by confidence alone.
+        // Some short upright vertical CJK columns are omitted even while neighboring
+        // columns succeed. Reflow original glyph pixels on uniform backgrounds and
+        // recognize them horizontally. Keep existing observations unchanged.
         let isExplicitCJK = preferredLanguages.count == 1 &&
             ["ja", "zh", "ko", "yue"].contains { preferredLanguages[0].hasPrefix($0) }
         if isExplicitCJK, observations.contains(where: { $0.boundingBox.height > $0.boundingBox.width * 1.5 }) {
+            let existing = observations
             let additional = await Task.detached(priority: .userInitiated) {
-                Self.recoverVerticalColumns(cgImage, languages: ocrLanguages, vocabulary: customVocabulary)
+                Self.recoverVerticalColumns(cgImage, existing: existing, languages: ocrLanguages, vocabulary: customVocabulary)
             }.value
             for candidate in additional {
                 let overlaps = observations.contains {
@@ -105,7 +106,7 @@ public final class OCRService {
                 }
                 if !overlaps { observations.append(candidate) }
             }
-            revisionsUsed.append(("vertical-regions", 1))
+            revisionsUsed.append(("vertical-reflow", 1))
         }
 
         // Self-heal Step 1: try .fast when accurate produced nothing.
@@ -186,29 +187,18 @@ public final class OCRService {
 
     // MARK: - Synchronous wrapper
 
-    private static func recoverVerticalColumns(_ image: CGImage, languages: [String], vocabulary: [String]) -> [TextObservation] {
-        let detector = VNDetectTextRectanglesRequest()
-        detector.reportCharacterBoxes = true
-        do { try VNImageRequestHandler(cgImage: image).perform([detector]) }
-        catch { return [] }
-        let width = CGFloat(image.width), height = CGFloat(image.height)
-        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
-        let regions = (detector.results ?? []).map(\.boundingBox)
-            .filter { $0.height * height > $0.width * width * 1.5 }
-            .sorted { $0.midX > $1.midX }.prefix(16)
-        return regions.flatMap { box -> [TextObservation] in
-            let crop = CGRect(x: box.minX * width, y: (1 - box.maxY) * height,
-                              width: box.width * width, height: box.height * height)
-                .insetBy(dx: -12, dy: -12).integral.intersection(bounds)
-            guard let cropped = image.cropping(to: crop) else { return [] }
-            return runSync(cgImage: cropped, level: .accurate, languages: languages,
-                           minTextHeight: 0, vocab: vocabulary, disableLanguageCorrection: true).map { observation in
-                let local = observation.boundingBox
-                return TextObservation(text: observation.text, confidence: observation.confidence,
-                    boundingBox: CGRect(x: (crop.minX + local.minX * crop.width) / width,
-                        y: 1 - crop.maxY / height + local.minY * crop.height / height,
-                        width: local.width * crop.width / width, height: local.height * crop.height / height))
-            }
+    private static func recoverVerticalColumns(_ image: CGImage, existing: [TextObservation], languages: [String], vocabulary: [String]) -> [TextObservation] {
+        let widths = existing.filter { $0.boundingBox.height > $0.boundingBox.width * 1.5 }
+            .map { $0.boundingBox.width }.sorted()
+        guard !widths.isEmpty else { return [] }
+        return VerticalTextReflow.columns(in: image, glyphWidth: widths[widths.count / 2]).compactMap { column in
+            guard !existing.contains(where: { $0.boundingBox.intersects(column.box) }) else { return nil }
+            let recognized = runSync(cgImage: column.image, level: .accurate, languages: languages,
+                                     minTextHeight: 0, vocab: vocabulary, disableLanguageCorrection: true)
+            guard !recognized.isEmpty else { return nil }
+            let text = recognized.sorted { $0.boundingBox.minX < $1.boundingBox.minX }.map(\.text).joined()
+            return TextObservation(text: text,
+                confidence: recognized.map(\.confidence).reduce(0, +) / Float(recognized.count), boundingBox: column.box)
         }
     }
 
