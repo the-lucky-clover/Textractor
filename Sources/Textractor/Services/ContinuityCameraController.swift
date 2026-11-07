@@ -21,6 +21,7 @@ final class ContinuityCameraController: NSObject, NSWindowDelegate {
             window.delegate = self
             window.isReleasedWhenClosed = false
             window.hidesOnDeactivate = false
+            window.level = .floating
             panel = window
             window.center()
             NSApp.activate(ignoringOtherApps: true)

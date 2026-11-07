@@ -4,6 +4,21 @@ import AppKit
 
 @MainActor
 final class SettingsRegressionTests: XCTestCase {
+    func testFreshAndResetDefaultsUseUSEnglish() throws {
+        XCTAssertEqual(AppSettings().uiLanguage, "en-US")
+        XCTAssertEqual(AppSettings.default.uiLanguage, "en-US")
+        let suite = "com.textractor.test.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = SettingsStore(userDefaults: defaults, appliesSystemEffects: false)
+        let state = AppState(settingsStore: store)
+        XCTAssertEqual(state.settings.uiLanguage, "en-US")
+        state.updateSettings { $0.uiLanguage = "fr-FR" }
+        state.resetSettingsToDefaults()
+        store.flushPendingPersist()
+        XCTAssertEqual(SettingsStore(userDefaults: defaults, appliesSystemEffects: false).current.uiLanguage, "en-US")
+    }
+
     func testUSEnglishAliasesAndEveryCatalogValue() {
         for alias in ["en", "en_US", "EN-us", " English ", "English (US)", "English (United States)"] {
             XCTAssertEqual(AppSettings.normalizedLanguage(alias), "en-US", alias)

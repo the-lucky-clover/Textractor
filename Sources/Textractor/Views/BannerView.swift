@@ -138,7 +138,9 @@ struct ProductBanner: View {
         }
         .frame(width: width)
         .clipped()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Textractor Pro")
+        // Decorative shimmer geometry must not obscure nearby controls in
+        // accessibility hit testing, even when its pixels are clipped.
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

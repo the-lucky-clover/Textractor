@@ -10,8 +10,9 @@ public struct OnboardingRootView: View {
     @State private var choseLanguage = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(hotkeyLabel: String, onComplete: @escaping (String?) -> Void) {
+    public init(hotkeyLabel: String, initialLanguage: String = "en-US", onComplete: @escaping (String?) -> Void) {
         self.hotkeyLabel = hotkeyLabel
+        self._language = State(initialValue: initialLanguage)
         self.onComplete = onComplete
     }
 
@@ -113,7 +114,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         // user-customized hotkey shortens the cycle; the factory `AppSettings.default`
         // would always show the app's hard-coded default.
         let liveHotkeyLabel = AppCoordinator.shared.appState.settings.resolvedHotkeyLabel
-        let view = OnboardingRootView(hotkeyLabel: liveHotkeyLabel, onComplete: { [weak self] chosen in
+        let view = OnboardingRootView(hotkeyLabel: liveHotkeyLabel, initialLanguage: AppCoordinator.shared.appState.settings.uiLanguage, onComplete: { [weak self] chosen in
             guard let self else { return }
             self.finish(with: chosen)
         })
@@ -129,6 +130,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.contentViewController = hosting
         panel.hidesOnDeactivate = false
+        panel.level = .floating
         panel.center()
         hosting.view.frame = NSRect(origin: .zero, size: size)
 

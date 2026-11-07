@@ -172,7 +172,7 @@ public var ocrLanguages: [String] = []
     public init(
         weirdness: Double = 0.45,
         customVocabulary: [String] = [],
-        uiLanguage: String = "",
+        uiLanguage: String = "en-US",
         localTelemetryEnabled: Bool = true,
         openPopoverOnCapture: Bool = false,
         lastUpdateCheckAt: Date? = nil,
@@ -254,9 +254,9 @@ private enum CodingKeys: String, CodingKey {
         weirdness = try container.decode(Double.self, forKey: .weirdness)
         customVocabulary = try container.decode([String].self, forKey: .customVocabulary)
         let storedLanguage = try container.decodeIfPresent(String.self, forKey: .uiLanguage)
-        var decodedUiLanguage = storedLanguage ?? ""
+        var decodedUiLanguage = storedLanguage ?? "en-US"
         // Migration: older builds stored the OCR language list in `ocrLanguages`.
-        // If `uiLanguage` is empty but legacy `ocrLanguages` has entries, promote
+        // If `uiLanguage` is absent but legacy `ocrLanguages` has entries, promote
         // the first one so the user does not lose their language preference.
         if storedLanguage == nil,
            let legacyLangs = try container.decodeIfPresent([String].self, forKey: .ocrLanguages),
@@ -339,7 +339,7 @@ private enum CodingKeys: String, CodingKey {
     public static let `default` = AppSettings(
         weirdness: 0.45,
         customVocabulary: [],
-        uiLanguage: "",
+        uiLanguage: "en-US",
         localTelemetryEnabled: true,
         openPopoverOnCapture: false,
         lastUpdateCheckAt: nil,

@@ -45,9 +45,16 @@ jobs:
           brew install xcodegen
           xcodegen generate
       - name: Playtest Settings and onboarding
+        timeout-minutes: 10
         run: |
           set -o pipefail
           xcodebuild test -project Textractor.xcodeproj -scheme Textractor -destination 'platform=macOS' -resultBundlePath qa-results/playtests.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee qa-results/playtests.log
+      - name: Export playtest screenshots
+        if: always()
+        run: |
+          if [ -d qa-results/playtests.xcresult ]; then
+            xcrun xcresulttool export attachments --path qa-results/playtests.xcresult --output-path qa-results/screenshots
+          fi
       - name: Preserve evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
