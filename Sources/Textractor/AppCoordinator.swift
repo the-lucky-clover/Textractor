@@ -20,6 +20,7 @@ public final class AppCoordinator: ObservableObject {
     public let settingsStore = SettingsStore.shared
     public let captureStore = CaptureStore.shared
     public let appState: AppState
+    @Published public private(set) var previousRegion: CGRect?
 
   /// Currently presented capture overlay (the fullscreen NSWindow).
   private var captureWindow: NSWindow?
