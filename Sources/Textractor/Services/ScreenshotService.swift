@@ -613,23 +613,33 @@ public final class ScreenshotService: NSObject {
         var stitchedImage = firstImage
         var previousImage = firstImage
         var scrollCount = 0
-        var isAtBottom = false
+        let boundedScrolls = min(max(maxScrolls, 0), 50)
+        let boundedInterval = min(max(scrollInterval, 0.1), 3.0)
+        let boundedOverlap = min(max(overlap, 0), CGFloat(firstImage.height - 1))
 
-        while scrollCount < 50 && !isAtBottom {
+        while scrollCount < boundedScrolls {
+            try Task.checkCancellation()
+            scrollCount += 1
             // Scroll down using AppleScript
+            guard let owner = window.ownerName else { throw ScreenshotError.noWindow }
+            let escapedOwner = owner.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
             let scrollScript = """
             tell application "System Events"
-                tell process "\(window.ownerName ?? "")"
-                    key code 125 -- down arrow
+                tell process "\(escapedOwner)"
+                    set frontmost to true
+                    key code 125
                 end tell
             end tell
             """
-
-            let script = NSAppleScript(source: scrollScript)
-            script?.executeAndReturnError(nil)
+            var scriptError: NSDictionary?
+            NSAppleScript(source: scrollScript)?.executeAndReturnError(&scriptError)
+            if scriptError != nil {
+                throw ScreenshotError.processingFailed("Scrolling needs permission to control the selected app. Capture a region instead or enable automation in System Settings.")
+            }
 
             // Wait for scroll animation
-            try await Task.sleep(nanoseconds: UInt64(0.5 * 1_000_000_000))
+            try await Task.sleep(nanoseconds: UInt64(boundedInterval * 1_000_000_000))
 
             // Capture current state
             let currentCapture = try await captureWindow(windowID)
@@ -643,7 +653,10 @@ public final class ScreenshotService: NSObject {
             }
 
             // Stitch the new image below the previous one
-            stitchedImage = stitchImagesVertically(top: stitchedImage, bottom: currentImage, overlap: 100)
+            guard stitchedImage.height + currentImage.height - Int(boundedOverlap) <= 32_000 else {
+                throw ScreenshotError.processingFailed("Scroll capture reached the 32,000-pixel limit. Capture a shorter section.")
+            }
+            stitchedImage = stitchImagesVertically(top: stitchedImage, bottom: currentImage, overlap: boundedOverlap)
             previousImage = currentImage
         }
         

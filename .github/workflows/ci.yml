@@ -11,8 +11,18 @@ concurrency:
   group: qa-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   native:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +30,10 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p qa-results
+          export TEXTRACTOR_QA_OUTPUT="$PWD/qa-results"
           swift test --enable-code-coverage 2>&1 | tee qa-results/unit-tests.log
+      - name: Score measured OCR results
+        run: python3 scripts/benchmark_report.py qa-results/ocr-measurements.json --output qa-results/ocr-summary.json
       - name: Build standalone bundle
         run: bash build.sh
       - name: Verify development bundle

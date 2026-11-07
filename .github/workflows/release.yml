@@ -65,7 +65,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build:
     name: Build & Test
-    runs-on: macos-14  # macOS 14 (Sonoma) with Xcode 15+
+    runs-on: macos-15  # macOS 14 (Sonoma) with Xcode 15+
     timeout-minutes: 30
     
     steps:
@@ -128,7 +128,7 @@ jobs:
   # ---------------------------------------------------------------------------
   notarize:
     name: Notarize
-    runs-on: macos-14
+    runs-on: macos-15
     needs: build
     timeout-minutes: 30
     if: ${{ !inputs.skip_notarize }}
@@ -190,7 +190,7 @@ jobs:
   # ---------------------------------------------------------------------------
   upload:
     name: Upload to App Store Connect
-    runs-on: macos-14
+    runs-on: macos-15
     needs: notarize
     timeout-minutes: 20
     if: ${{ !inputs.skip_upload }}

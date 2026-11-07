@@ -434,13 +434,7 @@ return await OCRService.shared.recognizeText(
         }
 
 // History record (text-only) — in-memory recents + persistent store.
-            appState.record(capture: capture, ocr: ocrResult, analysis: analysis)
-            HistoryStore.shared.record(
-                capture: capture,
-                text: outputText,
-                mode: capture.mode,
-                limit: appState.settings.historyEntryLimit
-            )
+            appState.record(capture: capture, ocr: ocrResult, analysis: analysis, storedText: outputText)
 
             // Auto-save captures to ~/Pictures/Textractor Captures/
             if appState.settings.autoSaveCaptures {
@@ -496,7 +490,7 @@ return await OCRService.shared.recognizeText(
         guard appState.settings.showSuccessNotifications else { return }
 
         appState.pipelinePhase = .completed
-        let toastText = analysis.cleanedText
+        let toastText = outputText
         let toastCopy: () -> Void = {
             _ = ClipboardService.shared.copy(toastText, plainTextOnly: pasteAsPlainText)
             SoundManager.playClick()
@@ -536,7 +530,7 @@ return await OCRService.shared.recognizeText(
         let onComposeEmail: (() -> Void)? = {
             let emails = MetadataExtractor.shared.extract(from: toastText).values(for: .email)
             guard let firstEmail = emails.first else { return }
-            let mailtoURL = URL(string: "mailto:\(firstEmail)")!
+            guard let mailtoURL = URL(string: "mailto:\(firstEmail)") else { return }
             NSWorkspace.shared.open(mailtoURL)
         }
         // Smart action: format as code block (with language detection)
@@ -562,8 +556,9 @@ let onFormatCodeBlock: (() -> Void)? = {
                 share: nil
             )
             // Schedule dismissal
+            let toastID = self.appState.toast?.id
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                if self.appState.toast?.id == self.appState.toast?.id {
+                if self.appState.toast?.id == toastID {
                     self.appState.toast = nil
                 }
             }
@@ -639,7 +634,7 @@ let onFormatCodeBlock: (() -> Void)? = {
                 guard CaptureExtras.shared.deliver(output, settings: appState.settings) else {
                     throw ScreenshotError.processingFailed("Could not copy barcode data. Clear the additive batch if it is full.")
                 }
-                appState.record(capture: capture, ocr: nil, analysis: nil)
+                appState.record(capture: capture, ocr: nil, analysis: nil, storedText: output)
                 appState.pipelinePhase = .completed
                 appState.toast = ToastState(kind: .info, headline: "Barcode copied", body: "\(payloads.count) distinct code(s)")
             } catch { handleFailure(error: error, context: "barcode") }
@@ -712,6 +707,10 @@ let onFormatCodeBlock: (() -> Void)? = {
                 outputText = outputText.split(separator: " ").filter { !$0.isEmpty }.joined(separator: " ")
             }
 
+            if appState.settings.sourceCodeMode {
+                outputText = SourceCodeDetector.analyze(outputText).formatted
+            }
+
             // Build attributed string for rich paste
             let attributed: NSAttributedString? = {
                 if pasteAsPlainText { return nil }
@@ -737,6 +736,10 @@ let onFormatCodeBlock: (() -> Void)? = {
             // Clipboard write
             appState.pipelinePhase = .clipboard
             let copyOk = CaptureExtras.shared.deliver(outputText, attributed: attributed, settings: appState.settings)
+            guard copyOk else {
+                handleFailure(error: ScreenshotError.processingFailed("Copy failed. The clipboard may be unavailable or the additive batch may be full."), context: "clipboard")
+                return
+            }
             SoundManager.playCaptureComplete()
 
             // Post-capture translation (Snip-to-translate)
@@ -791,18 +794,13 @@ let onFormatCodeBlock: (() -> Void)? = {
             }
 
             // History record (text-only) — in-memory recents + persistent store.
-            appState.record(capture: capture, ocr: ocrResult, analysis: analysis)
-            HistoryStore.shared.record(
-                capture: capture,
-                text: outputText,
-                mode: capture.mode,
-                limit: appState.settings.historyEntryLimit
-            )
+            appState.record(capture: capture, ocr: ocrResult, analysis: analysis, storedText: outputText)
 
             // Success toast
             appState.pipelinePhase = .completed
+            guard appState.settings.showSuccessNotifications else { return }
             // Capture text at creation time so the closures never read stale state.
-let toastText = analysis.cleanedText
+let toastText = outputText
         let toastPlainText = pasteAsPlainText
         let toastCopy: () -> Void = {
             _ = ClipboardService.shared.copy(

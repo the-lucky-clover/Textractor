@@ -68,14 +68,14 @@ public final class AppState: ObservableObject {
 
     public func record(capture: CapturedImage,
                        ocr: OCRResult?,
-                       analysis: AIInferenceService.Analysis?) {
+                       analysis: AIInferenceService.Analysis?, storedText: String? = nil) {
         self.lastCapture = capture
         self.lastOCR = ocr
         self.lastAnalysis = analysis
         let preview = RecentCaptureEntry(
             id: capture.id,
             capturedAt: capture.capturedAt,
-            textPreview: analysis?.cleanedText ?? ocr?.joinedText ?? "",
+            textPreview: storedText ?? analysis?.cleanedText ?? ocr?.joinedText ?? "",
             mode: capture.mode,
             sentiment: analysis?.sentiment
         )
@@ -89,7 +89,7 @@ public final class AppState: ObservableObject {
         let confidence = ocr?.averageConfidence
         HistoryStore.shared.record(
             capture: capture,
-            text: analysis?.cleanedText ?? ocr?.joinedText ?? "",
+            text: storedText ?? analysis?.cleanedText ?? ocr?.joinedText ?? "",
             mode: capture.mode,
             ocrConfidence: confidence,
             limit: settings.historyEntryLimit

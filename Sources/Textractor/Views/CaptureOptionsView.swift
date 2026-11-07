@@ -12,8 +12,6 @@ struct CaptureOptionsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button("Replay welcome tour") { AppCoordinator.shared.replayOnboarding() }
-                .accessibilityIdentifier("settings.onboarding.replay")
             Button("Import from iPhone or iPad…") {
                 Task { await AppCoordinator.shared.runContinuityCameraCapture() }
             }.accessibilityIdentifier("settings.continuity")

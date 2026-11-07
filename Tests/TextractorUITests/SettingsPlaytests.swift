@@ -55,6 +55,7 @@ final class SettingsPlaytests: XCTestCase {
         XCTAssertFalse(app.buttons["onboarding.skip"].exists)
     }
     func testCameraCancellationReturnsToSettings() {
+        reveal(app.buttons["settings.continuity"])
         app.buttons["settings.continuity"].click()
         let window = app.windows["Import from iPhone or iPad"]
         XCTAssertTrue(window.waitForExistence(timeout: 5))

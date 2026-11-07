@@ -41,7 +41,9 @@ public struct SettingsView: View {
 
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 4) {
-                    CaptureOptionsView()
+                    Button("Replay welcome tour") { AppCoordinator.shared.replayOnboarding() }
+                        .accessibilityIdentifier("settings.onboarding.replay")
+                        .padding(.horizontal, 10).padding(.vertical, 8)
 
                     // Permissions at top ONLY if not yet granted — critical for capture to work
                     if !screenRecordingGranted {
@@ -101,6 +103,8 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                         .introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("table.markdown"), icon: "tablecells", isOn: windowCaptureBinding)
                         .introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
+
+                    CaptureOptionsView()
 
                     sectionLabel(T.s("section.updates")).introReveal(screenRecordingGranted ? 4 : 5, appeared: firstLoad, animate: !reduceMotion)
                     updatesBlock.introReveal(screenRecordingGranted ? 4 : 5, appeared: firstLoad, animate: !reduceMotion)
