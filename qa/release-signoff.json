@@ -1,8 +1,9 @@
 {
   "status": "blocked",
-  "tested_commit": "9d4905b538c064a0ec80dad2d069281324ca9127",
+  "tested_commit": "f6250f3ded365f956347ac034399161d77020b59",
   "evidence": [
-    "https://github.com/the-lucky-clover/Textractor/actions/runs/42366276787",
+    "https://github.com/the-lucky-clover/Textractor/actions/runs/42376263273",
+    "https://github.com/the-lucky-clover/Textractor/actions/runs/42375364762",
     "https://github.com/the-lucky-clover/Textractor/actions/runs/42365315493"
   ],
   "checks": {
@@ -23,6 +24,7 @@
     "ios_ui_playtests": "passed",
     "ios_physical_import": "pending-device",
     "ios_print_review": "pending-device",
-    "ios_search_quality": "pending-device"
+    "ios_search_quality": "pending-device",
+    "representative_ocr": "pending-corpus"
   }
 }

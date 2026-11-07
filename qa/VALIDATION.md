@@ -2,43 +2,57 @@
 
 ## Current evidence
 
-At source/test commit `9d4905b538c064a0ec80dad2d069281324ca9127`,
-[CI run 42366276787](https://github.com/the-lucky-clover/Textractor/actions/runs/42366276787)
+At source/test commit `f6250f3ded365f956347ac034399161d77020b59`,
+[CI run 42376263273](https://github.com/the-lucky-clover/Textractor/actions/runs/42376263273)
 completed successfully in all three jobs:
 
-- Python measurement/release-gate suite: **12 passed**.
+- Python measurement/release-gate suite: **12 passed**. The gate additionally requires
+  representative OCR quality evidence; synthetic smoke results alone cannot satisfy it.
 - Secret scan: **passed**.
-- macOS: **72 unit tests and 3 UI playtests passed**, standalone release build and
-  development-signature verification passed. UI coverage includes US English defaults,
-  French → US English → relaunch, skip/replay preserving French, and camera-dialog cancel.
-- OCR: **15/15 exact synthetic samples; CER 0%; p50 1041.41 ms; p95 1218.52 ms**.
+- macOS: **96 unit tests and 4 UI playtests passed**, standalone release build and
+  development-signature verification passed. This is 24 more unit tests and one more UI
+  flow than the prior 72/3 baseline. Counts are coverage inventory, not a quality score.
+- UI coverage includes US English defaults, French → US English → relaunch, onboarding
+  skip/replay preserving French, camera-dialog cancel, capture overlay activation, Escape,
+  reopening and the Cmd-L option toggle. The borderless overlay is an AX Dialog.
+- Geometry regressions cover four synthetic display arrangements at two scale factors,
+  crop conversion/rejection and keyable negative-coordinate windows. Native Carbon event
+  dispatch reaches two registered action handlers; shortcut recording, F1–F20 labels,
+  capture-intent overrides, clipboard persistence/undo/ownership, URL policy, update
+  responses, table redaction and scroll image order/bounds also pass.
+- OCR smoke corpus: **15/15 exact synthetic samples; CER 0%; p50 626.65 ms; p95 758.92 ms**.
   These are three clean cases repeated five times. They are not real-world accuracy,
-  a same-hardware baseline comparison, or evidence of meeting the reference-Mac latency target.
+  a same-hardware baseline comparison or evidence of superiority over TextSniper.
+- Separate vertical Japanese fixture: initially only `文字認識` was returned (4 of 7
+  characters); the final run returns `日本語文字認識` (7 of 7) in column order after bounded
+  original-pixel reflow. QR and Code 128 generated payload tests also pass. One fixture
+  does not certify general vertical, degraded-text or barcode accuracy.
 - iOS: build, **10 unit tests and 1 UI playtest passed**. The UI flow covers fixture import,
   review, the typo query `libary`, keyboard dismissal, export options, English (US), and
   onboarding replay/skip. Actual external sharing and Photos/Files permission flows remain
-  physical-device checks. Synthetic unit-test import took **2317.13 ms** in this simulator;
-  this single cold measurement is not a performance distribution or comparative speed claim.
-- Regression assertions cover weekday-starting messages that contain numbers and distinct
-  long messages with matching first 1,000 characters. Neither is accepted as the misleading
-  timestamp/overlap match that the earlier logic could produce.
-- Both synthetic PDF layouts (transcript and reconstructed messages), each with a source
-  appendix, were rendered and visually inspected at commit `23597d5`: four pages total,
-  visible numbering, readable black text on white, no clipped fixture content. The renderer
-  is unchanged in the final commit; its new PDF attachments and unit checks also passed.
-  Original image export matched imported bytes; source tampering stopped export.
-  This is not a physical print test.
-- Physical iPhone camera/import, VoiceOver, multi-display, representative OCR/search corpora,
-  physical printing, commercial signing and App Store name acceptance remain unverified.
+  physical-device checks. Synthetic unit-test import took **3288.34 ms** in this simulator;
+  this single cold measurement is not a latency distribution or comparative speed claim.
+- iOS regressions retain weekday-starting messages containing numbers and distinct long
+  messages sharing the first 1,000 characters. Original image export matches imported
+  bytes; source tampering stops export. PDF transcript/reconstruction and source appendix
+  checks pass. Four fixture pages were visually inspected in the earlier renderer iteration
+  at `23597d5`; that renderer is unchanged. This is not a physical print test.
+- Settings and overlay screenshots were visually inspected: the 252 pt Settings panel
+  shows English (US), and the overlay HUD has readable instructions and option states.
+  The runner displays Screen Recording permission as not granted; the overlay UI test
+  therefore establishes interaction, not actual ScreenCaptureKit extraction.
+- Physical iPhone camera/import, VoiceOver, actual multi-display capture, representative
+  OCR/search corpora, reliable scroll-overlap estimation, physical printing, commercial
+  signing and App Store name acceptance remain unverified.
 
-The final iOS print-options and review screenshots were inspected. GitHub artifacts retain
-XCTest results, screenshots, PDF fixtures, logs and benchmark measurements for 14 days.
-Documentation-only updates after this commit do not change the tested implementation.
+GitHub artifacts retain XCTest results, screenshots, PDF fixtures, logs and benchmark
+measurements for 14 days. Documentation-only updates after this commit do not change the
+tested implementation. The [parity and bug audit](PARITY_AUDIT.md) records defects, changes,
+quantification limits and remaining gates; it does not claim a total product bug count.
 
-Earlier CI runs exposed and led to corrections for retired macOS 14 runners, malformed
-secret-scan regexes, compile failures, history ordering, code-language classification,
-accessibility hit testing, onboarding placement, combined accessibility labels and search-keyboard
-dismissal in UI automation. Native evidence supersedes local grammar checks.
+Earlier runs exposed the overlay test's incorrect AX role, missing vertical text and a
+Swift type-checking limit in the new fallback. Those failures remain in CI history; the
+original exact Japanese assertion was retained and passes in the final run.
 
 ## Execute on a Mac
 
@@ -63,6 +77,10 @@ The Xcode project is generated and intentionally ignored by git. The old screens
 examples in `Sources/TextractorUITests` are not wired to a test target and are not counted
 as coverage. Executable UI tests live in `Tests/TextractorUITests`.
 
+The native workflow keeps standalone-build and UI diagnostics running after a unit-test
+failure, while preserving the failed overall result. Screenshot export has a two-minute
+timeout so cleanup cannot wait indefinitely on an incomplete XCTest bundle.
+
 UI tests use a unique preferences suite and skip normal bootstrap. They do not click
 factory reset, open external privacy settings, request a device camera, or change system
 permissions. Unit tests use isolated stores. Test success does not replace VoiceOver,
@@ -78,11 +96,16 @@ physical camera, display-topology or signing validation.
    Copy rich/plain into TextEdit; inspect exact content. Try no-text and permission-denied cases.
 4. Import a real iPhone photo and multi-page scan; verify every page and its order. Cancel
    on both devices. Test unavailable device and retry. No separate iOS app is required for this.
-5. QR/barcode: compare payload byte-for-byte; no automatic URL opening. Switch back to OCR.
+5. QR/barcode: compare payload byte-for-byte; no URL opening with the default setting.
+   Opt in to automatic links and verify only HTTP(S), at most three distinct links. Switch back to OCR.
 6. Read aloud: change speed, language and stop mid-sentence. Add three captures, undo once,
-   clear the batch, and test the capacity boundary. The batch is session-only.
+   clear/undo the batch, and test the capacity boundary. Enable persistence, relaunch,
+   disable it and verify the saved file is removed. Test owned vs unrelated clipboard Cmd-V.
 7. Capture previous region, shortcut cancellation/conflict, right-click capture and all
    Dock modes. Use two displays with different scale factors and disconnect one.
+   Place the pointer on each display before activation; test left/right/above/below,
+   full-screen apps, separate Spaces and Stage Manager. Repeat Escape and mode toggles.
+   Verify one-shot line-break/speech/barcode actions and recording Command-key combinations.
 8. Scroll capture: test repeated rows, fixed headers and slow loading. Current overlap
    algorithm is not certified. Do not sign off while text can be omitted/duplicated.
 9. History: clear with confirmation, cancel clearing, restart persistence, factory reset,

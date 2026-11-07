@@ -12,14 +12,18 @@ and existing settings/history locations retain their original identifiers for co
 - Region, window, screen and image-file extraction through Apple Vision.
 - Native Continuity Camera requestor for iPhone/iPad photos and multipage scans.
 - QR/barcode extraction, read aloud, additive clipboard with undo, previous-region capture,
-  custom capture shortcut, formatting and history.
+  9 configurable global actions, 3 overlay toggles, formatting and history.
+- Optional additive-history persistence, undo clear, owned-clipboard Cmd-V clearing,
+  optional HTTP(S) opening and explicit stable-release checks.
+- One stationary capture overlay per display, pointer-based activation and shared mode feedback.
 - BreakingDad styling within the existing 232 pt menu and 252 pt Settings widths.
 - US English defaults and preference migration; skippable four-step onboarding, replayable
   from Settings without discarding the saved language choice.
 
 The [feature matrix](qa/FEATURE_MATRIX.md) distinguishes implemented behavior from gaps.
 Scroll stitching, physical-device capture, accessibility and other release checks remain
-unfinished. Translation is explicitly unavailable and no remote update feed is configured.
+unfinished. Translation is explicitly unavailable. Release checking uses the GitHub stable-release endpoint;
+there is no automatic installer. See the [parity and bug audit](qa/PARITY_AUDIT.md).
 Full TextSniper feature parity and quantified superiority are not claimed.
 
 ## iOS
