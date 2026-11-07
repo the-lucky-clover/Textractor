@@ -116,6 +116,7 @@ sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
                 .accessibilityLabel("Version \(UpdateService.versionDescription)")
         }
         .background(Self.headerBackground)
+        .preferredColorScheme(.dark)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .frame(width: bannerWidth)  // popover hugs banner edge-to-edge
         .onAppear { appeared = true }
@@ -142,25 +143,9 @@ sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
     /// The Textractor wordmark banner pinned to the very top. A single banner —
     /// no separate text header — sized to fill the popover width with rounded
     /// corners. This is the only branding element in the popover.
-    private var bannerAspect: CGFloat { 384.0 / 1171.0 }
-    /// Desired banner image width. The banner takes the full popover content
-    /// width minus 5 points of horizontal padding on each side (total 10).
     private var bannerWidth: CGFloat { 232 }
-    /// Banner is rendered slightly larger (5%) and bled past the popover edges
-    /// so its sides fill the gaps and the top sits flush with the popover top.
-    private var bannerDisplayWidth: CGFloat { bannerWidth * 1.05 }
-    /// Height derived from the banner's natural image aspect ratio.
-    private var bannerHeight: CGFloat { bannerWidth * bannerAspect * 0.95 }
-
-    @ViewBuilder private var banner: some View {
-        if let nsImage = loadBannerImage() {
-            ShimmerBanner(image: nsImage, width: bannerDisplayWidth, height: bannerHeight * 1.05, animate: !AppCoordinator.shared.appState.settings.reduceMotion)
-                .frame(maxWidth: .infinity, alignment: .center)
-                // Bleed the banner to the popover edges: center it horizontally
-                // so it spills 5/2% on each side, and push the top to the popover
-                // top so there are no gaps above or beside the artwork.
-                .offset(x: 0, y: -(bannerDisplayWidth - bannerWidth) / 2)
-        }
+    private var banner: some View {
+        ProductBanner(width: bannerWidth, animate: !appState.settings.reduceMotion)
     }
 
     // MARK: - Helpers

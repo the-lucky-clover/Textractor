@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Textractor",
-    defaultLocalization: "en-US",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v14)
     ],
@@ -31,6 +31,7 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
+                .linkedFramework("PDFKit"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("Vision"),
                 .linkedFramework("NaturalLanguage"),
@@ -47,10 +48,7 @@ let package = Package(
         .testTarget(
             name: "TextractorTests",
             dependencies: ["Textractor"],
-            path: "Tests/TextractorTests",
-            resources: [
-                .process("Resources")
-            ]
+            path: "Tests/TextractorTests"
         )
     ]
 )

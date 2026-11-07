@@ -16,6 +16,12 @@ public struct AppSettings: Codable, Sendable {
     /// Weirdness 0% = strict, 100% = lenient / creative correction.
     public var weirdness: Double
 
+    public var recognizeBarcodes = false
+    public var readAloud = false
+    public var speechRate: Double = 0.5
+    public var additiveClipboard = false
+    public var showSuccessNotifications = true
+
     /// User-vocab correction bias — Vision language-correction will favour these tokens.
     public var customVocabulary: [String]
 
@@ -197,7 +203,7 @@ public var ocrLanguages: [String] = []
     ) {
         self.weirdness = weirdness
         self.customVocabulary = customVocabulary
-        self.uiLanguage = uiLanguage
+        self.uiLanguage = Self.normalizedLanguage(uiLanguage)
         self.localTelemetryEnabled = localTelemetryEnabled
         self.openPopoverOnCapture = openPopoverOnCapture
         self.windowCaptureAsTable = windowCaptureAsTable
@@ -230,6 +236,7 @@ public var ocrLanguages: [String] = []
     // MARK: - Codable migration
 
 private enum CodingKeys: String, CodingKey {
+        case recognizeBarcodes, readAloud, speechRate, additiveClipboard, showSuccessNotifications
         case weirdness, customVocabulary, uiLanguage, localTelemetryEnabled, openPopoverOnCapture, lastUpdateCheckAt
         case customHotkeyKeyCode, customHotkeyModifiers, customHotkeyLabel, soundEffectsEnabled
         case pasteAsPlainText, wordWrapCaptured, windowCaptureAsTable, flattenText, reduceMotion
@@ -239,19 +246,25 @@ private enum CodingKeys: String, CodingKey {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        recognizeBarcodes = try container.decodeIfPresent(Bool.self, forKey: .recognizeBarcodes) ?? false
+        readAloud = try container.decodeIfPresent(Bool.self, forKey: .readAloud) ?? false
+        speechRate = min(1, max(0, try container.decodeIfPresent(Double.self, forKey: .speechRate) ?? 0.5))
+        additiveClipboard = try container.decodeIfPresent(Bool.self, forKey: .additiveClipboard) ?? false
+        showSuccessNotifications = try container.decodeIfPresent(Bool.self, forKey: .showSuccessNotifications) ?? true
         weirdness = try container.decode(Double.self, forKey: .weirdness)
         customVocabulary = try container.decode([String].self, forKey: .customVocabulary)
-        var decodedUiLanguage = try container.decode(String.self, forKey: .uiLanguage)
+        let storedLanguage = try container.decodeIfPresent(String.self, forKey: .uiLanguage)
+        var decodedUiLanguage = storedLanguage ?? ""
         // Migration: older builds stored the OCR language list in `ocrLanguages`.
         // If `uiLanguage` is empty but legacy `ocrLanguages` has entries, promote
         // the first one so the user does not lose their language preference.
-        if decodedUiLanguage.isEmpty,
+        if storedLanguage == nil,
            let legacyLangs = try container.decodeIfPresent([String].self, forKey: .ocrLanguages),
            let first = legacyLangs.first,
            !first.isEmpty {
             decodedUiLanguage = first
         }
-        self.uiLanguage = decodedUiLanguage
+        self.uiLanguage = Self.normalizedLanguage(decodedUiLanguage)
         localTelemetryEnabled = try container.decode(Bool.self, forKey: .localTelemetryEnabled)
         openPopoverOnCapture = try container.decode(Bool.self, forKey: .openPopoverOnCapture)
         lastUpdateCheckAt = try container.decodeIfPresent(Date.self, forKey: .lastUpdateCheckAt)
@@ -284,6 +297,11 @@ private enum CodingKeys: String, CodingKey {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(recognizeBarcodes, forKey: .recognizeBarcodes)
+        try container.encode(readAloud, forKey: .readAloud)
+        try container.encode(speechRate, forKey: .speechRate)
+        try container.encode(additiveClipboard, forKey: .additiveClipboard)
+        try container.encode(showSuccessNotifications, forKey: .showSuccessNotifications)
         try container.encode(weirdness, forKey: .weirdness)
         try container.encode(customVocabulary, forKey: .customVocabulary)
         try container.encode(uiLanguage, forKey: .uiLanguage)
@@ -400,6 +418,19 @@ static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
         ("zh-Hans", "Chinese (Simplified)", "🇨🇳"),
         ("zh-Hant", "Chinese (Traditional)", "🇹🇼"),
     ]
+
+    /// Canonical picker values. Older builds used underscores, bare "en", or labels.
+    static func normalizedLanguage(_ value: String) -> String {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.isEmpty || value.lowercased() == "automatic" { return "" }
+        let normalized = value.replacingOccurrences(of: "_", with: "-").lowercased()
+        if ["en", "english", "english (us)", "english (united states)"].contains(normalized) {
+            return "en-US"
+        }
+        return ocrLanguageCatalog.first {
+            $0.code.lowercased() == normalized || $0.name.lowercased() == normalized
+        }?.code ?? ""
+    }
 
     /// Bounded range exposed in the Settings slider.
     static let historyLimitRange: ClosedRange<Int> = 10...1000

@@ -11,9 +11,9 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Textractor</string>
+    <string>Textractor Pro</string>
     <key>CFBundleDisplayName</key>
-    <string>Textractor</string>
+    <string>Textractor Pro</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -39,11 +39,11 @@
     <key>CFBundleIconName</key>
     <string>Textractor</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Textractor needs Screen Recording access to extract text from selected regions and windows on your screen. All processing is performed locally on your Mac</string>
+    <string>Textractor Pro needs Screen Recording access to extract text from selected regions and windows on your screen. All processing is performed locally on your Mac</string>
     <key>NSCameraUsageDescription</key>
-    <string>Textractor needs Camera access so Continuity Camera photos you take with your iPhone can be ingested for text extraction. All processing stays on this Mac</string>
+    <string>Textractor Pro needs Camera access so Continuity Camera photos you take with your iPhone can be ingested for text extraction. All processing stays on this Mac</string>
     <key>NSHumanReadableCopyright</key>
-    <string>© 2026 Textractor. Privacy-first, on-device text extraction</string>
+    <string>© 2026 Textractor Pro. Privacy-first, on-device text extraction</string>
     <key>LSEnvironment</key>
     <dict>
         <key>OS_ACTIVITY_MODE</key>

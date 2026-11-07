@@ -70,37 +70,18 @@ if [[ -d "Sources/Textractor/Resources" ]]; then
   done
 fi
 
-# Ad-hoc sign the bundle so Gatekeeper lets the user open it via right-click → Open
+# Include SPM resources; Bundle.module resolves this bundle beside the executable.
+for bundle in "${BIN_PATH}/"*.bundle; do
+  [[ -d "$bundle" ]] || continue
+  cp -R "$bundle" "${APP_DIR}/Contents/Resources/"
+done
+
 if command -v codesign >/dev/null 2>&1; then
-  echo "▸ Ad-hoc code-signing…"
-  codesign --force --deep --sign - "$APP_DIR" 2>/dev/null \
-    || codesign --force --sign - "$APP_DIR" 2>/dev/null \
-    || echo "  (codesign unavailable; skipping)"
+  codesign --force --deep --sign - "$APP_DIR"
+  codesign --verify --deep --strict "$APP_DIR"
 fi
 
-# Install the finished bundle into /Applications so it's available system-wide.
-# Writing there usually requires admin rights, so try a plain copy first and
-# fall back to `sudo` (which will prompt for your password). Either way the
-# build itself is already done, so a failed install never aborts the script.
-install_to_applications() {
-  local dest="/Applications/${APP_NAME}.app"
-  rm -rf "$dest" 2>/dev/null || sudo rm -rf "$dest" 2>/dev/null || true
-  if cp -R "$APP_DIR" "$dest" 2>/dev/null; then
-    echo "▸ Installed to /Applications/${APP_NAME}.app"
-  elif sudo cp -R "$APP_DIR" "$dest"; then
-    echo "▸ Installed to /Applications/${APP_NAME}.app (via sudo)"
-  else
-    echo "  (Skipped /Applications install — copy ${APP_DIR} there manually if you want.)"
-  fi
-}
-install_to_applications
-
-echo ""
-echo "✓ Built ${APP_DIR}"
-echo ""
-echo "Run it with:"
-echo "  open '/Applications/${APP_NAME}.app'"
-echo "  # or: open '${ROOT}/${APP_DIR}'"
-echo ""
-echo "Or install with:"
-echo "  ./install.sh"
+# Build never installs or deletes an installed app. Installation is explicit.
+echo "Built ${APP_DIR} (development signature; not notarized)."
+echo "Run: open '${ROOT}/${APP_DIR}'"
+echo "Install separately: ./install.sh"

@@ -18,6 +18,11 @@ public func loadBannerImage() -> NSImage? {
        let img = NSImage(contentsOf: url) {
         return img
     }
+    #if SWIFT_PACKAGE
+    if let url = Bundle.module.url(forResource: "textractor-type", withExtension: "png") {
+        return NSImage(contentsOf: url)
+    }
+    #endif
     return nil
 }
 
@@ -36,6 +41,7 @@ public struct ShimmerBanner: View {
 
     /// When `false`, the specular sweep is skipped (reduce-motion / calm UI).
     public var animate: Bool = true
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     public init(image: NSImage, width: CGFloat, height: CGFloat, animate: Bool = true) {
         self.image = image
@@ -52,8 +58,20 @@ public struct ShimmerBanner: View {
                     .allowsHitTesting(false)
             )
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .onAppear {
-                if animate { scheduleNext() }
+            .task(id: animate && !systemReduceMotion) {
+                shimmering = false
+                guard animate && !systemReduceMotion else { return }
+                while !Task.isCancelled {
+                    do {
+                        try await Task.sleep(for: .seconds(Double.random(in: 6...14)))
+                        try Task.checkCancellation()
+                        phase = 0
+                        shimmering = true
+                        withAnimation(.easeInOut(duration: 1.15)) { phase = 1 }
+                        try await Task.sleep(for: .seconds(1.2))
+                        shimmering = false
+                    } catch { return }
+                }
             }
     }
 
@@ -90,24 +108,37 @@ public struct ShimmerBanner: View {
         }
     }
 
-    /// Schedule the next sweep at a random, rare interval so it feels organic.
-    private func scheduleNext() {
-        let delay = Double.random(in: 6.0...14.0)
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            triggerSweep()
-            scheduleNext()
-        }
-    }
+ }
 
-    private func triggerSweep() {
-        phase = 0
-        shimmering = true
-        withAnimation(.easeInOut(duration: 1.15)) {
-            phase = 1
+/// Both existing header widths share the same inset, wordmark and embossed Pro badge.
+struct ProductBanner: View {
+    let width: CGFloat
+    let animate: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                if let image = loadBannerImage() {
+                    ShimmerBanner(image: image, width: width - 68, height: 62, animate: animate)
+                        .accessibilityHidden(true)
+                } else {
+                    Text("Textractor").font(.title3.bold()).foregroundStyle(BreakingDad.chalk)
+                }
+                Text("PRO")
+                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                    .tracking(1)
+                    .foregroundStyle(BreakingDad.chalk)
+                    .padding(.horizontal, 7).padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(BreakingDad.deepGreen))
+                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(BreakingDad.toxicGreen.opacity(0.55)))
+                    .shadow(color: .black.opacity(0.25), radius: 2, y: 2)
+            }
+            .frame(width: width, height: 76)
+            Rectangle().fill(BreakingDad.gradient).frame(height: 1).opacity(0.35)
         }
-        // Fade the band out just after it clears the right edge.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            withAnimation(.easeOut(duration: 0.25)) { shimmering = false }
-        }
+        .frame(width: width)
+        .clipped()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Textractor Pro")
     }
 }

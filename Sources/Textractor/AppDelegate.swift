@@ -10,6 +10,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var splashController: SplashWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["TEXTRACTOR_UI_TEST_SUITE"]?.hasPrefix("com.textractor.uitest.") == true {
+            NSApp.setActivationPolicy(.regular)
+            SettingsWindowController.shared.show(appState: AppCoordinator.shared.appState)
+            return
+        }
+        #endif
         // Make sure we're a real accessory app (no Dock icon).
         NSApp.setActivationPolicy(.accessory)
 

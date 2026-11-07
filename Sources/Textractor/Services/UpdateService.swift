@@ -21,10 +21,7 @@ public final class UpdateService {
     }
 
     public static var bundleVersion: String {
-        // Build number is the count of launches since inception, not the static
-        // CFBundleVersion — so "build N" tracks how many builds the user has
-        // progressed through.
-        "\(BuildCounter.shared.count)"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
     }
 
     /// Human-readable version string, e.g. `v2.0.0 (build 42)`.
@@ -44,11 +41,11 @@ public final class UpdateService {
     @MainActor
     public func presentUpToDateAlert() {
         let alert = NSAlert()
-        alert.messageText = "You're up to date"
+        alert.messageText = Self.hasRemoteChannel ? "Update status" : "Installed version"
         if Self.hasRemoteChannel {
-            alert.informativeText = "Textractor \(Self.versionDescription) is the latest version."
+            alert.informativeText = "Textractor Pro \(Self.versionDescription)."
         } else {
-            alert.informativeText = "Textractor \(Self.versionDescription) is the latest local build. " +
+            alert.informativeText = "Textractor Pro \(Self.versionDescription) is installed. " +
                 "No remote update channel is configured."
         }
         alert.alertStyle = .informational

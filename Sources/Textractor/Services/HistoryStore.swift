@@ -73,6 +73,15 @@ public final class HistoryStore: ObservableObject {
         }
     }
 
+    /// File-backed test store, also useful for migration verification.
+    init(directory: URL) {
+        self.directory = directory
+        self.metadataURL = directory.appendingPathComponent("history.json")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        load()
+        recomputeSize()
+    }
+
     // MARK: - Persistence
 
     private func load() {

@@ -116,7 +116,17 @@ public final class AppCoordinator: ObservableObject {
         )
 
 
-        LoggerService.shared.info("Textractor bootstrap complete")
+        if !settingsStore.hasCompletedOnboarding { replayOnboarding() }
+        LoggerService.shared.info("Textractor Pro bootstrap complete")
+    }
+
+    public func replayOnboarding() {
+        OnboardingWindowController.shared.show { [weak self] code in
+            guard let self else { return }
+            if let code { self.appState.updateSettings { $0.uiLanguage = code } }
+            self.settingsStore.hasCompletedOnboarding = true
+            self.settingsStore.flushPendingPersist()
+        }
     }
 
     // MARK: - Capture flows
@@ -252,19 +262,33 @@ public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
     /// returned image is ingested and run through the same OCR path.
     @MainActor
     public func runContinuityCameraCapture() async {
+        guard !appState.isCapturing else { return }
         appState.isCapturing = true
+        defer { appState.isCapturing = false }
         appState.pipelinePhase = .capturing
         do {
-            if #available(macOS 13.0, *) {
-                let capture = try await ScreenshotService.shared.captureFromContinuityCamera()
+            let captures = try await ScreenshotService.shared.captureFromContinuityCamera()
+            var pages: [String] = []
+            for capture in captures {
+                CaptureExtras.shared.beginCapture()
                 await runPipeline(for: capture, perCaptureLanguage: nil)
-            } else {
-                throw ScreenshotError.continuityCameraNotAvailable
+                guard let text = CaptureExtras.shared.lastDeliveredText else {
+                    throw ScreenshotError.processingFailed("Page \(pages.count + 1) of \(captures.count) could not be extracted. Review the scan and retry.")
+                }
+                pages.append(text)
             }
+            if !appState.settings.additiveClipboard {
+                guard ClipboardService.shared.copy(pages.joined(separator: "\n\n"), plainTextOnly: true) else {
+                    throw ScreenshotError.processingFailed("Could not copy the scanned pages.")
+                }
+            }
+            appState.pipelinePhase = .completed
+            appState.toast = ToastState(kind: .info, headline: "Device import complete", body: "\(pages.count) of \(captures.count) pages copied.")
+        } catch is CancellationError {
+            appState.pipelinePhase = .idle
         } catch {
             handleFailure(error: error, context: "continuityCamera")
         }
-        appState.isCapturing = false
     }
 
     // MARK: - Core pipeline helpers
@@ -469,6 +493,8 @@ return await OCRService.shared.recognizeText(
         piiCount: Int,
         telemetryEnabled: Bool
     ) {
+        guard appState.settings.showSuccessNotifications else { return }
+
         appState.pipelinePhase = .completed
         let toastText = analysis.cleanedText
         let toastCopy: () -> Void = {
@@ -599,6 +625,27 @@ let onFormatCodeBlock: (() -> Void)? = {
             return
         }
 
+        if appState.settings.recognizeBarcodes {
+            do {
+                let payloads = try await Task.detached(priority: .userInitiated) {
+                    try BarcodeRecognition.recognize(cgImage)
+                }.value
+                guard !payloads.isEmpty else {
+                    throw ScreenshotError.processingFailed("No QR code or barcode found. Turn off barcode mode to capture text.")
+                }
+                let raw = payloads.joined(separator: "\n")
+                let report = SensitiveDataDetector.scan(raw)
+                let output = appState.settings.piiRedactionEnabled ? SensitiveDataDetector.scrub(raw, report: report) : raw
+                guard CaptureExtras.shared.deliver(output, settings: appState.settings) else {
+                    throw ScreenshotError.processingFailed("Could not copy barcode data. Clear the additive batch if it is full.")
+                }
+                appState.record(capture: capture, ocr: nil, analysis: nil)
+                appState.pipelinePhase = .completed
+                appState.toast = ToastState(kind: .info, headline: "Barcode copied", body: "\(payloads.count) distinct code(s)")
+            } catch { handleFailure(error: error, context: "barcode") }
+            return
+        }
+
         // Honor the user's chosen language. Empty = Automatic (english-first
         // multi-language superset); non-empty = that exact language for both
         // UI and OCR.
@@ -689,11 +736,7 @@ let onFormatCodeBlock: (() -> Void)? = {
 
             // Clipboard write
             appState.pipelinePhase = .clipboard
-            let copyOk = ClipboardService.shared.copy(
-                outputText,
-                attributed: attributed,
-                plainTextOnly: pasteAsPlainText
-            )
+            let copyOk = CaptureExtras.shared.deliver(outputText, attributed: attributed, settings: appState.settings)
             SoundManager.playCaptureComplete()
 
             // Post-capture translation (Snip-to-translate)

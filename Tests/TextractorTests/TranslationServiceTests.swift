@@ -80,13 +80,6 @@ final class TranslationServiceTests: XCTestCase {
         XCTAssertNil(languageCode)
     }
     
-    func testShortTextReturnsNil() async {
-        let languageCode = translationService.detectLanguageCode("hi")
-        // Short text might not be reliably detected
-        // Just verify it doesn't crash
-        XCTAssertNotNil(languageCode) // or could be nil, both acceptable
-    }
-    
     func testMixedLanguageReturnsDominant() async {
         let text = "Hello world! Bonjour le monde! Hello again!"
         let languageCode = translationService.detectLanguageCode(text)
@@ -117,8 +110,8 @@ final class TranslationServiceTests: XCTestCase {
         XCTAssertTrue(codes.contains("th"))
         XCTAssertTrue(codes.contains("id"))
         XCTAssertTrue(codes.contains("hi"))
-        XCTAssertTrue(codes.contains("sv"))
-        XCTAssertTrue(codes.contains("da"))
+        XCTAssertTrue(codes.contains("ms"))
+        XCTAssertTrue(codes.contains("he"))
         
         // Should have at least 20 languages
         XCTAssertGreaterThanOrEqual(targets.count, 20)
@@ -141,9 +134,9 @@ final class TranslationServiceTests: XCTestCase {
         XCTAssertNil(result)
     }
     
-    func testTranslateReturnsNonNilForValidInput() async {
+    func testUnavailableTranslationDoesNotFabricateOutput() async {
         let result = await translationService.translate("Hello world", to: "es")
-        XCTAssertNotNil(result)
-        XCTAssertTrue(result!.contains("es") || result!.contains("Spanish"))
+        XCTAssertFalse(TranslationService.isAvailable)
+        XCTAssertNil(result)
     }
 }

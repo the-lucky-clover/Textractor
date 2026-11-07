@@ -1,5 +1,5 @@
 /*
- en-US localization for Textractor
+ en-US localization for Textractor Pro
  Generated from Localization.swift
 */
 
@@ -39,11 +39,11 @@
 "history.empty.hint" = "Captured text and screenshots will appear here.";
 "reduce.motion" = "Reduce motion";
 "telemetry" = "Local telemetry log";
-"about.tagline" = "Textractor · on-device OCR";
+"about.tagline" = "Textractor Pro · on-device OCR";
 "about.sub" = "Built for your privacy and your eyes.";
 "about.by" = "by Lucky Clover";
 "about.made_with" = "Made with";
-"about.version" = "Textractor %@";
+"about.version" = "Textractor Pro %@";
 "toast.copied" = "Copied to clipboard";
 "toast.ready" = "Ready to paste ⌘V";
 "toast.copy_failed" = "Copy failed";
@@ -66,7 +66,7 @@
 "toast.share_airdrop" = "AirDrop";
 
 "toast.screen_permission_title" = "Screen Recording access needed";
-"toast.screen_permission_body" = "Textractor needs Screen Recording to read text from your screen. Nothing is sent anywhere — every capture is processed privately on this Mac. Allow access, then try again.";
+"toast.screen_permission_body" = "Textractor Pro needs Screen Recording to read text from your screen. Nothing is sent anywhere — every capture is processed privately on this Mac. Allow access, then try again.";
 "toast.open_settings" = "Open Settings";
 "menu.capture" = "Capture";
 "menu.region" = "Region";
@@ -87,7 +87,7 @@
 "shortcut.history" = "⌘H  Open History";
 "shortcut.settings" = "⌘,  Settings";
 "shortcut.quit" = "⌘Q  Quit";
-"onboarding.tour.title" = "Meet Textractor";
+"onboarding.tour.title" = "Meet Textractor Pro";
 "onboarding.tour.subtitle" = "Capture text on your screen with one keyboard shortcut.\n\nPrivacy-first • Works offline • No data ever leaves your device";
 "onboarding.tap_anywhere" = "Tap this anywhere";
 "onboarding.pick_capture_paste" = "Pick → capture → text on your clipboard";
@@ -109,22 +109,22 @@
 "onboarding.language.top" = "TOP";
 "onboarding.language.skip" = "Skip →";
 "onboarding.permissions.title" = "Permissions";
-"onboarding.permissions.subtitle" = "Textractor needs Screen Recording to capture text on your screen.\nNo network access requested. No data leaves your Mac.";
+"onboarding.permissions.subtitle" = "Textractor Pro needs Screen Recording to capture text on your screen.\nNo network access requested. No data leaves your Mac.";
 "onboarding.permission.screen_recording.title" = "Screen Recording";
 "onboarding.permission.screen_recording.detail" = "Required to capture regions, windows, and the full screen.";
-"onboarding.permissions.manual_hint" = "After opening System Settings, scroll to **Privacy & Security → Screen Recording**, find Textractor, and flip the switch ON. Then come back here.";
+"onboarding.permissions.manual_hint" = "After opening System Settings, scroll to **Privacy & Security → Screen Recording**, find Textractor Pro, and flip the switch ON. Then come back here.";
 "onboarding.back" = "← Back";
 "onboarding.done" = "Done";
 "onboarding.screen_recording_granted" = "Screen Recording granted — nice!";
 "onboarding.open_system_settings" = "Open System Settings";
-"onboarding.window.title" = "Welcome to Textractor";
+"onboarding.window.title" = "Welcome to Textractor Pro";
 "settings.about.replay_onboarding" = "Replay Onboarding";
 "settings.dock.title" = "App Presence";
 "settings.dock.menuBarOnly" = "Menu Bar Only";
 "settings.dock.dockOnly" = "Dock Only";
 "settings.dock.both" = "Both";
 "section.dock" = "App Presence";
-"capture.overlay.title" = "Textractor Capture";
+"capture.overlay.title" = "Textractor Pro Capture";
 "capture.overlay.region_mode" = "Region  •  drag";
 "capture.overlay.window_mode" = "Window  •  click";
 "capture.overlay.freeform" = "Freeform";
@@ -148,7 +148,7 @@
 "settings.open.log.folder" = "Open Log Folder";
 "settings.ahoy.toggle" = "Ahoy Mode";
 "settings.ahoy.help" = "Decorates toasts and menu copy with seafarin' flavor. OCR text stays clean.";
-"settings.factory.reset" = "Reset Textractor to factory defaults…";
+"settings.factory.reset" = "Reset Textractor Pro to factory defaults…";
 "settings.factory.help" = "Wipes settings, history, custom vocab, and cached captures. You'll need to re-grant permissions in System Settings.";
 "settings.factory.confirm.title" = "Reset to factory defaults?";
 "settings.factory.confirm.body" = "This wipes all settings, history, custom vocabulary, and cached captures. Permissions must be re-granted in System Settings (macOS does not let apps re-prompt themselves). This cannot be undone.";
@@ -162,7 +162,7 @@
 "toast.open_url" = "Open URL";
 "toast.compose_email" = "Compose Email";
 "toast.format_code_block" = "Format Code Block";
-"auto.save.captures" = "Auto-save captures to ~/Pictures/Textractor Captures/";
+"auto.save.captures" = "Auto-save captures to ~/Pictures/Textractor Pro Captures/";
 "toast.undo" = "Undo";
 "toast.undone" = "Undone";
 "toast.undone.body" = "Last capture removed from history.";
@@ -176,3 +176,8 @@
 "onboarding.feature.undo.detail" = "One click to remove last capture from history and restore clipboard.";
 "onboarding.feature.translate.title" = "Instant Translate";
 "onboarding.feature.translate.detail" = "Quick action to translate captured text to your target language.";
+
+"language.automatic.help" = "Automatic recognition; system UI language.";
+"language.selected.help" = "Selected: %@ · saved on this Mac";
+"translation.unavailable" = "Translation is not available in this build. Your extracted text stays unchanged.";
+"history.clear.confirm" = "Delete all capture history? This cannot be undone.";

@@ -291,7 +291,7 @@ public final class ScreenshotService: NSObject {
 
     /// Load an arbitrary image file (PNG/JPG/HEIC) — used by drag-and-drop,
     /// "Open File…", and Continuity-Camera driven workflows.
-    public func captureFromFile(at url: URL) async throws -> CapturedImage {
+    public func captureFromFile(at url: URL, origin: CapturedImage.Origin = .file) async throws -> CapturedImage {
         LoggerService.shared.info("Loading image file: \(url.path)")
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             throw ScreenshotError.fileLoadFailed(url)
@@ -306,7 +306,7 @@ public final class ScreenshotService: NSObject {
         return try writeToDisk(
             img,
             mode: .crosshair,
-            origin: .fullscreen,
+            origin: origin,
             rect: CGRect(x: 0, y: 0, width: w, height: h),
             screenIndex: 0
         )
@@ -328,48 +328,20 @@ public final class ScreenshotService: NSObject {
         )
     }
 
-    /// Check if Continuity Camera is available on this Mac with a nearby iOS device.
-    @available(macOS 13.0, *)
-    public func isContinuityCameraAvailable() async -> Bool {
-        // Check if there's at least one iOS device nearby that supports Continuity Camera
-        // We use a lightweight check by trying to enumerate devices
-        // For now, return true on macOS 13+ as the system handles the availability UI
-        return true
-    }
-
-    // MARK: - Continuity Camera Support
-
-    /// Capture an image using the Continuity Camera (iPhone/iPad as webcam).
-    /// macOS presents a native system sheet when an iPhone is held near the
-    /// computer asking the user to "Take Photo" or "Scan Documents".
-    /// On older macOS versions or without a nearby device, throws.
-    @available(macOS 13.0, *)
+    /// Receive native AppKit device imports, including every page of a scan.
     @MainActor
-    public func captureFromContinuityCamera() async throws -> CapturedImage {
-        LoggerService.shared.info("Starting Continuity Camera capture")
-
-        // macOS exposes Continuity Camera via ImageCaptureCore's ICCameraDevice;
-        // we rely on the system-provided `IKDeviceBrowserViewController`-style
-        // file dialog that automatically surfaces nearby iOS devices when the
-        // user opens an NSOpenPanel on a supported version.
-        let openPanel = NSOpenPanel()
-        openPanel.canChooseFiles = true
-        openPanel.canChooseDirectories = false
-        openPanel.allowsMultipleSelection = false
-        openPanel.allowedContentTypes = [.image]
-        openPanel.prompt = "Insert from iPhone"
-
-        let response = await withCheckedContinuation { continuation in
-            openPanel.begin { response in
-                continuation.resume(returning: response)
+    public func captureFromContinuityCamera() async throws -> [CapturedImage] {
+        let urls = try await ContinuityCameraController.shared.capture()
+        defer {
+            if let directory = urls.first?.deletingLastPathComponent() {
+                try? FileManager.default.removeItem(at: directory)
             }
         }
-
-        guard response == .OK, let url = openPanel.url else {
-            throw ScreenshotError.continuityCameraNotAvailable
+        var captures: [CapturedImage] = []
+        for url in urls {
+            captures.append(try await captureFromFile(at: url, origin: .continuityCamera))
         }
-
-        return try await ingestFile(at: url, origin: .continuityCamera)
+        return captures
     }
 
     /// Capture frames from a video URL at regular intervals and run OCR on each.

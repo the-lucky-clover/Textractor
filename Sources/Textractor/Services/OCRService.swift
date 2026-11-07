@@ -36,14 +36,9 @@ public final class OCRService {
         var revisionsUsed: [(String, Int)] = []
         var observations: [TextObservation] = []
 
-        // English / Automatic mode uses a single English recogniser
-        // ("en-US") so Vision's language correction stays within the English
-        // lexicon and never substitutes words from other scripts — that cross-
-        // language substitution was the source of "mangled" OCR. The 14-language
-        // superset is only used when a non-English language is explicitly chosen.
-        let isEnglishMode = preferredLanguages.isEmpty
-            || preferredLanguages.first?.lowercased().hasPrefix("en") == true
-        let ocrLanguages: [String] = isEnglishMode ? ["en-US"] : preferredLanguages
+        let isEnglishMode = preferredLanguages.count == 1
+            && preferredLanguages[0].lowercased().hasPrefix("en")
+        let ocrLanguages = preferredLanguages.isEmpty ? Self.automaticLanguages() : preferredLanguages
 
         // Step 1: accurate, baseline threshold derived from weirdness
         let trial1 = await Task.detached(priority: .userInitiated) { () -> [TextObservation] in
@@ -52,7 +47,7 @@ public final class OCRService {
                 level: .accurate,
                 languages: ocrLanguages,
                 minTextHeight: Self.threshold(for: currentWeirdness),
-                vocab: []
+                vocab: customVocabulary
             )
         }.value
         observations = trial1
@@ -77,7 +72,7 @@ public final class OCRService {
                     level: .accurate,
                     languages: ocrLanguages,
                     minTextHeight: Self.threshold(for: currentWeirdness),
-                    vocab: [],
+                    vocab: customVocabulary,
                     disableLanguageCorrection: true
                 )
             }.value
@@ -104,7 +99,7 @@ public final class OCRService {
                     level: .fast,
                     languages: ocrLanguages,
                     minTextHeight: 0.0,
-                    vocab: []
+                    vocab: customVocabulary
                 )
             }.value
             revisionsUsed.append(("fast", 1))
@@ -184,6 +179,7 @@ public final class OCRService {
         // substituting identifiers, paths and operators. The dense-text path
         // (English captures only) turns it off.
         request.usesLanguageCorrection = !disableLanguageCorrection
+        request.automaticallyDetectsLanguage = (languages?.count ?? 0) != 1
         if let languages, !languages.isEmpty {
             // Vision's .fast level only reliably handles 1-2 languages, so it
             // always gets a single language. .accurate can handle more, but the
@@ -210,7 +206,10 @@ public final class OCRService {
             } else {
                 effective = languages
             }
-            request.recognitionLanguages = effective
+            let supported = (try? request.supportedRecognitionLanguages()) ?? ["en-US"]
+            let supportedSet = Set(supported)
+            let filtered = effective.filter { supportedSet.contains($0) }
+            if !filtered.isEmpty { request.recognitionLanguages = filtered }
         }
         request.minimumTextHeight = Float(minTextHeight)
         if !vocab.isEmpty {
@@ -302,11 +301,13 @@ public final class OCRService {
     /// `Locale.preferredLanguages` the user has, deduped, preserving order so
     /// the leading English code wins for English-only text.
     static func automaticLanguages() -> [String] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        let supported = (try? request.supportedRecognitionLanguages()) ?? ["en-US"]
         var seen = Set<String>()
         var ordered: [String] = []
-        for code in automaticLanguageCatalog + Locale.preferredLanguages {
-            let key = code.lowercased()
-            if seen.insert(key).inserted { ordered.append(code) }
+        for code in ["en-US"] + Locale.preferredLanguages + supported {
+            if supported.contains(code), seen.insert(code).inserted { ordered.append(code) }
         }
         return ordered
     }

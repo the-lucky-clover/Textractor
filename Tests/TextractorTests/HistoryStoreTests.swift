@@ -147,18 +147,18 @@ final class HistoryStoreTests: XCTestCase {
     
     // MARK: - Persistence
     
-    func testSaveAndLoad() {
-        let capture = CapturedImage(id: UUID(), mode: .crosshair, origin: .hotkey, rect: .zero, fileURL: URL(fileURLWithPath: "/tmp/test.png"), capturedAt: Date(), screenIndex: 0)
-        historyStore.record(capture: capture, text: "Test", mode: .crosshair, limit: 100)
-        
-        // Create new store instance (simulates app restart)
-        let newStore = HistoryStore(inMemory: true)
-        
-        // In-memory store doesn't persist, so this tests the API
-        // Real persistence would be tested with a file-backed store
-        XCTAssertTrue(true) // Placeholder for actual persistence test
+    func testSaveAndLoad() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = HistoryStore(directory: directory)
+        let capture = CapturedImage(mode: .crosshair, origin: .file, rect: .zero,
+                                    fileURL: directory.appendingPathComponent("test.png"))
+        original.record(capture: capture, text: "Persisted – Unicode ✓", mode: .crosshair, limit: 100)
+        let reopened = HistoryStore(directory: directory)
+        XCTAssertEqual(reopened.records.count, 1)
+        XCTAssertEqual(reopened.records.first?.textPreview, "Persisted – Unicode ✓")
     }
-    
+
     // MARK: - CaptureMode
     
     func testRecordsCaptureMode() {

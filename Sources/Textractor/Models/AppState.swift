@@ -39,13 +39,11 @@ public final class AppState: ObservableObject {
 
     public init(settingsStore: SettingsStore) {
         self.settingsStore = settingsStore
-        self.settings = settingsStore.current
+        self.settings = settingsStore.currentettingsStore.current
         // Re-publish settings changes to the UI when they are written elsewhere.
-        settingsStore.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in
-                guard let self else { return }
-                self.settings = self.settingsStore.current
+        settingsStore.$current
+            .sink { [weak self] settings in
+                self?.settings = settings
             }
             .store(in: &cancellables)
     }
@@ -56,7 +54,7 @@ public final class AppState: ObservableObject {
         var s = settingsStore.current
         mutate(&s)
         settingsStore.update(s)
-        self.settings = s
+        self.settings = settingsStore.current
     }
 
     /// Resets every setting on `AppSettings` back to its factory default.
