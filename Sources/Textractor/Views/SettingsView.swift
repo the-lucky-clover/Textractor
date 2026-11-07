@@ -314,6 +314,10 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                 .foregroundStyle(BreakingDad.chalk)
             Picker(T.s("language"), selection: languageBinding) {
                 Text(T.s("language.automatic")).tag("")
+                if !appState.settings.uiLanguage.isEmpty,
+                   !AppSettings.availableOCRLanguages.contains(where: { $0.code == appState.settings.uiLanguage }) {
+                    Text(appState.settings.uiLanguage + " (unavailable on this Mac)").tag(appState.settings.uiLanguage).disabled(true)
+                }
                 ForEach(AppSettings.availableOCRLanguages, id: \.code) { loc in
                     Text(loc.name).tag(loc.code)
                 }

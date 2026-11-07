@@ -36,8 +36,10 @@ final class ParityRegressionTests: XCTestCase {
     @MainActor func testBorderlessOverlayAcceptsSecondaryFrameAndKeyboard() {
         _ = NSApplication.shared
         let frame = CGRect(x: -1920, y: 900, width: 1920, height: 1080)
-        let window = CaptureOverlayWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: true)
+        let window = CaptureOverlayWindow(frame: frame)
         XCTAssertTrue(window.canBecomeKey)
+        XCTAssertTrue(window.collectionBehavior.contains(.canJoinAllApplications))
+        XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAuxiliary))
         XCTAssertEqual(window.constrainFrameRect(frame, to: nil), frame)
         window.isReleasedWhenClosed = false; window.close()
     }
@@ -159,6 +161,53 @@ final class ParityRegressionTests: XCTestCase {
         XCTAssertTrue(extras.batch.entries.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
         XCTAssertNil(extras.lastDeliveredText)
+    }
+
+    @MainActor func testCarbonDispatchReachesBothRegisteredActions() async throws {
+        _ = NSApplication.shared
+        let first = HotkeyManager(id: 100), second = HotkeyManager(id: 101)
+        defer { first.unregister(); second.unregister() }
+        let firstFired = expectation(description: "First action routed")
+        let secondFired = expectation(description: "Second action routed")
+        first.onHotkey = { firstFired.fulfill() }; second.onHotkey = { secondFired.fulfill() }
+        let modifiers = UInt32(cmdKey | controlKey | optionKey)
+        XCTAssertTrue(first.register(keyCode: UInt32(kVK_ANSI_1), modifiers: modifiers, label: "test1").ok)
+        XCTAssertTrue(second.register(keyCode: UInt32(kVK_ANSI_2), modifiers: modifiers, label: "test2").ok)
+        for id in [UInt32(100), UInt32(101)] {
+            var event: EventRef?
+            XCTAssertEqual(CreateEvent(nil, OSType(kEventClassKeyboard), UInt32(kEventHotKeyPressed), 0, EventAttributes(0), &event), noErr)
+            let value = try XCTUnwrap(event)
+            var hotkey = EventHotKeyID(signature: 0x54524332, id: id)
+            XCTAssertEqual(SetEventParameter(value, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), MemoryLayout<EventHotKeyID>.size, &hotkey), noErr)
+            XCTAssertEqual(SendEventToEventTarget(value, GetApplicationEventTarget()), noErr)
+            ReleaseEvent(value)
+        }
+        await fulfillment(of: [firstFired, secondFired], timeout: 3)
+    }
+    @MainActor func testCommandShortcutRecordingConsumesMenuEquivalentAndCancelRestores() {
+        _ = NSApplication.shared
+        let button = ShortcutRecorder.RecorderButton(title: "Original", target: nil, action: nil)
+        var received: UInt32?
+        button.onRecord = { code, _, _ in received = code; return nil }
+        button.beginRecording()
+        let commandW = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                       windowNumber: 0, context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: UInt16(kVK_ANSI_W))!
+        XCTAssertTrue(button.performKeyEquivalent(with: commandW))
+        XCTAssertEqual(received, UInt32(kVK_ANSI_W))
+        XCTAssertFalse(button.recording)
+        button.title = "Saved"; button.beginRecording()
+        let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                     windowNumber: 0, context: nil, characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}", isARepeat: false, keyCode: UInt16(kVK_Escape))!
+        button.keyDown(with: escape)
+        XCTAssertEqual(button.title, "Saved"); XCTAssertFalse(button.recording)
+    }
+    func testOverlaySessionSharesModeAcrossDisplayConsumers() {
+        let session = CaptureOverlaySession(mode: .crosshair)
+        let secondDisplay = session
+        session.mode = .window
+        XCTAssertEqual(secondDisplay.mode, .window)
+        secondDisplay.status = "Line breaks: off"
+        XCTAssertEqual(session.status, "Line breaks: off")
     }
 
 }

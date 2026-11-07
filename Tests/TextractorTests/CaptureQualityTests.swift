@@ -75,4 +75,33 @@ final class CaptureQualityTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try data.write(to: directory.appendingPathComponent("ocr-measurements.json"), options: .atomic)
     }
+    func testVerticalJapaneseImageThroughVision() async throws {
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 600, pixelsHigh: 700,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let context = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: bitmap))
+        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = context
+        NSColor.white.setFill(); NSRect(x: 0, y: 0, width: 600, height: 700).fill()
+        let font = NSFont(name: "HiraginoSans-W3", size: 64) ?? NSFont.systemFont(ofSize: 64)
+        for (text, x) in [("日本語", CGFloat(400)), ("文字認識", CGFloat(160))] {
+            for (index, character) in text.enumerated() {
+                (String(character) as NSString).draw(at: NSPoint(x: x, y: 540 - CGFloat(index) * 90),
+                    withAttributes: [.font: font, .foregroundColor: NSColor.black])
+            }
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        let image = try XCTUnwrap(bitmap.cgImage)
+        let result = await OCRService.shared.recognizeText(in: image, preferredLanguages: ["ja-JP"])
+        print("VERTICAL_JAPANESE_OBSERVATIONS=\(result.rawObservations.map { ($0.text, $0.boundingBox) })")
+        let compact = result.joinedText.components(separatedBy: .whitespacesAndNewlines).joined()
+        XCTAssertEqual(compact, "日本語文字認識")
+    }
+    func testCode128PayloadIsExact() throws {
+        let payload = "ABC-123456"
+        let filter = try XCTUnwrap(CIFilter(name: "CICode128BarcodeGenerator"))
+        filter.setValue(Data(payload.utf8), forKey: "inputMessage")
+        let image = try XCTUnwrap(filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 3, y: 3)))
+        let raster = try XCTUnwrap(CIContext().createCGImage(image, from: image.extent))
+        XCTAssertEqual(try BarcodeRecognition.recognize(raster), [payload])
+    }
+
 }

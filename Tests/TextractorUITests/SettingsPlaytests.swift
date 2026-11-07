@@ -92,7 +92,7 @@ final class SettingsPlaytests: XCTestCase {
         let capture = app.buttons["settings.capture.test"]
         reveal(capture)
         capture.click()
-        let overlay = app.windows["Capture display 1"]
+        let overlay = app.dialogs["capture.display.0"]
         XCTAssertTrue(overlay.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(overlay.frame.width, 500)
         let attachment = XCTAttachment(screenshot: app.screenshot())
@@ -106,6 +106,7 @@ final class SettingsPlaytests: XCTestCase {
         capture.click()
         XCTAssertTrue(overlay.waitForExistence(timeout: 5))
         app.typeKey("l", modifierFlags: .command)
+        XCTAssertTrue(textValue(app.staticTexts["capture.status"]).contains("Line breaks: off"))
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertFalse(overlay.exists)
     }

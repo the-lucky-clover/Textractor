@@ -26,6 +26,7 @@ public final class AppCoordinator: ObservableObject {
   private var captureWindows: [NSWindow] = []
   private var captureKeyboardMonitor: Any?
   private var captureIntent = CaptureIntent()
+  private var captureSession: CaptureOverlaySession?
 
   /// When `true`, the next window selected by the overlay runs through
   /// `ScreenshotService.captureWindowWithAutoScroll` instead of plain window
@@ -56,8 +57,11 @@ public final class AppCoordinator: ObservableObject {
                 self.handleDockPresenceChange(presence)
             }
         }
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.dismissCaptureOverlay() }
+        }
     }
-    
+
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
@@ -861,7 +865,7 @@ let toastText = outputText
                         capturedAt: capture.capturedAt,
                         screenIndex: capture.screenIndex
                     )
-                    Task { await self.runPipeline(for: retryCapture, perCaptureLanguage: nil) }
+                    Task { await self.runPipeline(for: retryCapture, perCaptureLanguage: perCaptureLanguage, intent: intent) }
                 },
                 cancel: { [weak self] in
                     guard let self else { return }
@@ -955,7 +959,13 @@ let toastText = outputText
 
     // MARK: - Capture overlay window
 
+    private func captureStatus() -> String {
+        let settings = captureIntent.applying(to: appState.settings)
+        return "Line breaks: \(settings.flattenText ? "off" : "on") · Additive: \(settings.additiveClipboard ? "on" : "off") · Speech: \(settings.readAloud ? "on" : "off")"
+    }
+
     public func perform(_ action: CaptureAction) {
+        defer { captureSession?.status = captureStatus() }
         switch action {
         case .capture: startCaptureRegion()
         case .previous: capturePreviousRegion()
@@ -987,19 +997,16 @@ let toastText = outputText
         let mouse = NSEvent.mouseLocation
         let activeIndex = CaptureDisplayGeometry.displayIndex(at: mouse, frames: screens.map(\.frame)) ?? 0
         captureIntent = intent
+        let session = CaptureOverlaySession(mode: initialMode, status: captureStatus())
+        captureSession = session
         statusBarController?.closePopover()
         for (index, screen) in screens.enumerated() {
             let frame = screen.frame
-            let window = CaptureOverlayWindow(contentRect: frame, styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
+            let window = CaptureOverlayWindow(frame: frame)
             window.title = "Capture display \(index + 1)"
             window.identifier = NSUserInterfaceItemIdentifier("capture.display.\(index)")
-            window.level = .screenSaver
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-            window.isReleasedWhenClosed = false
-            window.isOpaque = false; window.backgroundColor = .clear
-            window.acceptsMouseMovedEvents = true
             let view = CaptureOverlayView(frame: frame, initialMode: initialMode,
-                initialCursorPoint: mouse,
+                initialCursorPoint: mouse, session: session,
                 onRegionCaptured: { [weak self] rect in
                     guard let self else { return }
                     let intent = self.captureIntent
@@ -1053,6 +1060,7 @@ let toastText = outputText
         captureKeyboardMonitor = nil
         captureWindows.forEach { $0.orderOut(nil); $0.close() }
         captureWindows.removeAll()
+        captureSession = nil
         captureIntent = CaptureIntent()
         pendingAutoScrollCapture = false
     }

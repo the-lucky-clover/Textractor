@@ -28,6 +28,14 @@ public enum CaptureDisplayGeometry {
 
 /// Borderless capture windows must not be constrained onto the primary screen's visible area.
 final class CaptureOverlayWindow: NSWindow {
+    convenience init(frame: CGRect) {
+        self.init(contentRect: frame, styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
+        level = .screenSaver
+        collectionBehavior = [.canJoinAllSpaces, .canJoinAllApplications, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        isReleasedWhenClosed = false
+        isOpaque = false; backgroundColor = .clear; acceptsMouseMovedEvents = true
+        setFrame(frame, display: false)
+    }
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }

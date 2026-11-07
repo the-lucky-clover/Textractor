@@ -451,7 +451,10 @@ static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
         OCRService.automaticLanguages().map { code in
             ocrLanguageCatalog.first { $0.code == code }
                 ?? (code, Locale(identifier: "en-US").localizedString(forIdentifier: code) ?? code, "🌐")
-        }.sorted { a, b in a.code == "en-US" ? true : b.code == "en-US" ? false : a.name < b.name }
+        }.sorted { a, b in
+            if a.code == b.code { return false }
+            return a.code == "en-US" ? true : b.code == "en-US" ? false : a.name < b.name
+        }
     }
 
     /// Canonical picker values. Older builds used underscores, bare "en", or labels.
