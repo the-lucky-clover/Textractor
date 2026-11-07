@@ -38,5 +38,6 @@ target/
 *.temp
 
 qa-results/
+qa-ios/
 dist/
 __pycache__/

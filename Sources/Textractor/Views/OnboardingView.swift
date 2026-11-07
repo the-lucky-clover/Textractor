@@ -131,8 +131,10 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         panel.contentViewController = hosting
         panel.hidesOnDeactivate = false
         panel.level = .floating
-        panel.center()
         hosting.view.frame = NSRect(origin: .zero, size: size)
+        hosting.view.layoutSubtreeIfNeeded()
+        panel.setContentSize(size)
+        panel.center()
 
         // Become the window's delegate so windowWillClose can clean up if the
         // user dismisses the panel without using an in-view Skip / Done button.

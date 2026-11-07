@@ -12,6 +12,46 @@ packages:
     url: https://github.com/apple/swift-crypto.git
     from: 2.0.0
 targets:
+  TextractorMobile:
+    type: application
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources: [ios/TextractorMobile]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.textractor.app.ios
+        PRODUCT_NAME: TextractorMobile
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Textractor Pro
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        TARGETED_DEVICE_FAMILY: '1,2'
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MARKETING_VERSION: '1.0'
+        CURRENT_PROJECT_VERSION: '1'
+  TextractorMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources: [ios/TextractorMobileTests]
+    dependencies:
+      - target: TextractorMobile
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.textractor.app.ios.tests
+  TextractorMobileUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources: [ios/TextractorMobileUITests]
+    dependencies:
+      - target: TextractorMobile
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.textractor.app.ios.uitests
   Textractor:
     type: application
     platform: macOS
@@ -43,6 +83,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.textractor.uitests
         GENERATE_INFOPLIST_FILE: YES
 schemes:
+  TextractorMobile:
+    build:
+      targets:
+        TextractorMobile: all
+    test:
+      targets: [TextractorMobileTests, TextractorMobileUITests]
+      gatherCoverageData: true
   Textractor:
     build:
       targets:

@@ -11,6 +11,34 @@ concurrency:
   group: qa-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate mobile project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Test iOS screenshot review and print packet
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          mkdir -p qa-ios
+          ios_device=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,items in d["devices"].items() if "iOS" in runtime for x in items if x["name"].startswith("iPhone")))')
+          xcodebuild test -project Textractor.xcodeproj -scheme TextractorMobile -destination "platform=iOS Simulator,id=$ios_device" -parallel-testing-enabled NO -resultBundlePath qa-ios/mobile.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee qa-ios/tests.log
+      - name: Export iOS playtest screenshots
+        if: always()
+        run: |
+          if [ -d qa-ios/mobile.xcresult ]; then
+            xcrun xcresulttool export attachments --path qa-ios/mobile.xcresult --output-path qa-ios/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: textractor-ios-qa-${{ github.sha }}
+          path: qa-ios/
+          retention-days: 14
   security:
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -57,6 +57,10 @@ final class SettingsPlaytests: XCTestCase {
         replay.click()
         XCTAssertTrue(app.staticTexts["onboarding.progress"].waitForExistence(timeout: 5))
         XCTAssertEqual(textValue(app.staticTexts["onboarding.progress"]), "1 of 4")
+        let panel = app.dialogs.firstMatch
+        let screen = XCUIScreen.main.screenshot().image.size
+        XCTAssertGreaterThanOrEqual(panel.frame.minX, 0)
+        XCTAssertLessThanOrEqual(panel.frame.maxX, screen.width)
         for expected in 2...4 {
             app.buttons["onboarding.next"].click()
             XCTAssertEqual(textValue(app.staticTexts["onboarding.progress"]), "\(expected) of 4")
@@ -73,9 +77,13 @@ final class SettingsPlaytests: XCTestCase {
     func testCameraCancellationReturnsToSettings() {
         reveal(app.buttons["settings.continuity"])
         app.buttons["settings.continuity"].click()
-        let window = app.windows["Import from iPhone or iPad"]
+        let window = app.dialogs["Import from iPhone or iPad"]
         XCTAssertTrue(window.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["continuity.chooseDevice"].exists)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Continuity import dialog"
+        attachment.lifetime = .keepAlways
+        add(attachment)
         window.buttons[XCUIIdentifierCloseWindow].click()
         XCTAssertFalse(window.exists)
         XCTAssertTrue(app.windows["Settings"].exists)

@@ -162,7 +162,7 @@
 "toast.open_url" = "Open URL";
 "toast.compose_email" = "Compose Email";
 "toast.format_code_block" = "Format Code Block";
-"auto.save.captures" = "Auto-save captures to ~/Pictures/Textractor Pro Captures/";
+"auto.save.captures" = "Auto-save captures to ~/Pictures/Textractor Captures/";
 "toast.undo" = "Undo";
 "toast.undone" = "Undone";
 "toast.undone.body" = "Last capture removed from history.";
