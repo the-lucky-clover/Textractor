@@ -314,7 +314,7 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                 .foregroundStyle(BreakingDad.chalk)
             Picker(T.s("language"), selection: languageBinding) {
                 Text(T.s("language.automatic")).tag("")
-                ForEach(AppSettings.ocrLanguageCatalog, id: \.code) { loc in
+                ForEach(AppSettings.availableOCRLanguages, id: \.code) { loc in
                     Text(loc.name).tag(loc.code)
                 }
             }
@@ -418,7 +418,6 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
     }
 
     private func checkForUpdates() {
-        if UpdateService.hasRemoteChannel { appState.updateSettings { $0.lastUpdateCheckAt = Date() } }
         UpdateService.shared.presentUpToDateAlert()
     }
 

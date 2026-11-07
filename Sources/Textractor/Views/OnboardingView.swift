@@ -36,7 +36,7 @@ public struct OnboardingRootView: View {
                         Label("Choose your recognition language", systemImage: "globe").font(.title2.bold())
                         Picker("Language", selection: $language) {
                             Text("Automatic").tag("")
-                            ForEach(AppSettings.ocrLanguageCatalog, id: \.code) { item in
+                            ForEach(AppSettings.availableOCRLanguages, id: \.code) { item in
                                 Text(item.name).tag(item.code)
                             }
                         }.accessibilityIdentifier("onboarding.language")

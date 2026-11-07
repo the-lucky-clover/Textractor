@@ -119,17 +119,17 @@ public final class ScreenshotService: NSObject {
             throw ScreenshotError.noDisplay
         }
         let centerPoint = CGPoint(x: rect.midX, y: rect.midY)
-        let screen = screens.first(where: { $0.frame.contains(centerPoint) }) ?? NSScreen.main ?? screens[0]
+        guard let screen = screens.first(where: { $0.frame.contains(centerPoint) }) else { throw ScreenshotError.noDisplay }
         let screenIndex = screens.firstIndex(of: screen) ?? 0
 
         let content = try await SCShareableContent.current
-        guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else {
+        guard let display = scDisplay(for: screen, in: content) else {
             throw ScreenshotError.noDisplay
         }
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         let full = try await captureCGImage(filter: filter)
         let scale = CGFloat(full.width) / max(screen.frame.width, 1)
-        let cropped = cropDisplayImage(full, displayFrame: screen.frame, scale: scale, toGlobalRect: rect)
+        let cropped = try cropDisplayImage(full, displayFrame: screen.frame, scale: scale, toGlobalRect: rect)
 
         return try writeToDisk(cropped, mode: .crosshair, origin: .region, rect: rect, screenIndex: screenIndex)
     }
@@ -157,15 +157,11 @@ public final class ScreenshotService: NSObject {
         guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
             throw ScreenshotError.noWindow
         }
-        let targetDisplayScreen: NSScreen = (NSScreen.screens.first { $0.frame.intersects(window.bounds) } ?? NSScreen.main)!
-        guard let display = scDisplay(for: targetDisplayScreen, in: content) ?? content.displays.first else {
-            throw ScreenshotError.noDisplay
-        }
-        let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [scWindow])
-        let fullImage = try await captureCGImage(filter: filter)
-        let scale = CGFloat(fullImage.width) / max(targetDisplayScreen.frame.width, 1)
-        let cropped = cropDisplayImage(fullImage, displaySizePoints: targetDisplayScreen.frame.size, scale: scale, toLocalRect: window.bounds)
-        let captured = try writeToDisk(cropped, mode: .window, origin: .window, rect: window.bounds, screenIndex: 0)
+        // Capture the selected window directly, including windows spanning multiple displays.
+        // WindowDescriptor.bounds is Quartz-global, not display-local AppKit coordinates.
+        let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+        let image = try await captureCGImage(filter: filter)
+        let captured = try writeToDisk(image, mode: .window, origin: .window, rect: window.bounds, screenIndex: 0)
         return (captured, window)
     }
 
@@ -189,7 +185,7 @@ public final class ScreenshotService: NSObject {
         var results: [CapturedImage] = []
         for (index, screen) in displays.enumerated() {
             let screenFrame = screen.frame
-            guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else { continue }
+            guard let display = scDisplay(for: screen, in: content) else { continue }
             let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
             guard let full = try? await captureCGImage(filter: filter) else { continue }
             do {
@@ -252,7 +248,7 @@ public final class ScreenshotService: NSObject {
         )
 
         let content = try await SCShareableContent.current
-        guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else {
+        guard let display = scDisplay(for: screen, in: content) else {
             throw ScreenshotError.noDisplay
         }
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
@@ -278,13 +274,13 @@ public final class ScreenshotService: NSObject {
         let screen = screens[index]
 
         let content = try await SCShareableContent.current
-        guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else {
+        guard let display = scDisplay(for: screen, in: content) else {
             throw ScreenshotError.noDisplay
         }
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         let full = try await captureCGImage(filter: filter)
         let scale = CGFloat(full.width) / max(screen.frame.width, 1)
-        let cropped = cropDisplayImage(full, displaySizePoints: screen.frame.size, scale: scale, toLocalRect: rect)
+        let cropped = try cropDisplayImage(full, displaySizePoints: screen.frame.size, scale: scale, toLocalRect: rect)
 
         return try writeToDisk(cropped, mode: .crosshair, origin: .region, rect: rect, screenIndex: index)
     }
@@ -466,7 +462,11 @@ public final class ScreenshotService: NSObject {
         filter: SCContentFilter,
         configuration: SCStreamConfiguration = SCStreamConfiguration()
     ) async throws -> CGImage {
-        try await withCheckedThrowingContinuation { continuation in
+        let scale = CGFloat(filter.pointPixelScale)
+        configuration.width = max(1, Int((filter.contentRect.width * scale).rounded(.up)))
+        configuration.height = max(1, Int((filter.contentRect.height * scale).rounded(.up)))
+        configuration.showsCursor = false
+        return try await withCheckedThrowingContinuation { continuation in
             SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration) { image, error in
                 if let error {
                     continuation.resume(throwing: ScreenshotError.processingFailed("ScreenCaptureKit: \(error.localizedDescription)"))
@@ -498,16 +498,16 @@ public final class ScreenshotService: NSObject {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { throw ScreenshotError.noDisplay }
         let centerPoint = CGPoint(x: rect.midX, y: rect.midY)
-        let screen = screens.first { $0.frame.contains(centerPoint) } ?? NSScreen.main ?? screens[0]
+        guard let screen = screens.first(where: { $0.frame.contains(centerPoint) }) else { throw ScreenshotError.noDisplay }
 
         let content = try await SCShareableContent.current
-        guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else {
+        guard let display = scDisplay(for: screen, in: content) else {
             throw ScreenshotError.noDisplay
         }
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         let full = try await captureCGImage(filter: filter)
         let scale = CGFloat(full.width) / max(screen.frame.width, 1)
-        let cropped = cropDisplayImage(full, displayFrame: screen.frame, scale: scale, toGlobalRect: rect)
+        let cropped = try cropDisplayImage(full, displayFrame: screen.frame, scale: scale, toGlobalRect: rect)
         return cropped
     }
 
@@ -518,29 +518,15 @@ public final class ScreenshotService: NSObject {
         displayFrame: CGRect,
         scale: CGFloat,
         toGlobalRect rect: CGRect
-    ) -> CGImage {
-        let dx = (rect.minX - displayFrame.minX) * scale
-        let dy = (displayFrame.maxY - rect.maxY) * scale
-        let crop = CGRect(x: dx, y: dy, width: rect.width * scale, height: rect.height * scale)
-        let clamped = crop.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        guard !clamped.isEmpty, let cropped = image.cropping(to: clamped) else { return image }
+    ) throws -> CGImage {
+        guard let crop = CaptureDisplayGeometry.pixelCrop(globalRect: rect, displayFrame: displayFrame,
+                imageSize: CGSize(width: image.width, height: image.height)),
+              let cropped = image.cropping(to: crop) else { throw ScreenshotError.imageCreationFailed }
         return cropped
     }
 
-    /// Crop a display-sized `CGImage` down to a rect expressed in the display's
-    /// own local coordinate space (AppKit bottom-left origin, points).
-    private func cropDisplayImage(
-        _ image: CGImage,
-        displaySizePoints: CGSize,
-        scale: CGFloat,
-        toLocalRect rect: CGRect
-    ) -> CGImage {
-        let dx = rect.minX * scale
-        let dy = (displaySizePoints.height - rect.maxY) * scale
-        let crop = CGRect(x: dx, y: dy, width: rect.width * scale, height: rect.height * scale)
-        let clamped = crop.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        guard !clamped.isEmpty, let cropped = image.cropping(to: clamped) else { return image }
-        return cropped
+    private func cropDisplayImage(_ image: CGImage, displaySizePoints: CGSize, scale: CGFloat, toLocalRect rect: CGRect) throws -> CGImage {
+        try cropDisplayImage(image, displayFrame: CGRect(origin: .zero, size: displaySizePoints), scale: scale, toGlobalRect: rect)
     }
 
     // MARK: - Helpers

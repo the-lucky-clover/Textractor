@@ -13,7 +13,7 @@ public final class HotkeyManager {
 
     /// Signature 'TRC2' — uniquely identifies our hotkey in the OS event stream.
     private let signature: OSType = 0x54524332
-    private let hotKeyIDValue: UInt32 = 1
+    private let hotKeyIDValue: UInt32
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
@@ -33,7 +33,7 @@ public final class HotkeyManager {
     /// anywhere on the system.
     public var onHotkey: (() -> Void)?
 
-    private init() {}
+    init(id: UInt32 = 1) { hotKeyIDValue = id }
 
     // MARK: - Public registration
 
@@ -252,14 +252,16 @@ public final class HotkeyManager {
         )
         guard status == noErr else { return status }
 
-        if hotKeyID.signature == 0x54524332 && hotKeyID.id == 1 {
+        if hotKeyID.signature == 0x54524332 {
             let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+            guard hotKeyID.id == manager.hotKeyIDValue else { return OSStatus(eventNotHandledErr) }
             DispatchQueue.main.async {
                 manager.fireHotkey()
             }
+            return noErr
         }
 
-        return noErr
+        return OSStatus(eventNotHandledErr)
     }
 
     private func fireHotkey() {

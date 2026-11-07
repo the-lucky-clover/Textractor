@@ -45,7 +45,7 @@ public enum FactoryResetService {
         let cacheFreedBytes = CacheService.shared.clearCache()
 
         HistoryStore.shared.clearAll()
-        CaptureExtras.shared.clearBatch()
+        CaptureExtras.shared.discardAllHistory()
         CaptureExtras.shared.stopSpeaking()
 
         // 4. In-memory history list (the UI's "recent captures" sidebar).
@@ -56,7 +56,7 @@ public enum FactoryResetService {
         appState.lastAnalysis = nil
 
         // 5. Reset hotkey registration (so it picks up any new defaults).
-        HotkeyManager.shared.register()
+        _ = ActionShortcuts.shared.configure(appState.settings)
 
         LoggerService.shared.info("[factory-reset] complete — captures=\(capturesDeleted), bytesFreed=\(cacheFreedBytes)")
 

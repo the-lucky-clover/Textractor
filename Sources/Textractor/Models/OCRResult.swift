@@ -53,6 +53,15 @@ public struct OCRResult: Sendable {
     public var joinedText: String {
         guard !rawObservations.isEmpty else { return "" }
 
+        let cjk = languageCandidates.first.map { $0.hasPrefix("ja") || $0.hasPrefix("zh") || $0.hasPrefix("ko") || $0.hasPrefix("yue") } ?? false
+        let vertical = rawObservations.filter { $0.boundingBox.height > $0.boundingBox.width * 1.5 }.count
+        if cjk, vertical * 2 > rawObservations.count {
+            return rawObservations.sorted {
+                if abs($0.boundingBox.midX - $1.boundingBox.midX) > 0.02 { return $0.boundingBox.midX > $1.boundingBox.midX }
+                return $0.boundingBox.midY > $1.boundingBox.midY
+            }.map(\.text).joined(separator: "\n")
+        }
+
         let avgHeight = rawObservations.reduce(CGFloat(0)) { $0 + $1.boundingBox.height }
             / CGFloat(rawObservations.count)
         let lineTolerance = max(avgHeight * 0.5, 0.005)

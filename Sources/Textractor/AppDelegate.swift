@@ -51,6 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Ensure any debounced UserDefaults writes from the last 250 ms land.
         AppCoordinator.shared.settingsStore.flushPendingPersist()
-        HotkeyManager.shared.unregister()
+        ActionShortcuts.shared.unregister()
     }
 }

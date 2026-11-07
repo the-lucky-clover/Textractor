@@ -89,6 +89,8 @@ public final class SettingsStore: ObservableObject {
     private func applySideEffects(for settings: AppSettings) {
         T.sharedLanguage.value = settings.uiLanguage
         guard appliesSystemEffects else { return }
+        CaptureExtras.shared.configure(settings: settings)
+        _ = ActionShortcuts.shared.configure(settings)
         SoundManager.enabled = settings.soundEffectsEnabled
         TelemetryService.shared.isEnabled = settings.localTelemetryEnabled
         // Push the user's chosen UI language into the global localization

@@ -169,7 +169,6 @@ sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
     }
 
     private func checkForUpdates() {
-        appState.updateSettings { $0.lastUpdateCheckAt = Date() }
         UpdateService.shared.presentUpToDateAlert()
     }
 }

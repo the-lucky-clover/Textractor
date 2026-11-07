@@ -12,7 +12,7 @@ public struct CaptureOverlayView: View {
     // MARK: Callbacks
 
     public typealias OnRegionCaptured = ( CGRect) -> Void
-    public typealias OnWindowCaptured = (CGWindowID) -> Void
+    public typealias OnWindowCaptured = (CGWindowID, CaptureMode) -> Void
     public typealias OnCancel = () -> Void
     public typealias OnContinuityCapture = () -> Void
     public typealias OnDisplayChanged = (NSScreen) -> Void
@@ -78,6 +78,7 @@ public init(
         self.showLivePreview = showLivePreview
         self.onLiveOCRRequest = onLiveOCRRequest
         self._mode = State(initialValue: initialMode)
+        self._cursorPoint = State(initialValue: CaptureDisplayGeometry.overlayPoint(fromGlobal: initialCursorPoint, frame: frame))
     }
 
     // MARK: Geometry
@@ -134,19 +135,10 @@ public init(
                 switch phase {
                 case .active(let p):
                     cursorPoint = p
-                    // Multi-display: detect when cursor moves to a different screen
-                    if let newScreen = NSScreen.screens.first(where: { $0.frame.contains(p) }),
-                       newScreen != currentScreen {
-                        currentScreen = newScreen
-                        onDisplayChanged(newScreen)
+                    if let screen = NSScreen.screens.first(where: { $0.frame == frame }) {
+                        onDisplayChanged(screen)
                     }
-                    // Debounce hover updates to ~60fps to avoid excessive hit-testing
-                    Task {
-                        try? await Task.sleep(nanoseconds: 16_000_000) // ~16ms
-                        await MainActor.run {
-                            updateHoveredWindow(size: size)
-                        }
-                    }
+                    updateHoveredWindow(size: size)
                 case .ended:
                     hoveredWindow = nil
                 }
@@ -181,6 +173,7 @@ public init(
                 LoggerService.shared.info("[capture.key] G pressed, showsGrid=\(showsGrid)")
                 return .handled
             }
+            .onDisappear { liveOCRCancellable?.cancel() }
             .onAppear {
                 LoggerService.shared.info("[capture.ui] onAppear; windows=\(ScreenshotService.shared.enumerateWindows().filter { $0.isCaptureEligible }.count)")
                 windows = ScreenshotService.shared.enumerateWindows().filter { $0.isCaptureEligible }
@@ -447,7 +440,7 @@ private struct GridOverlayView: View {
                 liveOCRText = nil
                 if mode == .window || mode == .autoScroll {
                     if let w = windowAt(point: value.location, size: size) {
-                        onWindowCaptured(w.id)
+                        onWindowCaptured(w.id, mode)
                     }
                 } else if mode == .crosshair {
                     let r = currentSelectionRect(size: size)
@@ -504,7 +497,7 @@ private struct GridOverlayView: View {
         if mode == .crosshair, let r = currentSelectionRect(size: size), r.width > 8, r.height > 8 {
             onRegionCaptured(convertToScreen(r))
         } else if mode == .window || mode == .autoScroll, let h = hoveredWindow {
-            onWindowCaptured(h.id)
+            onWindowCaptured(h.id, mode)
         }
     }
 
@@ -521,10 +514,7 @@ private struct GridOverlayView: View {
     }
 
     private func convertToScreen(_ rect: CGRect) -> CGRect {
-        let f = liveFrame()
-        let originX = f.origin.x + rect.minX
-        let originY = f.origin.y + (f.height - rect.maxY)
-        return CGRect(x: originX, y: originY, width: rect.width, height: rect.height)
+        CaptureDisplayGeometry.globalRect(fromOverlay: rect, frame: liveFrame())
     }
 
     /// Height of the primary display (the screen whose AppKit frame origin is
@@ -543,15 +533,7 @@ private struct GridOverlayView: View {
     /// safe: accounts for the overlay window's own AppKit frame and the primary
     /// display height used by the Quartz→AppKit flip.
     private func convertToOverlay(bounds: CGRect, size: CGSize) -> CGRect {
-        let f = liveFrame()                       // overlay window, AppKit bottom-left global
-        let primaryH = primaryDisplayHeight()
-        // Quartz global x already matches AppKit global x.
-        let x = bounds.origin.x - f.origin.x
-        // Quartz y (down from primary top) → overlay-local y (down from overlay top).
-        // Derivation: appKitTop = primaryH - qy;  overlayLocalY = f.maxY - appKitTop
-        //           = f.maxY - (primaryH - qy) = qy + f.maxY - primaryH.
-        let y = bounds.origin.y + f.maxY - primaryH
-        return CGRect(x: x, y: y, width: bounds.width, height: bounds.height)
+        CaptureDisplayGeometry.overlayRect(fromQuartz: bounds, frame: liveFrame(), primaryHeight: primaryDisplayHeight())
     }
 
     /// The single source of truth for "which window is under this overlay-local

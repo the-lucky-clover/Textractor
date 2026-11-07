@@ -209,6 +209,7 @@ public final class OCRService {
             let supported = (try? request.supportedRecognitionLanguages()) ?? ["en-US"]
             let supportedSet = Set(supported)
             let filtered = effective.filter { supportedSet.contains($0) }
+            if filtered.isEmpty, languages.count == 1 { return [] }
             if !filtered.isEmpty { request.recognitionLanguages = filtered }
         }
         request.minimumTextHeight = Float(minTextHeight)

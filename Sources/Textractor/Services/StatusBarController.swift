@@ -22,6 +22,7 @@ public final class StatusBarController: NSObject {
         self.popover = NSPopover()
         super.init()
         StatusBarController.shared = self
+        statusItem.behavior = [.removalAllowed]
         configureButton()
         configurePopover()
     }

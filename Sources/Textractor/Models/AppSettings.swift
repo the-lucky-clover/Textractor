@@ -20,6 +20,11 @@ public struct AppSettings: Codable, Sendable {
     public var readAloud = false
     public var speechRate: Double = 0.5
     public var additiveClipboard = false
+    public var persistAdditiveClipboard = false
+    public var clearAdditiveOnPaste = false
+    public var automaticallyOpenLinks = false
+    public var actionShortcuts: [String: ShortcutBinding] = [:]
+    public var disabledShortcuts: [String] = []
     public var showSuccessNotifications = true
 
     /// User-vocab correction bias — Vision language-correction will favour these tokens.
@@ -237,6 +242,7 @@ public var ocrLanguages: [String] = []
 
 private enum CodingKeys: String, CodingKey {
         case recognizeBarcodes, readAloud, speechRate, additiveClipboard, showSuccessNotifications
+        case persistAdditiveClipboard, clearAdditiveOnPaste, automaticallyOpenLinks, actionShortcuts, disabledShortcuts
         case weirdness, customVocabulary, uiLanguage, localTelemetryEnabled, openPopoverOnCapture, lastUpdateCheckAt
         case customHotkeyKeyCode, customHotkeyModifiers, customHotkeyLabel, soundEffectsEnabled
         case pasteAsPlainText, wordWrapCaptured, windowCaptureAsTable, flattenText, reduceMotion
@@ -250,6 +256,11 @@ private enum CodingKeys: String, CodingKey {
         readAloud = try container.decodeIfPresent(Bool.self, forKey: .readAloud) ?? false
         speechRate = min(1, max(0, try container.decodeIfPresent(Double.self, forKey: .speechRate) ?? 0.5))
         additiveClipboard = try container.decodeIfPresent(Bool.self, forKey: .additiveClipboard) ?? false
+        persistAdditiveClipboard = try container.decodeIfPresent(Bool.self, forKey: .persistAdditiveClipboard) ?? false
+        clearAdditiveOnPaste = try container.decodeIfPresent(Bool.self, forKey: .clearAdditiveOnPaste) ?? false
+        automaticallyOpenLinks = try container.decodeIfPresent(Bool.self, forKey: .automaticallyOpenLinks) ?? false
+        actionShortcuts = try container.decodeIfPresent([String: ShortcutBinding].self, forKey: .actionShortcuts) ?? [:]
+        disabledShortcuts = try container.decodeIfPresent([String].self, forKey: .disabledShortcuts) ?? []
         showSuccessNotifications = try container.decodeIfPresent(Bool.self, forKey: .showSuccessNotifications) ?? true
         weirdness = try container.decode(Double.self, forKey: .weirdness)
         customVocabulary = try container.decode([String].self, forKey: .customVocabulary)
@@ -301,6 +312,11 @@ private enum CodingKeys: String, CodingKey {
         try container.encode(readAloud, forKey: .readAloud)
         try container.encode(speechRate, forKey: .speechRate)
         try container.encode(additiveClipboard, forKey: .additiveClipboard)
+        try container.encode(persistAdditiveClipboard, forKey: .persistAdditiveClipboard)
+        try container.encode(clearAdditiveOnPaste, forKey: .clearAdditiveOnPaste)
+        try container.encode(automaticallyOpenLinks, forKey: .automaticallyOpenLinks)
+        try container.encode(actionShortcuts, forKey: .actionShortcuts)
+        try container.encode(disabledShortcuts, forKey: .disabledShortcuts)
         try container.encode(showSuccessNotifications, forKey: .showSuccessNotifications)
         try container.encode(weirdness, forKey: .weirdness)
         try container.encode(customVocabulary, forKey: .customVocabulary)
@@ -395,6 +411,17 @@ public extension AppSettings {
     /// supports many more, this list covers the most commonly requested.
 static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
         ("en-US", "English (US)", "🇺🇸"),
+        ("uk-UA", "Ukrainian", "🇺🇦"),
+        ("cs-CZ", "Czech", "🇨🇿"),
+        ("da-DK", "Danish", "🇩🇰"),
+        ("nb-NO", "Norwegian", "🇳🇴"),
+        ("ro-RO", "Romanian", "🇷🇴"),
+        ("sv-SE", "Swedish", "🇸🇪"),
+        ("fi-FI", "Finnish", "🇫🇮"),
+        ("mr-IN", "Marathi", "🇮🇳"),
+        ("ars-SA", "Najdi Arabic", "🇸🇦"),
+        ("yue-Hans", "Cantonese (Simplified)", "🇨🇳"),
+        ("yue-Hant", "Cantonese (Traditional)", "🇭🇰"),
         ("en-GB", "English (UK)", "🇬🇧"),
         ("es-ES", "Spanish", "🇪🇸"),
         ("fr-FR", "French", "🇫🇷"),
@@ -419,6 +446,14 @@ static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
         ("zh-Hant", "Chinese (Traditional)", "🇹🇼"),
     ]
 
+    /// Offer only languages supported by the installed Vision runtime, including future additions.
+    static var availableOCRLanguages: [CatalogEntry] {
+        OCRService.automaticLanguages().map { code in
+            ocrLanguageCatalog.first { $0.code == code }
+                ?? (code, Locale(identifier: "en-US").localizedString(forIdentifier: code) ?? code, "🌐")
+        }.sorted { a, b in a.code == "en-US" ? true : b.code == "en-US" ? false : a.name < b.name }
+    }
+
     /// Canonical picker values. Older builds used underscores, bare "en", or labels.
     static func normalizedLanguage(_ value: String) -> String {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -429,7 +464,7 @@ static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
         }
         return ocrLanguageCatalog.first {
             $0.code.lowercased() == normalized || $0.name.lowercased() == normalized
-        }?.code ?? ""
+        }?.code ?? OCRService.automaticLanguages().first { $0.lowercased() == normalized } ?? ""
     }
 
     /// Bounded range exposed in the Settings slider.

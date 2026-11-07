@@ -88,4 +88,26 @@ final class SettingsPlaytests: XCTestCase {
         XCTAssertFalse(window.exists)
         XCTAssertTrue(app.windows["Settings"].exists)
     }
+    func testCaptureOverlayActivatesAndEscapeReturnsToSettings() {
+        let capture = app.buttons["settings.capture.test"]
+        reveal(capture)
+        capture.click()
+        let overlay = app.windows["Capture display 1"]
+        XCTAssertTrue(overlay.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(overlay.frame.width, 500)
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Capture overlay activated"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertFalse(overlay.exists)
+        XCTAssertTrue(app.windows["Settings"].exists)
+        reveal(capture)
+        capture.click()
+        XCTAssertTrue(overlay.waitForExistence(timeout: 5))
+        app.typeKey("l", modifierFlags: .command)
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertFalse(overlay.exists)
+    }
+
 }
