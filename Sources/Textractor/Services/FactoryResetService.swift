@@ -44,6 +44,10 @@ public enum FactoryResetService {
         // 3. Cache folder — empty `~/.Library/Caches/Textractor/`.
         let cacheFreedBytes = CacheService.shared.clearCache()
 
+        HistoryStore.shared.clearAll()
+        CaptureExtras.shared.clearBatch()
+        CaptureExtras.shared.stopSpeaking()
+
         // 4. In-memory history list (the UI's "recent captures" sidebar).
         appState.recentCaptures.removeAll()
         appState.streakCount = 0

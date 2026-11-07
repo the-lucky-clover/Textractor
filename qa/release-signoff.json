@@ -1,0 +1,19 @@
+{
+  "status": "blocked",
+  "tested_commit": null,
+  "evidence": [],
+  "checks": {
+    "native_build": "pending",
+    "unit_tests": "pending",
+    "ui_playtests": "pending",
+    "ocr_benchmark": "pending",
+    "continuity_photo": "pending-device",
+    "continuity_multipage": "pending-device",
+    "camera_cancel": "pending",
+    "voiceover": "pending-device",
+    "multi_display": "pending-device",
+    "scroll_stitching": "pending-device",
+    "signing": "pending-credentials",
+    "app_store_name": "pending-app-store-connect"
+  }
+}

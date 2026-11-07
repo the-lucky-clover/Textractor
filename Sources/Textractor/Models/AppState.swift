@@ -39,7 +39,7 @@ public final class AppState: ObservableObject {
 
     public init(settingsStore: SettingsStore) {
         self.settingsStore = settingsStore
-        self.settings = settingsStore.currentettingsStore.current
+        self.settings = settingsStore.current
         // Re-publish settings changes to the UI when they are written elsewhere.
         settingsStore.$current
             .sink { [weak self] settings in

@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: Validate measurement and release-gate logic
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
       - name: Build and test native services
         run: |
           set -o pipefail

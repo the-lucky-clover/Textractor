@@ -119,7 +119,10 @@ private func configureButton() {
     // MARK: - Click handling
 
     @objc private func handleClick(_ sender: AnyObject) {
-        togglePopover()
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            closePopover()
+            coordinator?.startCaptureRegion()
+        } else { togglePopover() }
     }
 
     private func togglePopover() {

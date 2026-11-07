@@ -164,6 +164,11 @@ public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
     presentCaptureOverlay(initialMode: .autoScroll, perCaptureLanguage: nil)
   }
 
+    public func capturePreviousRegion() {
+        guard !appState.isCapturing, let rect = previousRegion else { return }
+        Task { await runCaptureRegion(rect) }
+    }
+
     public func startCaptureFullScreen() {
         guard !appState.isCapturing else { return }
         Task {
@@ -221,6 +226,7 @@ public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
 
     /// Captures a region via a CG rect (returned by overlay).
     public func runCaptureRegion(_ rect: CGRect, perCaptureLanguage: String? = nil) async {
+        previousRegion = rect
         appState.isCapturing = true
         appState.pipelinePhase = .capturing
         do {
@@ -402,13 +408,7 @@ return await OCRService.shared.recognizeText(
                 case .mention(let s): return s
                 }
             }
-            let metaEntities: [String] = metadata.values(for: .url)
-                + metadata.values(for: .email) + metadata.values(for: .phone)
-                + metadata.values(for: .cryptoAddress) + metadata.values(for: .trackingNumber)
-                + metadata.values(for: .apiKey) + metadata.values(for: .creditCard)
-                + metadata.values(for: .ipAddress) + metadata.values(for: .macAddress)
-                + metadata.values(for: .uuid) + metadata.values(for: .filePath)
-                + metadata.values(for: .sshKey) + metadata.values(for: .dockerId)
+            let metaEntities: [String] = ([.url, .email, .phone, .cryptoAddress, .trackingNumber, .apiKey, .creditCard, .ipAddress, .macAddress, .uuid, .filePath, .sshKey, .dockerId] as [MetadataType]).flatMap { metadata.values(for: $0) }
             let allEntities = Array(Set(aiEntities + metaEntities))
 
             let record = CaptureRecord(
@@ -765,10 +765,7 @@ let onFormatCodeBlock: (() -> Void)? = {
                     }
                 }
                 // Combine AI entities with extracted metadata
-                let metadataEntities = metadata.values(for: .url) + metadata.values(for: .email) + metadata.values(for: .phone) + 
-                    metadata.values(for: .cryptoAddress) + metadata.values(for: .trackingNumber) + metadata.values(for: .apiKey) +
-                    metadata.values(for: .creditCard) + metadata.values(for: .ipAddress) + metadata.values(for: .macAddress) +
-                    metadata.values(for: .uuid) + metadata.values(for: .filePath) + metadata.values(for: .sshKey) + metadata.values(for: .dockerId)
+                let metadataEntities: [String] = ([.url, .email, .phone, .cryptoAddress, .trackingNumber, .apiKey, .creditCard, .ipAddress, .macAddress, .uuid, .filePath, .sshKey, .dockerId] as [MetadataType]).flatMap { metadata.values(for: $0) }
                 let allEntities = Array(Set(entities + metadataEntities))
                 
                 let record = CaptureRecord(

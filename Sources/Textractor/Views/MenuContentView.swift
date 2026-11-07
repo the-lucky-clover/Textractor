@@ -66,6 +66,9 @@ public struct MenuContentView: View {
 sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
                 MenuRow(T.s("menu.region"), icon: "viewfinder") { onClose(); onCaptureRegion() }
                     .introReveal(2, appeared: appeared)
+                MenuRow("Capture previous region", icon: "arrow.uturn.backward") {
+                    onClose(); AppCoordinator.shared.capturePreviousRegion()
+                }.disabled(AppCoordinator.shared.previousRegion == nil || appState.isCapturing)
                 MenuRow(T.s("menu.window"), icon: "macwindow") { onClose(); onCaptureWindow() }
                     .introReveal(3, appeared: appeared)
                 MenuRow(T.s("menu.fullscreen"), icon: "rectangle.dashed.badge.record") { onClose(); onCaptureFullScreen() }

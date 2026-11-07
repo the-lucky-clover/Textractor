@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CaptureOptionsView: View {
     @EnvironmentObject var appState: AppState
+    @State private var shortcutError: String?
     @ObservedObject private var extras = CaptureExtras.shared
 
     private func binding<Value>(_ key: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
@@ -12,6 +13,25 @@ struct CaptureOptionsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Text("Capture shortcut").font(.caption)
+            ShortcutRecorder(label: appState.settings.resolvedHotkeyLabel) { key, modifiers, label in
+                let old = appState.settings
+                let result = HotkeyManager.shared.register(keyCode: key, modifiers: modifiers, label: label)
+                if !result.ok {
+                    _ = HotkeyManager.shared.register(keyCode: old.resolvedHotkeyKeyCode, modifiers: old.resolvedHotkeyModifiers, label: old.resolvedHotkeyLabel)
+                    shortcutError = result.description
+                    return result.description
+                }
+                appState.updateSettings {
+                    $0.customHotkeyKeyCode = key
+                    $0.customHotkeyModifiers = modifiers
+                    $0.customHotkeyLabel = label
+                }
+                shortcutError = nil
+                return nil
+            }.frame(height: 30).accessibilityLabel("Record capture shortcut")
+            if let shortcutError { Text(shortcutError).font(.caption).foregroundStyle(.orange) }
+
             Button("Import from iPhone or iPad…") {
                 Task { await AppCoordinator.shared.runContinuityCameraCapture() }
             }.accessibilityIdentifier("settings.continuity")

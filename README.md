@@ -1,3 +1,13 @@
+# Textractor Pro — verification in progress
+
+The display name is now **Textractor Pro**. The Swift package, executable, bundle identifier,
+and existing settings/history locations retain their original identifiers for compatibility.
+App Store name reservation is **not verified**. No production signoff has been issued.
+
+See [the feature and verification matrix](qa/FEATURE_MATRIX.md),
+[the native QA instructions](qa/VALIDATION.md), and
+[the iOS conversation-import proposal](qa/IOS_DIRECTION.md).
+
 # Textractor
 
 > **On-device, privacy-first OCR for macOS.** A cyberpunk menubar/TUI app that

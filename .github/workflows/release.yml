@@ -74,6 +74,9 @@ jobs:
         with:
           fetch-depth: 0  # Needed for git tags and version detection
       
+      - name: Require verified release signoff
+        run: python3 scripts/check_release_signoff.py
+
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
