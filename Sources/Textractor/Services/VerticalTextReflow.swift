@@ -14,10 +14,19 @@ enum VerticalTextReflow {
               let data = context.data else { return [] }
         context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         let pixels = data.assumingMemoryBound(to: UInt8.self)
-        let border = (0..<w).flatMap { [Int(pixels[$0]), Int(pixels[(h - 1) * w + $0])] }
-            + (0..<h).flatMap { [Int(pixels[$0 * w]), Int(pixels[$0 * w + w - 1])] }
+        var border: [Int] = []
+        border.reserveCapacity(2 * (w + h))
+        for x in 0..<w {
+            border.append(Int(pixels[x]))
+            border.append(Int(pixels[(h - 1) * w + x]))
+        }
+        for y in 0..<h {
+            border.append(Int(pixels[y * w]))
+            border.append(Int(pixels[y * w + w - 1]))
+        }
         let background = border.sorted()[border.count / 2]
-        guard border.filter({ abs($0 - background) < 15 }).count * 10 >= border.count * 9 else { return [] }
+        let uniformCount = border.filter { abs($0 - background) < 15 }.count
+        guard uniformCount * 10 >= border.count * 9 else { return [] }
         func ink(_ x: Int, _ y: Int) -> Bool { abs(Int(pixels[y * w + x]) - background) > 50 }
         let xCounts = (0..<w).map { x in (0..<h).reduce(0) { $0 + (ink(x, $1) ? 1 : 0) } }
         let xBands = bands(xCounts, minimum: max(2, h / 500), gap: max(2, Int(glyph * 0.3)))

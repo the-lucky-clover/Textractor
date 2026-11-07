@@ -95,6 +95,16 @@ final class CaptureQualityTests: XCTestCase {
         print("VERTICAL_JAPANESE_OBSERVATIONS=\(result.rawObservations.map { ($0.text, $0.boundingBox) })")
         let compact = result.joinedText.components(separatedBy: .whitespacesAndNewlines).joined()
         if compact != "日本語文字認識" {
+            let columns = VerticalTextReflow.columns(in: image, glyphWidth: 0.11)
+            print("VERTICAL_REFLOW_BOXES=\(columns.map(\.box))")
+            if let path = ProcessInfo.processInfo.environment["TEXTRACTOR_QA_OUTPUT"] {
+                let directory = URL(fileURLWithPath: path)
+                let fixtures = [("vertical-original", image)] + columns.enumerated().map { ("vertical-reflow-\($0.offset)", $0.element.image) }
+                for (name, raster) in fixtures {
+                    let data = try XCTUnwrap(NSBitmapImageRep(cgImage: raster).representation(using: .png, properties: [:]))
+                    try data.write(to: directory.appendingPathComponent(name + ".png"))
+                }
+            }
             let detector = VNDetectTextRectanglesRequest(); detector.reportCharacterBoxes = true
             try VNImageRequestHandler(cgImage: image).perform([detector])
             print("VERTICAL_DETECTION_REGIONS=\((detector.results ?? []).map { ($0.boundingBox, $0.characterBoxes?.map(\.boundingBox) ?? []) })")
