@@ -642,13 +642,12 @@ public final class ScreenshotService: NSObject {
             guard stitchedImage.height + currentImage.height - Int(boundedOverlap) <= 32_000 else {
                 throw ScreenshotError.processingFailed("Scroll capture reached the 32,000-pixel limit. Capture a shorter section.")
             }
-            stitchedImage = stitchImagesVertically(top: stitchedImage, bottom: currentImage, overlap: boundedOverlap)
+            stitchedImage = try ScrollImageComposer.append(top: stitchedImage, bottom: currentImage, overlap: Int(boundedOverlap))
             previousImage = currentImage
         }
         
         // Save the final stitched image
         let url = try persist(cgImage: stitchedImage)
-        let rect = CGRect(x: 0, y: 0, width: stitchedImage.width, height: stitchedImage.height)
         
         return CapturedImage(
             mode: .autoScroll,
@@ -665,7 +664,6 @@ public final class ScreenshotService: NSObject {
         
         let width = min(img1.width, img2.width)
         let height = min(img1.height, img2.height)
-        let bytesPerPixel = 4
         let bytesPerRow = width * 4
         
         var pixels1 = [UInt8](repeating: 0, count: width * height * 4)
@@ -700,38 +698,10 @@ public final class ScreenshotService: NSObject {
         }
         
         let similarity = 1.0 - Double(differentPixels) / Double(totalPixels)
-        return similarity >= 0.98
+        return similarity >= threshold
     }
     
-    /// Stitch two images vertically with overlap
-    private func stitchImagesVertically(top: CGImage, bottom: CGImage, overlap: CGFloat) -> CGImage {
-        let topHeight = top.height
-        let bottomHeight = bottom.height
-        let overlapInt = Int(overlap)
-        
-        let newHeight = topHeight + bottomHeight - overlapInt
-        let width = max(top.width, bottom.width)
-        
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let context = CGContext(
-            data: nil,
-            width: width,
-            height: newHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        )!
-        
-        // Draw top image
-        context.draw(top, in: CGRect(x: 0, y: 0, width: top.width, height: topHeight))
-        
-        // Draw bottom image, overlapping by 'overlap' pixels
-        let bottomY = topHeight - overlapInt
-        context.draw(bottom, in: CGRect(x: 0, y: bottomY, width: bottom.width, height: bottomHeight))
-        
-        return context.makeImage()!
-    }
+
     
     /// Load a CGImage from a file URL
     private func loadCGImage(from url: URL) -> CGImage? {

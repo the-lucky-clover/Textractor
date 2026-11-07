@@ -87,6 +87,28 @@ public final class OCRService {
             }
         }
 
+        // Vertical CJK lines can be omitted by correction-on recognition even when
+        // another column succeeds. Try correction-off and retain only additional,
+        // spatially distinct observations; do not replace text by confidence alone.
+        let isExplicitCJK = preferredLanguages.count == 1 &&
+            ["ja", "zh", "ko", "yue"].contains { preferredLanguages[0].hasPrefix($0) }
+        if isExplicitCJK, observations.contains(where: { $0.boundingBox.height > $0.boundingBox.width * 1.5 }) {
+            let additional = await Task.detached(priority: .userInitiated) {
+                Self.runSync(cgImage: cgImage, level: .accurate, languages: ocrLanguages,
+                             minTextHeight: 0, vocab: customVocabulary, disableLanguageCorrection: true)
+            }.value
+            for candidate in additional {
+                let overlaps = observations.contains {
+                    let intersection = $0.boundingBox.intersection(candidate.boundingBox)
+                    return !intersection.isNull && intersection.width * intersection.height >
+                        min($0.boundingBox.width * $0.boundingBox.height,
+                            candidate.boundingBox.width * candidate.boundingBox.height) * 0.3
+                }
+                if !overlaps { observations.append(candidate) }
+            }
+            revisionsUsed.append(("vertical-no-correction", 1))
+        }
+
         // Self-heal Step 1: try .fast when accurate produced nothing.
         if observations.isEmpty {
             TelemetryService.shared.record(
@@ -142,7 +164,7 @@ public final class OCRService {
         let result = OCRResult(
             rawObservations: observations,
             recognizedAtSeconds: Date().timeIntervalSince(started),
-            languageCandidates: [],
+            languageCandidates: preferredLanguages,
             revisionsUsed: revisionsUsed
         )
 

@@ -1,7 +1,7 @@
 import Foundation
 import Carbon.HIToolbox
 
-public struct ShortcutBinding: Codable, Equatable {
+public struct ShortcutBinding: Codable, Equatable, Sendable {
     public var keyCode: UInt32
     public var modifiers: UInt32
     public var label: String

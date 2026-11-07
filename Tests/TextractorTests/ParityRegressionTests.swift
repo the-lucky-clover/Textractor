@@ -4,6 +4,34 @@ import Carbon.HIToolbox
 @testable import Textractor
 
 final class ParityRegressionTests: XCTestCase {
+    func testFunctionKeyLabelsUseActualNoncontiguousMacKeyCodes() {
+        let keys = [kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8,
+                    kVK_F9, kVK_F10, kVK_F11, kVK_F12, kVK_F13, kVK_F14, kVK_F15,
+                    kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20]
+        for (index, key) in keys.enumerated() {
+            XCTAssertEqual(HotkeyManager.labelFor(keyCode: UInt32(key), modifiers: UInt32(cmdKey)), "⌘F\(index + 1)")
+        }
+    }
+    func testScrollAssemblyKeepsPageOrderAndRemovesOnlySpecifiedOverlap() throws {
+        func raster(_ values: [UInt8], width: Int = 1) throws -> CGImage {
+            let data = Data(values.flatMap { [ $0, $0, $0, UInt8(255) ] })
+            let provider = try XCTUnwrap(CGDataProvider(data: data as CFData))
+            return try XCTUnwrap(CGImage(width: width, height: values.count / width,
+                bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        }
+        let top = try raster([20, 40, 60]), bottom = try raster([60, 80, 100])
+        let result = try ScrollImageComposer.append(top: top, bottom: bottom, overlap: 1)
+        XCTAssertEqual(result.height, 5)
+        let bytes = try XCTUnwrap(result.dataProvider?.data) as Data
+        XCTAssertEqual((0..<result.height).map { bytes[$0 * result.bytesPerRow] }, [20, 40, 60, 80, 100])
+        XCTAssertThrowsError(try ScrollImageComposer.append(top: top, bottom: bottom, overlap: 3))
+        XCTAssertThrowsError(try ScrollImageComposer.append(top: top, bottom: bottom, overlap: -1))
+        XCTAssertThrowsError(try ScrollImageComposer.append(top: top, bottom: raster([1, 2, 3, 4], width: 2), overlap: 0))
+        let huge = try raster(Array(repeating: 1, count: 32_000))
+        XCTAssertThrowsError(try ScrollImageComposer.append(top: huge, bottom: bottom, overlap: 0))
+    }
     func testPointerSelectionAndCropRoundTripsAcrossDisplayArrangements() {
         let main = CGRect(x: 0, y: 0, width: 1440, height: 900)
         let others = [CGRect(x: -1920, y: -180, width: 1920, height: 1080),

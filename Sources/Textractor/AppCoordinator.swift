@@ -299,23 +299,6 @@ public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
         try loadCGImage(from: capture.fileURL)
     }
 
-    /// Run OCR on the image and return the result.
-    @MainActor
-    private func pipelineOCR(
-        cgImage: CGImage,
-        weirdness: Double,
-        vocab: [String],
-        uiLanguage: String
-    ) async -> OCRResult {
-        let langs = uiLanguage.isEmpty ? OCRService.automaticLanguages() : [uiLanguage]
-return await OCRService.shared.recognizeText(
-            in: cgImage,
-            weirdness: weirdness,
-            customVocabulary: vocab,
-            autoWeirdness: true
-        )
-    }
-
     /// Extract metadata and scan PII.
     @MainActor
     private func pipelineMetadataAndPII(
@@ -737,17 +720,6 @@ let onFormatCodeBlock: (() -> Void)? = {
             }
             SoundManager.playCaptureComplete()
 
-            // Post-capture translation (Snip-to-translate)
-            var deliverableText = outputText
-            if settings.translateAfterCapture,
-               !settings.translationTargetLanguage.isEmpty,
-               let translated = await TranslationService.shared.translate(
-                outputText,
-                to: settings.translationTargetLanguage
-               ) {
-                deliverableText = translated
-            }
-
             // Save to CaptureStore (new visual knowledge library)
             if settings.knowledgeModeEnabled {
                 let entities: [String] = analysis.entities.compactMap { entity in
@@ -1063,30 +1035,6 @@ let toastText = outputText
         captureSession = nil
         captureIntent = CaptureIntent()
         pendingAutoScrollCapture = false
-    }
-
-    /// Handles live OCR requests from the capture overlay.
-    /// Runs OCR on the given screen rect with fast settings and returns the text.
-    /// This is called ~4×/sec during region drag to update the preview text.
-    @MainActor
-    private func handleLiveOCRRequest(screenRect: CGRect, completion: @escaping (String?) -> Void) {
-        Task { @MainActor in
-            do {
-                let cgImage = try await ScreenshotService.shared.captureCGImageForRect(screenRect)
-                let langs = OCRService.automaticLanguages()
-                let result = try await OCRService.shared.recognizeText(
-                    in: cgImage,
-                    weirdness: appState.settings.weirdness,
-                    customVocabulary: appState.settings.customVocabulary,
-                    preferredLanguages: langs,
-                    autoWeirdness: true
-                )
-                completion(result.isEmpty ? nil : result.joinedText)
-            } catch {
-                // Silently ignore — live OCR failures don't warrant on-screen noise
-                completion(nil)
-            }
-        }
     }
 
     // MARK: - Toast auto-dismiss
