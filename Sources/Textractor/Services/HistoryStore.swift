@@ -152,6 +152,8 @@ public final class HistoryStore: ObservableObject {
             imagePath: imagePath ?? capture.fileURL.path
         )
         records.insert(record, at: 0)
+        // Imports and reprocessing may arrive out of timestamp order.
+        records.sort { $0.capturedAt > $1.capturedAt }
         enforceLimit(limit)
         save()
     }

@@ -81,7 +81,7 @@ final class TranslationServiceTests: XCTestCase {
     }
     
     func testMixedLanguageReturnsDominant() async {
-        let text = "Hello world! Bonjour le monde! Hello again!"
+        let text = "The report describes how to capture text from a photograph and save it as a document. Review the extracted text before sharing it with your team. A visitor said Bonjour, then continued the conversation in English."
         let languageCode = translationService.detectLanguageCode(text)
         XCTAssertEqual(languageCode, "en") // English should be dominant
     }
