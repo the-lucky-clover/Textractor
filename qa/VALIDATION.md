@@ -2,27 +2,43 @@
 
 ## Current evidence
 
-At commit `3ebd8e55f2dfed410c058dfb2d6463f01d9b106f`,
-[CI run 42364679691](https://github.com/the-lucky-clover/Textractor/actions/runs/42364679691)
-recorded:
+At source/test commit `9d4905b538c064a0ec80dad2d069281324ca9127`,
+[CI run 42366276787](https://github.com/the-lucky-clover/Textractor/actions/runs/42366276787)
+completed successfully in all three jobs:
 
 - Python measurement/release-gate suite: **12 passed**.
 - Secret scan: **passed**.
 - macOS: **72 unit tests and 3 UI playtests passed**, standalone release build and
   development-signature verification passed. UI coverage includes US English defaults,
   French → US English → relaunch, skip/replay preserving French, and camera-dialog cancel.
-- OCR: 15/15 exact synthetic samples; CER 0%; p50 1119.99 ms, p95 2059.28 ms.
+- OCR: **15/15 exact synthetic samples; CER 0%; p50 1041.41 ms; p95 1218.52 ms**.
   These are three clean cases repeated five times. They are not real-world accuracy,
   a same-hardware baseline comparison, or evidence of meeting the reference-Mac latency target.
-- iOS: build and **10 unit tests passed**; synthetic import took 3179 ms on this simulator.
-  UI import → review → export options ran, then the accessibility query for the combined
-  US English label failed. A correction and additional search playtesting are in progress.
+- iOS: build, **10 unit tests and 1 UI playtest passed**. The UI flow covers fixture import,
+  review, the typo query `libary`, keyboard dismissal, export options, English (US), and
+  onboarding replay/skip. Actual external sharing and Photos/Files permission flows remain
+  physical-device checks. Synthetic unit-test import took **2317.13 ms** in this simulator;
+  this single cold measurement is not a performance distribution or comparative speed claim.
+- Regression assertions cover weekday-starting messages that contain numbers and distinct
+  long messages with matching first 1,000 characters. Neither is accepted as the misleading
+  timestamp/overlap match that the earlier logic could produce.
+- Both synthetic PDF layouts (transcript and reconstructed messages), each with a source
+  appendix, were rendered and visually inspected at commit `23597d5`: four pages total,
+  visible numbering, readable black text on white, no clipped fixture content. The renderer
+  is unchanged in the final commit; its new PDF attachments and unit checks also passed.
+  Original image export matched imported bytes; source tampering stopped export.
+  This is not a physical print test.
 - Physical iPhone camera/import, VoiceOver, multi-display, representative OCR/search corpora,
   physical printing, commercial signing and App Store name acceptance remain unverified.
 
+The final iOS print-options and review screenshots were inspected. GitHub artifacts retain
+XCTest results, screenshots, PDF fixtures, logs and benchmark measurements for 14 days.
+Documentation-only updates after this commit do not change the tested implementation.
+
 Earlier CI runs exposed and led to corrections for retired macOS 14 runners, malformed
 secret-scan regexes, compile failures, history ordering, code-language classification,
-accessibility hit testing, and onboarding placement. Native evidence supersedes local grammar checks.
+accessibility hit testing, onboarding placement, combined accessibility labels and search-keyboard
+dismissal in UI automation. Native evidence supersedes local grammar checks.
 
 ## Execute on a Mac
 

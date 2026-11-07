@@ -15,7 +15,8 @@ user device. `Textractor Pro` is a working display name, not a verified App Stor
   Visible timestamp classification is a heuristic and can be corrected. Relative labels such
   as “Today” are not converted into invented calendar dates.
 - Adjacent screenshot overlap proposals require at least two matching blocks and 24 characters.
-  Differing numbers reject fuzzy overlap matches. Nothing is excluded automatically.
+  Differing numbers reject fuzzy overlap matches. Nonidentical blocks over 1,000 characters
+  are rejected rather than compared using a truncated prefix. Nothing is excluded automatically.
   Keep-both decisions and reversible exclusions are logged. Identical source files are flagged.
 - Reconstructed message layout with user-assigned left/right direction; this is labeled as a
   reconstruction and does not masquerade as an original iMessage screenshot.
@@ -45,12 +46,12 @@ physical-device performance, accessibility and large-corpus quality testing rema
 |---|---|
 | OCR import | Synthetic image through Vision; exact source-byte retention; record import latency. Expand to 30 threads covering light/dark mode, text size, emoji and long messages. |
 | Timestamps | Positive and negative classification fixtures; hiding timestamps leaves stored OCR untouched. No inferred dates. |
-| Overlap | Repeated “Yes” retained; two-block overlap proposed; changed amounts rejected. Require zero silently omitted blocks over the expanded corpus. |
+| Overlap | Repeated “Yes” retained; two-block overlap proposed; changed amounts and mismatched long-block tails rejected. Require zero silently omitted blocks over the expanded corpus. |
 | Review | Before/after edit log, original OCR persistence, reversible exclusions. |
 | Search | Exact source references, typo fixture and cosine mathematics. Real semantic relevance needs a labeled query corpus and device model availability checks. |
-| PDF | 612×792 pt media boxes, every-page numbering, searchable text, long-message pagination and Unicode wrapping. Both layouts need rendered inspection and a physical print test. |
+| PDF | 612×792 pt media boxes, every-page numbering, searchable text, long-message pagination and Unicode wrapping. Both synthetic layouts were rendered and visually inspected (see VALIDATION); physical print and representative-content checks remain. |
 | Provenance | Exact imported bytes and original exports match; tampering stops export. |
-| UI | Simulator import fixture → review → export options; US English and onboarding replay. Real Photos/Files permission and sharing flows remain device gates. |
+| UI | Simulator import fixture → review → fuzzy search → export options; US English and onboarding replay. Real Photos/Files permission and sharing flows remain device gates. |
 
 Run `xcodegen generate`, then `xcodebuild test -project Textractor.xcodeproj -scheme
 TextractorMobile -destination 'platform=iOS Simulator,name=<available iPhone>'
