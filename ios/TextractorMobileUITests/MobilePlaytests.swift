@@ -15,6 +15,8 @@ final class MobilePlaytests: XCTestCase {
         let search = app.searchFields.firstMatch
         search.tap(); search.typeText("libary")
         XCTAssertTrue(app.staticTexts["I will arrive at the library at noon."].waitForExistence(timeout: 10))
+        // Native searchable keeps the keyboard over the tab bar until dismissed.
+        app.buttons["Cancel"].tap()
         app.tabBars.buttons["Review"].tap()
         app.buttons["mobile.export"].tap()
         XCTAssertTrue(app.buttons["mobile.pdf.create"].waitForExistence(timeout: 5))
