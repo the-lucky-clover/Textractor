@@ -12,7 +12,7 @@ The baseline describes behavior, not a promise to copy its branding or interface
 | Capability | Textractor Pro implementation / gap | Quantification and acceptance evidence |
 |---|---|---|
 | Screen OCR: region, window, full display | Existing native pipeline retained; useful short text and numeric strings no longer require three words | 15 measured OCR samples per run after three warm-ups; report character error rate and p50/p95; target CER ≤1% for clean prose, ≤5% code, p95 ≤1500 ms on the reference Mac; not measured yet |
-| US English selection | Canonical `en-US`; underscore/label migration; separate full-width picker; explicit Automatic preserved over stale legacy data | 20 × 5 preference transitions in regression test; target 100/100 persisted correctly plus UI relaunch test |
+| US English selection | Fresh installs and reset default to `en-US`; underscore/label migration; separate full-width picker; explicit Automatic preserved over stale legacy data | 20 × 5 preference transitions in regression test; target 100/100 persisted correctly plus UI relaunch test |
 | Automatic / multiple languages | Use Vision's supported language list and automatic detection; explicit English remains isolated | Test every advertised catalog value; device gate: unsupported language must not be advertised as verified |
 | Tiny, low-quality and vertical text | Vision path exists; vertical CJK and degraded image behavior not yet established | Required corpus: 20 small-font, 20 degraded, 20 vertical samples; measure each separately; no aggregate accuracy claim yet |
 | File import | Existing image import; corrected file origin | PNG/JPEG/HEIC/TIFF import, cancel, corrupt file; 0 unexpected clipboard changes on failure |
@@ -46,3 +46,10 @@ Claims about speed, accuracy, user preference or superiority need measurements. 
 identical images and the same hardware/OS, excluding warm-up consistently. Do not treat
 Apple Vision confidence as measured OCR accuracy. The scorer rejects unmatched cases,
 changed ground truth, different environments and duplicate measurements.
+
+## iOS extension
+
+See [iOS implementation and limits](IOS_DIRECTION.md) for screenshot extraction, optional
+timestamps, overlap review, reconstructed message layout, search and numbered black-and-white
+packets. Shared-link import remains a proposal. Simulator tests do not constitute device or
+court-use approval.

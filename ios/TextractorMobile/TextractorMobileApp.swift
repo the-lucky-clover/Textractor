@@ -169,6 +169,10 @@ struct MobileSettingsView: View {
             Form {
                 Section("Recognition") {
                     LabeledContent("Default language", value: "English (US)")
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Default recognition language")
+                        .accessibilityValue("English (US)")
+                        .accessibilityIdentifier("mobile.language")
                     Text("Recognition runs on this device using en-US.").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Packet") {

@@ -87,6 +87,10 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(ConversationStore(directory: directory).archive.blocks.count, store.archive.blocks.count)
         let files = try PrintPacketRenderer.export(store: store, options: PacketOptions())
         defer { try? FileManager.default.removeItem(at: files[0].deletingLastPathComponent()) }
+        let transcriptAttachment = XCTAttachment(contentsOfFile: files[0])
+        transcriptAttachment.name = "Synthetic transcript packet"
+        transcriptAttachment.lifetime = .keepAlways
+        add(transcriptAttachment)
         let pdf = try XCTUnwrap(PDFDocument(url: files[0]))
         XCTAssertGreaterThanOrEqual(pdf.pageCount, 2)
         for index in 0..<pdf.pageCount {
@@ -94,7 +98,15 @@ final class ConversationTests: XCTestCase {
             XCTAssertEqual(pdf.page(at: index)?.bounds(for: .mediaBox).size, CGSize(width: 612, height: 792))
         }
         XCTAssertTrue(pdf.string?.contains("blue folder") == true)
-        XCTAssertEqual(files.count, 2)
+        XCTAssertEqual(files.count, 3)
+        XCTAssertEqual(try Data(contentsOf: files[2]), data)
+        var messageOptions = PacketOptions(); messageOptions.layout = .conversation
+        let messageFiles = try PrintPacketRenderer.export(store: store, options: messageOptions)
+        defer { try? FileManager.default.removeItem(at: messageFiles[0].deletingLastPathComponent()) }
+        let messageAttachment = XCTAttachment(contentsOfFile: messageFiles[0])
+        messageAttachment.name = "Synthetic reconstructed message packet"
+        messageAttachment.lifetime = .keepAlways
+        add(messageAttachment)
         try Data("altered".utf8).write(to: directory.appendingPathComponent(store.archive.sources[0].relativePath))
         XCTAssertThrowsError(try PrintPacketRenderer.export(store: store, options: PacketOptions()))
     }

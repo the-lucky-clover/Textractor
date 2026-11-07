@@ -10,6 +10,7 @@ struct PacketOptions {
     var includeTimestamps = true
     var includeSourcePages = true
     var includeAuditJSON = true
+    var includeOriginalFiles = true
     var layout: PacketLayout = .transcript
 }
 struct PacketTextBlock {
@@ -152,6 +153,14 @@ enum PrintPacketRenderer {
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
                 try encoder.encode(archive).write(to: json, options: [.atomic, .completeFileProtection])
                 urls.append(json)
+            }
+            if options.includeOriginalFiles {
+                for (index, source) in archive.sources.enumerated() {
+                    let suffix = (source.relativePath as NSString).pathExtension
+                    let original = directory.appendingPathComponent(String(format: "Source-%02d", index + 1) + "." + suffix)
+                    try store.originalData(source).write(to: original, options: [.atomic, .completeFileProtection])
+                    urls.append(original)
+                }
             }
             return urls
         } catch {

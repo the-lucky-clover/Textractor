@@ -88,6 +88,8 @@ enum ConversationLogic {
     static func similarity(_ a: String, _ b: String) -> Double {
         let a = normalized(String(a.prefix(1000))), b = normalized(String(b.prefix(1000)))
         guard !a.isEmpty, !b.isEmpty else { return 0 }
+        if a == b { return 1 }
+        guard abs(a.count - b.count) <= max(a.count, b.count) / 10 else { return 0 }
         // Amounts, dates and phone numbers are not interchangeable fuzzy matches.
         let numbers: (String) -> [String] = { $0.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty } }
         guard numbers(a) == numbers(b) else { return 0 }

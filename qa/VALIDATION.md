@@ -2,17 +2,27 @@
 
 ## Current evidence
 
-- Local Python measurement/release-gate suite: **12 passed**.
-- Shell, plist, workflow and XcodeGen-spec parsing: passed locally.
-- Swift tree-sitter grammar check: 78/79 files parsed without errors at the initial pass;
-  the existing async getter in CaptureProvider is a grammar limitation / unresolved parse
-  result, not an Xcode compilation result. Subsequent files need native compilation too.
-- First CI execution was cancelled before checkout: retired macOS 14 runner configuration.
-  Workflows now target macOS 15.
-- Native compilation, XCTest, UI screenshots, OCR timing and physical-device testing must
-  be judged from the latest CI result. This document does not claim they passed.
-- The initial secret scan crashed on the repository's invalid glob-shaped regexes.
-  Configuration now extends default detectors and excludes only generated/binary files.
+At commit `3ebd8e55f2dfed410c058dfb2d6463f01d9b106f`,
+[CI run 42364679691](https://github.com/the-lucky-clover/Textractor/actions/runs/42364679691)
+recorded:
+
+- Python measurement/release-gate suite: **12 passed**.
+- Secret scan: **passed**.
+- macOS: **72 unit tests and 3 UI playtests passed**, standalone release build and
+  development-signature verification passed. UI coverage includes US English defaults,
+  French → US English → relaunch, skip/replay preserving French, and camera-dialog cancel.
+- OCR: 15/15 exact synthetic samples; CER 0%; p50 1119.99 ms, p95 2059.28 ms.
+  These are three clean cases repeated five times. They are not real-world accuracy,
+  a same-hardware baseline comparison, or evidence of meeting the reference-Mac latency target.
+- iOS: build and **10 unit tests passed**; synthetic import took 3179 ms on this simulator.
+  UI import → review → export options ran, then the accessibility query for the combined
+  US English label failed. A correction and additional search playtesting are in progress.
+- Physical iPhone camera/import, VoiceOver, multi-display, representative OCR/search corpora,
+  physical printing, commercial signing and App Store name acceptance remain unverified.
+
+Earlier CI runs exposed and led to corrections for retired macOS 14 runners, malformed
+secret-scan regexes, compile failures, history ordering, code-language classification,
+accessibility hit testing, and onboarding placement. Native evidence supersedes local grammar checks.
 
 ## Execute on a Mac
 

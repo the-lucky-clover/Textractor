@@ -6,7 +6,8 @@ from pathlib import Path
 
 REQUIRED = ('native_build', 'unit_tests', 'ui_playtests', 'ocr_benchmark', 'continuity_photo',
             'continuity_multipage', 'camera_cancel', 'voiceover', 'multi_display',
-            'scroll_stitching', 'signing', 'app_store_name')
+            'scroll_stitching', 'signing', 'app_store_name', 'ios_build', 'ios_unit_tests',
+            'ios_ui_playtests', 'ios_physical_import', 'ios_print_review', 'ios_search_quality')
 
 def validate(record):
     missing = [item for item in REQUIRED if record.get('checks', {}).get(item) != 'passed']
@@ -21,7 +22,7 @@ if __name__ == '__main__':
         validate(record)
         commit = record['tested_commit']
         subprocess.run(['git', 'merge-base', '--is-ancestor', commit, 'HEAD'], check=True)
-        subprocess.run(['git', 'diff', '--exit-code', commit, 'HEAD', '--', 'Sources', 'Tests',
+        subprocess.run(['git', 'diff', '--exit-code', commit, 'HEAD', '--', 'Sources', 'Tests', 'ios',
                         'Package.swift', 'Package.resolved', 'project.yml', 'build.sh', 'scripts',
                         '.github/workflows'], check=True)
     except (ValueError, subprocess.CalledProcessError) as error:

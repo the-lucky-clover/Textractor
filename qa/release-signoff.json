@@ -14,6 +14,12 @@
     "multi_display": "pending-device",
     "scroll_stitching": "pending-device",
     "signing": "pending-credentials",
-    "app_store_name": "pending-app-store-connect"
+    "app_store_name": "pending-app-store-connect",
+    "ios_build": "pending",
+    "ios_unit_tests": "pending",
+    "ios_ui_playtests": "pending",
+    "ios_physical_import": "pending-device",
+    "ios_print_review": "pending-device",
+    "ios_search_quality": "pending-device"
   }
 }

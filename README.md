@@ -6,7 +6,13 @@ App Store name reservation is **not verified**. No production signoff has been i
 
 See [the feature and verification matrix](qa/FEATURE_MATRIX.md),
 [the native QA instructions](qa/VALIDATION.md), and
-[the iOS conversation-import proposal](qa/IOS_DIRECTION.md).
+[the iOS screenshot-review implementation and shared-link proposal](qa/IOS_DIRECTION.md).
+
+The new `TextractorMobile` target imports user-selected screenshots, preserves originals,
+reviews overlap, searches extracted text, and exports numbered black-and-white packets.
+Generate the project with `xcodegen generate`; select `TextractorMobile` for iOS or
+`Textractor` for macOS. Both default to English (US). Physical-device and release approval
+remain pending.
 
 # Textractor
 

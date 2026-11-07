@@ -239,6 +239,7 @@ struct PacketExportView: View {
                     Picker("Layout", selection: $options.layout) { ForEach(PacketLayout.allCases) { Text($0.rawValue).tag($0) } }
                     Toggle("Include transcript timestamps", isOn: $options.includeTimestamps)
                     Toggle("Append grayscale source pages", isOn: $options.includeSourcePages)
+                    Toggle("Share original image files", isOn: $options.includeOriginalFiles)
                     Toggle("Include full source text and edit history JSON", isOn: $options.includeAuditJSON)
                     Text("Timestamp visibility affects the transcript only. Source pages and full audit JSON retain source text, including timestamps and excluded blocks.").font(.caption)
                 }
