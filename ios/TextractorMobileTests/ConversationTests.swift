@@ -13,8 +13,8 @@ final class ConversationTests: XCTestCase {
     }
 
     func testTimestampClassificationDoesNotInventDates() {
-        for value in ["Today 9:41 AM", "Yesterday", "11:42 PM", "Nov 7, 2026"] { XCTAssertTrue(ConversationLogic.isTimestamp(value), value) }
-        for value in ["I will arrive at 9:41 AM", "We met yesterday", "Pay 1200 today"] { XCTAssertFalse(ConversationLogic.isTimestamp(value), value) }
+        for value in ["Today 9:41 AM", "Yesterday", "11:42 PM", "Nov 7, 2026", "Saturday, 10:20 AM"] { XCTAssertTrue(ConversationLogic.isTimestamp(value), value) }
+        for value in ["I will arrive at 9:41 AM", "We met yesterday", "Pay 1200 today", "Monday I owe you 100 dollars"] { XCTAssertFalse(ConversationLogic.isTimestamp(value), value) }
     }
     func testRepeatedShortMessagesAreNotAutomaticallyDuplicates() {
         let a = UUID(), b = UUID()
@@ -31,6 +31,9 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(ConversationLogic.overlaps(in: archive).count, 1)
         XCTAssertFalse(archive.blocks.contains(where: \.excluded))
         XCTAssertEqual(ConversationLogic.similarity("Payment is 100 dollars", "Payment is 900 dollars"), 0)
+        let longPrefix = String(repeating: "Shared sentence. ", count: 80)
+        XCTAssertEqual(ConversationLogic.similarity(longPrefix + "100", longPrefix + "900"), 0)
+        XCTAssertEqual(ConversationLogic.similarity(longPrefix, longPrefix), 1)
     }
     func testEditsPreserveOriginalAndLogBeforeAfter() {
         var archive = ConversationArchive(); let original = block("Original wording")

@@ -86,9 +86,11 @@ enum ConversationLogic {
     }
 
     static func similarity(_ a: String, _ b: String) -> Double {
-        let a = normalized(String(a.prefix(1000))), b = normalized(String(b.prefix(1000)))
+        let a = normalized(a), b = normalized(b)
         guard !a.isEmpty, !b.isEmpty else { return 0 }
         if a == b { return 1 }
+        // Never call different long messages duplicates based on a truncated prefix.
+        guard a.count <= 1000, b.count <= 1000 else { return 0 }
         guard abs(a.count - b.count) <= max(a.count, b.count) / 10 else { return 0 }
         // Amounts, dates and phone numbers are not interchangeable fuzzy matches.
         let numbers: (String) -> [String] = { $0.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty } }
@@ -101,7 +103,7 @@ enum ConversationLogic {
         let patterns = [
             #"^(?:Today|Yesterday)(?:[, ]+\d{1,2}:\d{2}(?:\s*[AP]M)?)?$"#,
             #"^\d{1,2}:\d{2}(?:\s*[AP]M)?$"#,
-            #"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:day|sday|nesday|rsday|urday)?[, ]+.*\d.*$"#,
+            #"^(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)(?:[, ]+\d{1,2}:\d{2}(?:\s*[AP]M)?)?$"#,
             #"^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,?\s+\d{4})?(?:[, ]+\d{1,2}:\d{2}(?:\s*[AP]M)?)?$"#
         ]
         return patterns.contains { s.range(of: $0, options: [.regularExpression, .caseInsensitive]) != nil }
