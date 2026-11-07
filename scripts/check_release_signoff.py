@@ -4,7 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 
-REQUIRED = ('native_build', 'unit_tests', 'ui_playtests', 'ocr_benchmark', 'continuity_photo',
+REQUIRED = ('native_build', 'unit_tests', 'ui_playtests', 'ocr_benchmark', 'representative_ocr', 'continuity_photo',
             'continuity_multipage', 'camera_cancel', 'voiceover', 'multi_display',
             'scroll_stitching', 'signing', 'app_store_name', 'ios_build', 'ios_unit_tests',
             'ios_ui_playtests', 'ios_physical_import', 'ios_print_review', 'ios_search_quality')

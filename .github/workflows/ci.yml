@@ -29,6 +29,7 @@ jobs:
           xcodebuild test -project Textractor.xcodeproj -scheme TextractorMobile -destination "platform=iOS Simulator,id=$ios_device" -parallel-testing-enabled NO -resultBundlePath qa-ios/mobile.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee qa-ios/tests.log
       - name: Export iOS playtest screenshots
         if: always()
+        timeout-minutes: 2
         run: |
           if [ -d qa-ios/mobile.xcresult ]; then
             xcrun xcresulttool export attachments --path qa-ios/mobile.xcresult --output-path qa-ios/screenshots
@@ -65,20 +66,27 @@ jobs:
       - name: Score measured OCR results
         run: python3 scripts/benchmark_report.py qa-results/ocr-measurements.json --output qa-results/ocr-summary.json
       - name: Build standalone bundle
+        id: bundle
+        if: ${{ !cancelled() }}
         run: bash build.sh
       - name: Verify development bundle
+        if: ${{ !cancelled() && steps.bundle.outcome == 'success' }}
         run: codesign --verify --deep --strict dist/Textractor.app
       - name: Generate UI test project
+        id: ui_project
+        if: ${{ !cancelled() }}
         run: |
           brew install xcodegen
           xcodegen generate
       - name: Playtest Settings and onboarding
+        if: ${{ !cancelled() && steps.ui_project.outcome == 'success' }}
         timeout-minutes: 10
         run: |
           set -o pipefail
           xcodebuild test -project Textractor.xcodeproj -scheme Textractor -destination 'platform=macOS' -resultBundlePath qa-results/playtests.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee qa-results/playtests.log
       - name: Export playtest screenshots
         if: always()
+        timeout-minutes: 2
         run: |
           if [ -d qa-results/playtests.xcresult ]; then
             xcrun xcresulttool export attachments --path qa-results/playtests.xcresult --output-path qa-results/screenshots
