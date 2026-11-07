@@ -78,6 +78,23 @@ final class ParityRegressionTests: XCTestCase {
         XCTAssertTrue(original.flattenText); XCTAssertFalse(original.readAloud); XCTAssertTrue(original.recognizeBarcodes)
         XCTAssertEqual(CaptureIntent().applying(to: original).flattenText, original.flattenText)
     }
+    func testPerCaptureLanguageControlsVerdictWithoutChangingDefault() {
+        let original = AppSettings.default
+        let japanese = CaptureIntent().applying(to: original, languageOverride: "ja-JP")
+        let result = OCRResult(rawObservations: [.init(text: "日本語文字認識", confidence: 0.95, boundingBox: .zero)],
+            recognizedAtSeconds: 0, languageCandidates: ["ja-JP"], revisionsUsed: [])
+        XCTAssertTrue(EnglishSuccessDetector.judge(result, preferredLanguage: japanese.uiLanguage).success)
+        XCTAssertFalse(EnglishSuccessDetector.judge(result, preferredLanguage: original.uiLanguage).success)
+        XCTAssertEqual(original.uiLanguage, "en-US")
+        XCTAssertEqual(CaptureIntent().applying(to: original, languageOverride: "").uiLanguage, "")
+    }
+    func testTableReconstructionCannotReintroduceRedactedEmailIntoFinalText() {
+        let table = "| Contact | Email |\n| --- | --- |\n| Jane | jane@example.com |"
+        let result = TextFormatter.finalize(table, redactSensitiveData: true)
+        XCTAssertFalse(result.contains("jane@example.com"))
+        XCTAssertTrue(result.contains("| Jane |"))
+        XCTAssertEqual(TextFormatter.finalize(table, redactSensitiveData: false), table)
+    }
     func testShortcutConflictIncludesOverlayAndGlobalBindings() throws {
         var settings = AppSettings.default
         settings.actionShortcuts[CaptureAction.previous.rawValue] = settings.shortcut(for: .capture)

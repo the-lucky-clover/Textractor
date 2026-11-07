@@ -291,295 +291,11 @@ public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
         }
     }
 
-    // MARK: - Core pipeline helpers
-
-    /// Load the CGImage from the capture file, or fail fast.
-    @MainActor
-    private func pipelineLoadImage(from capture: CapturedImage) throws -> CGImage {
-        try loadCGImage(from: capture.fileURL)
-    }
-
-    /// Extract metadata and scan PII.
-    @MainActor
-    private func pipelineMetadataAndPII(
-        ocrText: String,
-        piiEnabled: Bool
-    ) -> (metadata: ExtractedMetadata, piiReport: SensitiveDataDetector.Report, piiRedacted: Bool, piiCount: Int, scrubbedText: String) {
-        let metadata = MetadataExtractor.shared.extract(from: ocrText)
-        let report = SensitiveDataDetector.scan(ocrText)
-        let redacted = piiEnabled && !report.isClean
-        let count = report.byKind.count
-        let scrubbed = SensitiveDataDetector.scrub(ocrText, report: report)
-        return (metadata, report, redacted, count, scrubbed)
-    }
-
-    /// Analyze, format, and persist the successful capture. Returns the
-    /// output text and the analysis for the toast.
-    @MainActor
-    private func pipelineSuccessPath(
-        capture: CapturedImage,
-        cgImage: CGImage,
-        ocrResult: OCRResult,
-        metadata: ExtractedMetadata,
-        piiRedacted: Bool,
-        piiCount: Int,
-        scrubbedText: String,
-        weirdness: Double,
-        vocab: [String],
-        pasteAsPlainText: Bool,
-        wordWrapCaptured: Bool,
-        flattenText: Bool
-    ) async -> (outputText: String, analysis: AIInferenceService.Analysis?) {
-        let rawText = ocrResult.joinedText
-        let finalText = piiRedacted ? (scrubbedText.isEmpty ? "[REDACTED:ALL]" : scrubbedText) : rawText
-
-        let analysis = await AIInferenceService.shared.analyze(finalText, weirdness: weirdness)
-
-        let isWindow = capture.mode == .window
-        let tableMarkdown = (isWindow && appState.settings.windowCaptureAsTable)
-            ? TableFormatter.toMarkdownTable(observations: ocrResult.rawObservations)
-            : nil
-
-        var outputText: String = wordWrapCaptured
-            ? Self.flattenWordWrap(tableMarkdown ?? analysis.cleanedText, columns: 80)
-            : tableMarkdown ?? analysis.cleanedText
-        if flattenText {
-            outputText = outputText
-                .replacingOccurrences(of: "\r\n", with: " ")
-                .replacingOccurrences(of: "\n", with: " ")
-                .replacingOccurrences(of: "\r", with: " ")
-            outputText = outputText.split(separator: " ").filter { !$0.isEmpty }.joined(separator: " ")
-        }
-
-        // Build attributed string for rich paste
-        let attributed: NSAttributedString? = {
-            if pasteAsPlainText { return nil }
-            if let tableMarkdown {
-                let p = NSMutableParagraphStyle()
-                p.lineSpacing = 2.5
-                return NSAttributedString(
-                    string: tableMarkdown,
-                    attributes: [
-                        .font: NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular),
-                        .paragraphStyle: p,
-                        .foregroundColor: NSColor.labelColor
-                    ]
-                )
-            }
-            return TextFormatter.attributed(from: outputText, analysis: analysis, weirdness: weirdness)
-        }()
-
-        // Clipboard write
-        appState.pipelinePhase = .clipboard
-        _ = ClipboardService.shared.copy(outputText, attributed: attributed, plainTextOnly: pasteAsPlainText)
-        SoundManager.playCaptureComplete()
-
-        // Save to CaptureStore (new visual knowledge library)
-        if appState.settings.knowledgeModeEnabled {
-            let aiEntities: [String] = analysis.entities.compactMap { entity in
-                switch entity {
-                case .url(let s): return s
-                case .email(let s): return s
-                case .phone(let s): return s
-                case .hashtag(let s): return s
-                case .mention(let s): return s
-                }
-            }
-            let metaEntities: [String] = ([.url, .email, .phone, .cryptoAddress, .trackingNumber, .apiKey, .creditCard, .ipAddress, .macAddress, .uuid, .filePath, .sshKey, .dockerId] as [MetadataType]).flatMap { metadata.values(for: $0) }
-            let allEntities = Array(Set(aiEntities + metaEntities))
-
-            let record = CaptureRecord(
-                mode: capture.mode.rawValue,
-                origin: capture.origin.rawValue,
-                rect: capture.rect,
-                filePath: capture.fileURL.path,
-                ocrText: ocrResult.joinedText,
-                language: appState.settings.uiLanguage.isEmpty ? "auto" : appState.settings.uiLanguage,
-                confidence: Double(ocrResult.averageConfidence),
-                tags: analysis.keywords,
-                notes: "",
-                summary: analysis.keywords.prefix(5).joined(separator: ", "),
-                entities: allEntities,
-                fileSize: (try? FileManager.default.attributesOfItem(atPath: capture.fileURL.path)[.size] as? Int64) ?? 0,
-                imageWidth: cgImage.width,
-                imageHeight: cgImage.height,
-                isFavorite: false,
-                applicationName: capture.mode == .window ? "Window" : nil,
-                windowTitle: nil
-            )
-            try? CaptureStore.shared.save(record)
-        }
-
-// History record (text-only) — in-memory recents + persistent store.
-            appState.record(capture: capture, ocr: ocrResult, analysis: analysis, storedText: outputText)
-
-            // Auto-save captures to ~/Pictures/Textractor Captures/
-            if appState.settings.autoSaveCaptures {
-                Task.detached(priority: .utility) { [capture, outputText, ocrResult] in
-                    let saveDir = FileManager.default.urls(for: .picturesDirectory, in: .userDomainMask).first!
-                        .appendingPathComponent("Textractor Captures", isDirectory: true)
-                    try? FileManager.default.createDirectory(at: saveDir, withIntermediateDirectories: true)
-                    
-                    let formatter = DateFormatter()
-                    formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
-                    let timestamp = formatter.string(from: capture.capturedAt)
-                    let baseName = "Textractor_\(timestamp)"
-                    
-                    // Save image
-                    let imageURL = saveDir.appendingPathComponent("\(baseName).png")
-                    try? FileManager.default.copyItem(at: capture.fileURL, to: imageURL)
-                    
-                    // Save text
-                    let textURL = saveDir.appendingPathComponent("\(baseName).txt")
-                    try? outputText.write(to: textURL, atomically: true, encoding: .utf8)
-                    
-                    // Save metadata JSON
-                    let metadata = [
-                        "id": capture.id.uuidString,
-                        "timestamp": ISO8601DateFormatter().string(from: capture.capturedAt),
-                        "mode": capture.mode.rawValue,
-                        "origin": capture.origin.rawValue,
-                        "confidence": ocrResult.averageConfidence,
-                        "textLength": outputText.count
-                    ]
-                    let jsonData = try? JSONSerialization.data(withJSONObject: metadata, options: .prettyPrinted)
-                    let jsonURL = saveDir.appendingPathComponent("\(baseName).json")
-                    try? jsonData?.write(to: jsonURL, options: .atomic)
-                }
-            }
-
-        return (outputText, analysis)
-    }
-
-    /// Present the success toast and record clipboard telemetry.
-    @MainActor
-    private func pipelinePresentToast(
-        capture: CapturedImage,
-        ocrResult: OCRResult,
-        analysis: AIInferenceService.Analysis,
-        outputText: String,
-        tableMarkdown: String?,
-        pasteAsPlainText: Bool,
-        piiRedacted: Bool,
-        piiCount: Int,
-        telemetryEnabled: Bool
-    ) {
-        guard appState.settings.showSuccessNotifications else { return }
-
-        appState.pipelinePhase = .completed
-        let toastText = outputText
-        let toastCopy: () -> Void = {
-            _ = ClipboardService.shared.copy(toastText, plainTextOnly: pasteAsPlainText)
-            SoundManager.playClick()
-        }
-        let toastShare: (ShareService.Provider) -> Void = { provider in
-            AppCoordinator.shared.share(text: toastText, via: provider)
-        }
-        // Quick action: translate on demand (when not auto-translating)
-        let onTranslate: (() -> Void)? = {
-            guard !self.appState.settings.translationTargetLanguage.isEmpty else { return }
-            let targetLang = self.appState.settings.translationTargetLanguage
-            let plainText = self.appState.settings.pasteAsPlainText
-            Task { [targetLang, plainText, toastText] in
-                guard let translated = await TranslationService.shared.translate(
-                    toastText,
-                    to: targetLang
-                ) else { return }
-                _ = ClipboardService.shared.copy(translated, plainTextOnly: plainText)
-                SoundManager.playClick()
-            }
-        }
-        // Quick action: format as code block
-        let onFormatCode: (() -> Void)? = {
-            guard !toastText.isEmpty else { return }
-            let result = SourceCodeDetector.analyze(toastText)
-            let formatted = result.formatted
-            _ = ClipboardService.shared.copy(formatted, plainTextOnly: pasteAsPlainText)
-            SoundManager.playClick()
-        }
-        // Smart action: open first detected URL
-        let onOpenURL: (() -> Void)? = {
-            let urls = MetadataExtractor.shared.extract(from: toastText).values(for: .url)
-            guard let firstURL = urls.first, let url = URL(string: firstURL) else { return }
-            NSWorkspace.shared.open(url)
-        }
-        // Smart action: compose email to first detected email
-        let onComposeEmail: (() -> Void)? = {
-            let emails = MetadataExtractor.shared.extract(from: toastText).values(for: .email)
-            guard let firstEmail = emails.first else { return }
-            guard let mailtoURL = URL(string: "mailto:\(firstEmail)") else { return }
-            NSWorkspace.shared.open(mailtoURL)
-        }
-        // Smart action: format as code block (with language detection)
-let onFormatCodeBlock: (() -> Void)? = {
-            guard !toastText.isEmpty else { return }
-            let result = SourceCodeDetector.analyze(toastText)
-            let formatted = result.formatted
-            _ = ClipboardService.shared.copy(formatted, plainTextOnly: pasteAsPlainText)
-            SoundManager.playClick()
-        }
-        // Smart action: undo last capture
-        let onUndo: (() -> Void)? = {
-            // Remove last history entry
-            HistoryStore.shared.undoLastCapture()
-            // Show confirmation toast
-            SoundManager.playClick()
-            self.appState.toast = ToastState(
-                id: UUID(),
-                kind: .success,
-                headline: T.s("toast.undone"),
-                body: T.s("toast.undone.body"),
-                copy: nil,
-                share: nil
-            )
-            // Schedule dismissal
-            let toastID = self.appState.toast?.id
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                if self.appState.toast?.id == toastID {
-                    self.appState.toast = nil
-                }
-            }
-        }
-        let copyOk = ClipboardService.shared.copy(outputText, attributed: nil, plainTextOnly: pasteAsPlainText)
-        appState.toast = ToastState(
-            id: UUID(),
-            kind: .success,
-            headline: T.s("toast.copied"),
-            body: copyOk ? T.s("toast.ready") : T.s("toast.copy_failed"),
-            capture: capture,
-            ocr: ocrResult,
-            analysis: analysis,
-            piiWasRedacted: piiRedacted,
-            piiRedactionsApplied: piiCount,
-            copy: toastCopy,
-            share: toastShare,
-            onTranslate: onTranslate,
-            onFormatCode: onFormatCode,
-            onOpenURL: onOpenURL,
-            onComposeEmail: onComposeEmail,
-            onFormatCodeBlock: onFormatCodeBlock,
-            onUndo: onUndo
-        )
-        TelemetryService.shared.record(
-            TelemetryEvent(
-                kind: .clipboardWrite,
-                success: copyOk,
-                meta: [
-                    "bytes": "\(outputText.count)",
-                    "table": (tableMarkdown != nil ? "1" : "0"),
-                    "pii": piiRedacted ? "1" : "0"
-                ]
-            ),
-            telemetryEnabled: telemetryEnabled
-        )
-        scheduleToastDismiss()
-    }
-
     // MARK: - Core pipeline
 
     @MainActor
     public func runPipeline(for capture: CapturedImage, perCaptureLanguage: String? = nil, intent: CaptureIntent = CaptureIntent()) async {
-        let settings = intent.applying(to: appState.settings)
+        let settings = intent.applying(to: appState.settings, languageOverride: perCaptureLanguage)
 
         let weirdness = settings.weirdness
         let vocab = settings.customVocabulary
@@ -623,13 +339,7 @@ let onFormatCodeBlock: (() -> Void)? = {
         // multi-language superset); non-empty = that exact language for both
         // UI and OCR.
         // Per-capture language override (⌥ + capture) takes precedence over settings.
-        let ocrLanguages: [String] = if let override = perCaptureLanguage, !override.isEmpty {
-            [override]
-        } else if settings.uiLanguage.isEmpty {
-            OCRService.automaticLanguages()
-        } else {
-            [settings.uiLanguage]
-        }
+        let ocrLanguages = settings.uiLanguage.isEmpty ? OCRService.automaticLanguages() : [settings.uiLanguage]
         let ocrResult = await OCRService.shared.recognizeText(
             in: cgImage,
             weirdness: weirdness,
@@ -689,14 +399,17 @@ let onFormatCodeBlock: (() -> Void)? = {
                 outputText = SourceCodeDetector.analyze(outputText).formatted
             }
 
+            // Formatting (especially table reconstruction) can reintroduce raw text.
+            outputText = TextFormatter.finalize(outputText, redactSensitiveData: settings.piiRedactionEnabled)
+
             // Build attributed string for rich paste
             let attributed: NSAttributedString? = {
                 if pasteAsPlainText { return nil }
-                if let tableMarkdown {
+                if tableMarkdown != nil {
                     let p = NSMutableParagraphStyle()
                     p.lineSpacing = 2.5
                     return NSAttributedString(
-                        string: tableMarkdown,
+                        string: outputText,
                         attributes: [
                             .font: NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular),
                             .paragraphStyle: p,

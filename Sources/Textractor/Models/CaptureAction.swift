@@ -53,8 +53,9 @@ public struct CaptureIntent: Equatable {
     public init(flatten: Bool? = nil, speech: Bool? = nil, barcode: Bool? = nil) {
         self.flatten = flatten; self.speech = speech; self.barcode = barcode
     }
-    public func applying(to settings: AppSettings) -> AppSettings {
+    public func applying(to settings: AppSettings, languageOverride: String? = nil) -> AppSettings {
         var result = settings
+        if let languageOverride { result.uiLanguage = languageOverride }
         if let flatten { result.flattenText = flatten; result.wordWrapCaptured = false }
         if let speech { result.readAloud = speech }
         if let barcode { result.recognizeBarcodes = barcode }

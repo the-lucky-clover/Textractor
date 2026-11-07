@@ -1,6 +1,7 @@
 import XCTest
 import AppKit
 import CoreImage
+import Vision
 @testable import Textractor
 
 @MainActor
@@ -93,6 +94,14 @@ final class CaptureQualityTests: XCTestCase {
         let result = await OCRService.shared.recognizeText(in: image, preferredLanguages: ["ja-JP"])
         print("VERTICAL_JAPANESE_OBSERVATIONS=\(result.rawObservations.map { ($0.text, $0.boundingBox) })")
         let compact = result.joinedText.components(separatedBy: .whitespacesAndNewlines).joined()
+        if compact != "日本語文字認識" {
+            let detector = VNDetectTextRectanglesRequest(); detector.reportCharacterBoxes = true
+            try VNImageRequestHandler(cgImage: image).perform([detector])
+            print("VERTICAL_DETECTION_REGIONS=\((detector.results ?? []).map { ($0.boundingBox, $0.characterBoxes?.map(\.boundingBox) ?? []) })")
+            let column = try XCTUnwrap(image.cropping(to: CGRect(x: 380, y: 50, width: 120, height: 600)))
+            let cropped = await OCRService.shared.recognizeText(in: column, preferredLanguages: ["ja-JP"])
+            print("VERTICAL_DIAGNOSTIC_CROP=\(cropped.joinedText)")
+        }
         XCTAssertEqual(compact, "日本語文字認識")
     }
     func testCode128PayloadIsExact() throws {

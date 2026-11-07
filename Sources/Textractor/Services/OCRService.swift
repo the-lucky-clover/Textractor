@@ -94,8 +94,7 @@ public final class OCRService {
             ["ja", "zh", "ko", "yue"].contains { preferredLanguages[0].hasPrefix($0) }
         if isExplicitCJK, observations.contains(where: { $0.boundingBox.height > $0.boundingBox.width * 1.5 }) {
             let additional = await Task.detached(priority: .userInitiated) {
-                Self.runSync(cgImage: cgImage, level: .accurate, languages: ocrLanguages,
-                             minTextHeight: 0, vocab: customVocabulary, disableLanguageCorrection: true)
+                Self.recoverVerticalColumns(cgImage, languages: ocrLanguages, vocabulary: customVocabulary)
             }.value
             for candidate in additional {
                 let overlaps = observations.contains {
@@ -106,7 +105,7 @@ public final class OCRService {
                 }
                 if !overlaps { observations.append(candidate) }
             }
-            revisionsUsed.append(("vertical-no-correction", 1))
+            revisionsUsed.append(("vertical-regions", 1))
         }
 
         // Self-heal Step 1: try .fast when accurate produced nothing.
@@ -186,6 +185,32 @@ public final class OCRService {
     }
 
     // MARK: - Synchronous wrapper
+
+    private static func recoverVerticalColumns(_ image: CGImage, languages: [String], vocabulary: [String]) -> [TextObservation] {
+        let detector = VNDetectTextRectanglesRequest()
+        detector.reportCharacterBoxes = true
+        do { try VNImageRequestHandler(cgImage: image).perform([detector]) }
+        catch { return [] }
+        let width = CGFloat(image.width), height = CGFloat(image.height)
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        let regions = (detector.results ?? []).map(\.boundingBox)
+            .filter { $0.height * height > $0.width * width * 1.5 }
+            .sorted { $0.midX > $1.midX }.prefix(16)
+        return regions.flatMap { box -> [TextObservation] in
+            let crop = CGRect(x: box.minX * width, y: (1 - box.maxY) * height,
+                              width: box.width * width, height: box.height * height)
+                .insetBy(dx: -12, dy: -12).integral.intersection(bounds)
+            guard let cropped = image.cropping(to: crop) else { return [] }
+            return runSync(cgImage: cropped, level: .accurate, languages: languages,
+                           minTextHeight: 0, vocab: vocabulary, disableLanguageCorrection: true).map { observation in
+                let local = observation.boundingBox
+                return TextObservation(text: observation.text, confidence: observation.confidence,
+                    boundingBox: CGRect(x: (crop.minX + local.minX * crop.width) / width,
+                        y: 1 - crop.maxY / height + local.minY * crop.height / height,
+                        width: local.width * crop.width / width, height: local.height * crop.height / height))
+            }
+        }
+    }
 
     private static func runSync(
         cgImage: CGImage,
