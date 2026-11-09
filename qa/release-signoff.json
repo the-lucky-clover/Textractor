@@ -6,19 +6,19 @@
       "status": "blocked",
       "version": "2.0.0",
       "build": "2000",
-      "tested_commit": null,
+      "tested_commit": "a49bee68f3ca4a7ceb33167a007f3c6b7b1050d7",
       "checks": {
-        "configuration": "pending-validation",
+        "configuration": "passed",
         "privacy_review": "pending-owner-review",
         "metadata": "pending-app-store-connect",
         "app_store_name": "pending-app-store-connect",
         "signing": "pending-credentials",
-        "native_build": "pending-validation",
-        "unit_tests": "pending-validation",
-        "ui_playtests": "pending-validation",
-        "release_archive": "pending-validation",
+        "native_build": "passed",
+        "unit_tests": "passed",
+        "ui_playtests": "passed",
+        "release_archive": "passed-unsigned-only",
         "sandbox_launch": "pending-device",
-        "ocr_benchmark": "pending-validation",
+        "ocr_benchmark": "passed",
         "representative_ocr": "pending-corpus",
         "continuity_photo": "pending-device",
         "continuity_multipage": "pending-device",
@@ -29,23 +29,65 @@
         "history_migration": "pending-device",
         "app_store_validation": "pending-app-store-connect"
       },
-      "evidence": {}
+      "evidence": {
+        "configuration": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432569690"
+        ],
+        "native_build": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722247"
+        ],
+        "unit_tests": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722247"
+        ],
+        "ui_playtests": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722247"
+        ],
+        "ocr_benchmark": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722247"
+        ],
+        "release_archive": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722247"
+        ]
+      },
+      "unsigned_archive": {
+        "version": "2.0.0",
+        "build": "2000",
+        "signed": false,
+        "architectures": [
+          "arm64",
+          "x86_64"
+        ],
+        "source_sha256": "7086fa6e73a14061268bb01c54effba7ce514a7196fef86a0d360b1d640e3935",
+        "ci_merge_commit": "c458b6ef05c3d79078adcffc4c8ee1585addc546",
+        "artifact_id": 13709549263,
+        "evidence": "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722247"
+      },
+      "validation_summary": {
+        "portable_tests": 51,
+        "unit_tests": 118,
+        "app_store_policy_tests": 16,
+        "ui_playtests": 4,
+        "ocr_synthetic_samples": 15,
+        "macos": "15.8.2",
+        "architecture": "arm64",
+        "xcode": "26.3"
+      }
     },
     "ios": {
       "status": "blocked",
       "version": "1.0",
       "build": "1",
-      "tested_commit": null,
+      "tested_commit": "a49bee68f3ca4a7ceb33167a007f3c6b7b1050d7",
       "checks": {
-        "configuration": "pending-validation",
+        "configuration": "passed",
         "privacy_review": "pending-owner-review",
         "metadata": "pending-app-store-connect",
         "app_store_name": "pending-app-store-connect",
         "signing": "pending-credentials",
-        "ios_build": "pending-validation",
-        "ios_unit_tests": "pending-validation",
-        "ios_ui_playtests": "pending-validation",
-        "release_archive": "pending-validation",
+        "ios_build": "passed",
+        "ios_unit_tests": "passed",
+        "ios_ui_playtests": "passed",
+        "release_archive": "passed-unsigned-only",
         "ios_physical_import": "pending-device",
         "ios_print_review": "pending-device",
         "ios_search_quality": "pending-corpus",
@@ -53,7 +95,28 @@
         "archive_recovery": "pending-device",
         "app_store_validation": "pending-app-store-connect"
       },
-      "evidence": {}
+      "evidence": {
+        "configuration": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432569690"
+        ],
+        "ios_build": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722313"
+        ],
+        "ios_unit_tests": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722313"
+        ],
+        "ios_ui_playtests": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722313"
+        ],
+        "release_archive": [
+          "https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722313"
+        ]
+      },
+      "validation_summary": {
+        "unit_tests": 10,
+        "ui_playtests": 1,
+        "unsigned_archive": "passed"
+      }
     }
   },
   "previous_validation": {

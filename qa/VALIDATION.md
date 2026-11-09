@@ -1,41 +1,82 @@
 # Native QA and production signoff
 
-## November 9 release-readiness iteration
+## November 9 verified macOS release candidate
 
-The current iteration prepares the Textractor Pro store product and shipping pipeline.
-On the Linux editing environment, the 51 Python release-tool/metadata/evidence/benchmark
-tests passed, both platform candidate configuration checks passed, release shell scripts
-passed syntax checks, and the changed files passed `git diff --check`.
+Source candidate: `a49bee68f3ca4a7ceb33167a007f3c6b7b1050d7`.
+[CI run 42697333842](https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842)
+completed successfully in all four jobs: release configuration, security, native macOS and iOS.
 
-Ten native regressions were added for recovery collisions/retry preservation, unavailable
-model output, distribution mode handling, corrupt-history preservation, diagnostic opt-in,
-and nondefault settings persistence. These new tests have not yet been executed in the
-editing environment, which has no Swift or Xcode. Prior native results below are historical.
-The updated CI also compiles the actual store Release configurations as unsigned archives;
-these builds are distinct from the development UI test configuration.
+GitHub tested synthetic PR merge `c458b6ef05c3d79078adcffc4c8ee1585addc546`. Its full Git tree is
+identical to the source candidate (`c1df57ec938eb6f8295ad7320acae794b17ff7b8`). The local macOS
+shipping-input digest also matches the archive provenance:
+`7086fa6e73a14061268bb01c54effba7ce514a7196fef86a0d360b1d640e3935`.
+Subsequent changes limited to this report and `release-signoff.json` record evidence without
+changing the tested shipping inputs.
 
-The additional macOS pass restores Dock-only launch/reopen controls, removes stale shortcut
-labels, honors Reduce Motion in the capture menu, and avoids the generated SwiftPM resource
-accessor's fatal fallback in an installed `.app`. Native lifecycle tests cover persisted Dock
-preferences and reopen behavior. Capture-library regressions exercise transient decrypted OCR,
-legacy cache migration, inaccessible storage, locked/missing keys and per-record read failures.
-They are queued for native execution; portable tests do not establish Swift compilation.
+### Verified results
 
-Packaging checks inspect the actual built executable, both archive architecture slices,
-localizations, menu-bar resources and root privacy manifest. The signed archive path additionally
-checks the certificate-backed code signature's identifier and Apple team before export/upload.
-CI runs the release-safety/settings tests with `APP_STORE` as well as the ordinary build.
+| Check | Result |
+|---|---|
+| Portable release, metadata, provenance, benchmark and packaging checks | 51 tests passed locally and in CI |
+| Candidate configuration and release shell syntax | macOS and iOS passed |
+| Secret scan | Passed |
+| Native macOS suite | 118 tests passed; zero failures |
+| `APP_STORE` policy/settings suite | 16 tests passed; zero failures |
+| macOS UI playtests | 4 tests passed; zero failures |
+| Standalone app and development signature | Build, packaged-resource check and strict signature verification passed |
+| Mac App Store compile archive | Version 2.0.0, build 2000; unsigned; both arm64 and x86_64 slices passed verification |
+| iOS regression target | 10 unit tests, 1 UI playtest and unsigned App Store archive passed |
 
-The iOS primary icon now uses an opaque 1024×1024 RGB variant of the existing flask artwork.
-Its source and generation prompt are recorded in [ICON.md](../appstore/ios/ICON.md).
-The candidate validator rejects primary icons with alpha/transparency. Image generation
-and a passing configuration check are not evidence of App Store approval.
+[Native job](https://github.com/the-lucky-clover/Textractor/actions/runs/42697333842/job/129432722247)
+used macOS 15.8.2 on arm64, Xcode 26.3 (17C529), and the macOS 26.2 SDK. The standalone bundle
+uses an ad-hoc development signature. No production certificate, provisioning profile or
+App Store upload was exercised.
 
-The new [release plan](RELEASE_PLAN.md) and per-platform `release-signoff.json` keep
-native execution, physical-device acceptance, signing, privacy/metadata review and name
-acceptance separate. Record the new native CI run and tested commit here after execution.
-Existing nonsandboxed history migration into a signed sandbox container remains a device
-gate; preserved bundle identifiers alone do not establish a successful migration.
+The native suite includes nine capture-library storage/key tests, three Dock lifecycle tests,
+and nine release-safety tests. It exercises transient OCR storage across saves/reopens, legacy
+cache cleanup/recovery, locked/missing keys, unavailable storage, recovery-image collisions,
+corrupt history, diagnostics opt-in and unavailable model behavior. Existing language, OCR,
+geometry, shortcut, clipboard, barcode and output-policy regressions remain passing.
+
+The 15-sample synthetic OCR smoke corpus matched exactly: CER 0%, p50 595.22 ms, p95 625.04 ms.
+These results apply to those clean CI fixtures. They do not establish representative accuracy
+or a comparison with another product. The representative-corpus acceptance check remains open.
+
+Six exported macOS screenshots were inspected: the 252 pt Settings panel shows Textractor Pro
+and English (US); welcome steps retain readable text and navigation; the capture-overlay HUD
+and Continuity import dialog are visible and readable. The runner's Screen Recording permission
+is **not granted**, so the overlay test verifies activation/cancellation, not actual screen
+extraction. Camera-dialog cancellation is covered; an actual paired-device capture is not.
+The screenshots are QA evidence, not approved App Store marketing assets.
+
+### Release work included
+
+The candidate separates App Store archive/export/upload from development builds; applies the
+Textractor Pro name, sandbox entitlements and root privacy manifest; validates built resources
+and universal architecture slices; and checks signing identity/team before signed export.
+App Store compilation excludes experimental scrolling and external paste observation. The
+macOS pass also restores Dock-only launch/reopen, corrects shortcut labels, respects Reduce
+Motion in the capture menu, and avoids fatal installed-app SwiftPM resource fallbacks.
+
+The capture library no longer persists new decrypted OCR caches. Existing cached plaintext is
+logically cleared after successful recovery/authentication. This is not secure erasure of
+previous SQLite pages, write-ahead logs or backups. An unavailable optional library no longer
+terminates app startup, and Keychain failures do not silently replace encryption keys.
+
+Previously staged iOS metadata, privacy and opaque-icon work is included and passed the iOS
+regression job. [ICON.md](../appstore/ios/ICON.md) retains its source record.
+
+### Still required before release
+
+`qa/release-signoff.json` remains blocked on signed sandbox launch, actual multi-display and
+Screen Recording permission behavior, paired Continuity Camera capture/cancel, VoiceOver,
+representative OCR, and real existing-user migration. Development/CI fixtures do not establish
+migration between a nonsandboxed support folder and a signed sandbox container.
+
+Apple-account verification must supply the accepted product name and build number, production
+signing assets, completed support/privacy URLs and review contact, actual store screenshots,
+account declarations and App Store validation. No upload, review submission or public release
+has occurred. Follow [RELEASE_PLAN.md](RELEASE_PLAN.md) for those remaining actions.
 
 ## Prior native evidence (November 7)
 
