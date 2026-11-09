@@ -5,6 +5,12 @@ import AppKit
 /// styling so paste targets receive both `.string` and `.rtf` representations.
 public enum TextFormatter {
 
+    /// Apply privacy policy after every reconstruction/formatting step, before any paste representation.
+    public static func finalize(_ text: String, redactSensitiveData: Bool) -> String {
+        guard redactSensitiveData else { return text }
+        return SensitiveDataDetector.scrub(text, report: SensitiveDataDetector.scan(text))
+    }
+
     // MARK: - Public
 
     /// Build a rich-text version of cleaned OCR text. `weirdness` tweaks

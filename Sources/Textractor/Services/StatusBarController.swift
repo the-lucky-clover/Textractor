@@ -10,7 +10,7 @@ import SwiftUI
 @MainActor
 public final class StatusBarController: NSObject {
 
-    public static var shared: StatusBarController?
+    public static weak var shared: StatusBarController?
 
     public let statusItem: NSStatusItem
     public let popover: NSPopover
@@ -22,6 +22,7 @@ public final class StatusBarController: NSObject {
         self.popover = NSPopover()
         super.init()
         StatusBarController.shared = self
+        statusItem.behavior = [.removalAllowed]
         configureButton()
         configurePopover()
     }
@@ -57,7 +58,7 @@ private func configureButton() {
         } else {
             button.image = NSImage(
                 systemSymbolName: "text.viewfinder",
-                accessibilityDescription: "Textractor"
+                accessibilityDescription: "Textractor Pro"
             )
         }
         button.imageScaling = .scaleProportionallyDown
@@ -72,54 +73,61 @@ private func configureButton() {
         popover.behavior = .transient
         popover.animates = true
         let host = NSHostingController(rootView: AnyView(
-            MenuContentView(
-                appState: coordinator.appState,
-                onCaptureRegion: { [weak self] in
-                    self?.closePopover()
-                    coordinator.startCaptureRegion()
-                },
-                onCaptureWindow: { [weak self] in
-                    self?.closePopover()
-                    coordinator.startCaptureWindow()
-                },
-                onCaptureFullScreen: { [weak self] in
-                    self?.closePopover()
-                    coordinator.startCaptureFullScreen()
-                },
-                onCaptureContinuityCamera: { [weak self] in
-                    self?.closePopover()
-                    Task { await coordinator.runContinuityCameraCapture() }
-                },
-                onCaptureAutoScroll: { [weak self] in
-                    self?.closePopover()
-                    coordinator.startAutoScrollCapture()
-                },
-                onOpenSettings: { [weak self] in
-                    self?.closePopover()
-                    coordinator.openSettings()
-                },
-                onShowHistory: { [weak self] in
-                    self?.closePopover()
-                    coordinator.showHistoryWindow()
-                },
-                onQuit: { [weak self] in
-                    self?.closePopover()
-                    coordinator.quitApp()
-                },
-                onClose: { [weak self] in
-                    self?.closePopover()
-                }
-            )
+            Self.menuContent(coordinator: coordinator, onClose: { [weak self] in self?.closePopover() })
         ))
         // Don't force a fixed height — let the hosting controller size the
         // popover to the SwiftUI content so the whole menu fits with no scroll.
         popover.contentViewController = host
     }
 
+    /// The same capture controls serve the status popover and Dock-only window.
+    /// A Dock window has no status item to anchor a popover to.
+    static func menuContent(coordinator: AppCoordinator, onClose: @escaping () -> Void) -> MenuContentView {
+        MenuContentView(
+            appState: coordinator.appState,
+            onCaptureRegion: {
+                onClose()
+                coordinator.startCaptureRegion()
+            },
+            onCaptureWindow: {
+                onClose()
+                coordinator.startCaptureWindow()
+            },
+            onCaptureFullScreen: {
+                onClose()
+                coordinator.startCaptureFullScreen()
+            },
+            onCaptureContinuityCamera: {
+                onClose()
+                Task { await coordinator.runContinuityCameraCapture() }
+            },
+            onCaptureAutoScroll: {
+                onClose()
+                coordinator.startAutoScrollCapture()
+            },
+            onOpenSettings: {
+                onClose()
+                coordinator.openSettings()
+            },
+            onShowHistory: {
+                onClose()
+                coordinator.showHistoryWindow()
+            },
+            onQuit: {
+                onClose()
+                coordinator.quitApp()
+            },
+            onClose: onClose
+        )
+    }
+
     // MARK: - Click handling
 
     @objc private func handleClick(_ sender: AnyObject) {
-        togglePopover()
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            closePopover()
+            coordinator?.startCaptureRegion()
+        } else { togglePopover() }
     }
 
     private func togglePopover() {

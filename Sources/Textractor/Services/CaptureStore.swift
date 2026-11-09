@@ -5,10 +5,6 @@ import AppKit
 import CryptoKit
 import Security
 
-#if canImport(Security)
-import Security
-#endif
-
 /// Persistent model for a captured image with OCR text and metadata.
 @Model
 public final class CaptureRecord {
@@ -22,9 +18,13 @@ public final class CaptureRecord {
     // Encrypted fields
     public var ocrText: Data // AES-GCM ciphertext
     public var ocrNonce: Data // AES-GCM nonce
-    public var decryptedocrText: String? // Cached plaintext (optional)
+    // Retain the original stored field so older SwiftData stores keep their schema.
+    // It is read only for migration and cleared before the library becomes available.
+    // Never put newly decrypted text in this legacy field.
+    var decryptedocrText: String?
+    @Transient public var decryptedOcrText: String? = nil
     
-    /// Encryption key version used for this record. Allows decryption after key rotation.
+    /// Key metadata retained for existing records; missing keys never trigger rotation.
     public var keyVersion: Int
     
     public var language: String
@@ -70,10 +70,11 @@ public final class CaptureRecord {
         self.origin = origin
         self.rect = Self.encodeRect(rect)
         self.filePath = filePath
-        // Store plaintext temporarily in decryptedocrText; CaptureStore.save() will encrypt it
+        // The plaintext exists only in memory; save encrypts it before insertion.
         self.ocrText = Data()
         self.ocrNonce = Data()
-        self.decryptedocrText = ocrText.isEmpty ? nil : ocrText
+        self.decryptedocrText = nil
+        self.decryptedOcrText = ocrText.isEmpty ? nil : ocrText
         self.language = language
         self.confidence = confidence
         self.tags = tags
@@ -112,10 +113,29 @@ public final class CaptureRecord {
         )
     }
     
-    /// Returns cached decrypted OCR text if available, otherwise empty string.
-    /// The cache is populated by CaptureStore when fetching records.
-    public var decryptedOcrText: String? {
-        return decryptedocrText
+}
+
+/// The injectable interface keeps persistence tests out of the user's real Keychain.
+protocol CaptureKeyStoring: AnyObject {
+    func data(forKey key: String) throws -> Data?
+    func set(_ data: Data, forKey key: String) throws
+}
+
+public enum CaptureLibraryError: Error, LocalizedError {
+    case unavailable
+    case missingEncryptionKey
+    case invalidEncryptionKey
+    case invalidKeyVersion
+
+    public var errorDescription: String? {
+        switch self {
+        case .unavailable:
+            return "The capture library could not be opened. Its existing files have been kept. Check disk space and file access, then try again."
+        case .missingEncryptionKey:
+            return "The capture library's encryption key is missing. Restore the original login keychain before saving more captures. Existing records have been kept."
+        case .invalidEncryptionKey, .invalidKeyVersion:
+            return "The capture library's encryption information could not be read. Existing records and keys have been kept. Restore the original login keychain, then try again."
+        }
     }
 }
 
@@ -125,242 +145,245 @@ public final class CaptureStore: ObservableObject {
     
     public static let shared = CaptureStore()
     
-    // MARK: - Keychain Keys
-    private let keychain = Keychain()
-    private let encryptionKeyIdentifier = "com.example.textractor.encryption.key"
-    private let keyVersionIdentifier = "com.example.textractor.encryption.keyVersion"
-    
-    /// Current encryption key version stored as monotonic integer in Keychain.
-    /// Incrementing this triggers re-encryption of all stored records.
-    private var currentKeyVersion: Int {
-        // Read stored version from Keychain, default to 1
-        if let data = keychain.data(forKey: keyVersionIdentifier),
-           let stored = try? JSONDecoder().decode(Int.self, from: data) {
-            return stored
+    // Keep these identifiers unchanged so existing users retain their encryption key.
+    static let encryptionKeyIdentifier = "com.example.textractor.encryption.key"
+    static let keyVersionIdentifier = "com.example.textractor.encryption.keyVersion"
+    private let keychain: CaptureKeyStoring
+    private let directory: URL
+    private var container: ModelContainer?
+    private(set) var context: ModelContext?
+    private var openingError: Error?
+
+    @Published public var recentCaptures: [CaptureRecord] = []
+    @Published public private(set) var storageError: String?
+    public var isAvailable: Bool { context != nil }
+
+    init(directory: URL? = nil, keychain: CaptureKeyStoring = Keychain()) {
+        self.directory = directory ?? (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory()))
+            .appendingPathComponent("Textractor/Captures", isDirectory: true)
+        self.keychain = keychain
+        openStore()
+    }
+
+    /// Failure leaves the original store untouched and the rest of the app usable.
+    /// There is deliberately no destructive recreation or in-memory success fallback.
+    private func openStore() {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let schema = Schema([CaptureRecord.self])
+            let configuration = ModelConfiguration(
+                schema: schema,
+                url: directory.appendingPathComponent("captures.store"),
+                allowsSave: true,
+                cloudKitDatabase: .none
+            )
+            let openedContainer = try ModelContainer(for: CaptureRecord.self, configurations: configuration)
+            let openedContext = ModelContext(openedContainer)
+            // Every mutation must pass through an explicit save/error path.
+            openedContext.autosaveEnabled = false
+            container = openedContainer
+            context = openedContext
+            try migrateLegacyPlaintext(in: openedContext)
+            openingError = nil
+            storageError = nil
+        } catch {
+            context?.rollback()
+            context = nil
+            container = nil
+            openingError = (error is keychainError || error is CaptureLibraryError)
+                ? error : CaptureLibraryError.unavailable
+            storageError = openingError?.localizedDescription
+            LoggerService.shared.error("Capture library unavailable; existing files kept", error: error)
         }
-        return 1
     }
-    
-    /// Store the current key version to Keychain
-    private func setKeyVersion(_ version: Int) throws {
-        let data = try JSONEncoder().encode(version)
-        try keychain.set(data, forKey: keyVersionIdentifier)
+
+    private func requiredContext() throws -> ModelContext {
+        // A later attempt can recover after disk access or Keychain is restored.
+        if context == nil { openStore() }
+        guard let context else { throw openingError ?? CaptureLibraryError.unavailable }
+        return context
     }
-    
-    // Simplified direct key access with version-based rotation
-    private func getEncryptionKey() throws -> SymmetricKey {
-        let storedVersion = currentKeyVersion
-        
-        if let keyData = keychain.data(forKey: encryptionKeyIdentifier) {
-            // Key exists, check if version matches
-            // If version doesn't match, we'll rotate below
-            // For now, just return the key - rotation happens on mismatch
+
+    private func currentKeyVersion() throws -> Int {
+        guard let data = try keychain.data(forKey: Self.keyVersionIdentifier) else { return 1 }
+        guard let version = try? JSONDecoder().decode(Int.self, from: data), version > 0 else {
+            throw CaptureLibraryError.invalidKeyVersion
+        }
+        return version
+    }
+
+    private func getEncryptionKey(allowCreation: Bool) throws -> SymmetricKey {
+        // A locked/denied Keychain is an error, not an absent key. Never replace it.
+        if let keyData = try keychain.data(forKey: Self.encryptionKeyIdentifier) {
+            guard keyData.count == 32 else { throw CaptureLibraryError.invalidEncryptionKey }
             return SymmetricKey(data: keyData)
         }
-        
-        // Key rotation: key missing or version changed
-        let newKey = SymmetricKey(size: .bits256)
-        try keychain.set(newKey.withUnsafeBytes { Data($0) }, forKey: encryptionKeyIdentifier)
-        try setKeyVersion(currentKeyVersion)
-        
-        // Re-encrypt existing records with new key
-        Task { @MainActor in
-            await rotateAllExistingRecords(oldKeyVersion: storedVersion)
+        guard allowCreation else { throw CaptureLibraryError.missingEncryptionKey }
+        let records = try requiredContext().fetch(FetchDescriptor<CaptureRecord>())
+        guard records.allSatisfy({ $0.ocrText.isEmpty }) else {
+            throw CaptureLibraryError.missingEncryptionKey
         }
-        
+        let hasStoredVersion = try keychain.data(forKey: Self.keyVersionIdentifier) != nil
+        let version = try currentKeyVersion()
+        let newKey = SymmetricKey(size: .bits256)
+        try keychain.set(newKey.withUnsafeBytes { Data($0) }, forKey: Self.encryptionKeyIdentifier)
+        if !hasStoredVersion {
+            try keychain.set(try JSONEncoder().encode(version), forKey: Self.keyVersionIdentifier)
+        }
         return newKey
     }
-    
+
     private func encrypt(_ text: String) throws -> (combined: Data, nonce: Data) {
-        let key = try getEncryptionKey()
-        let sealedBox = try AES.GCM.seal(text.data(using: .utf8)!, using: key)
+        let key = try getEncryptionKey(allowCreation: true)
+        let sealedBox = try AES.GCM.seal(Data(text.utf8), using: key)
         guard let combined = sealedBox.combined else {
             throw keychainError.unexpectedStatus(errSecInternalError)
         }
         return (combined, Data(sealedBox.nonce.withUnsafeBytes { $0 }))
     }
-    
-    private func decrypt(_ combined: Data, nonce: Data) throws -> String {
-        let key = try getEncryptionKey()
+
+    private func decrypt(_ combined: Data) throws -> String {
+        let key = try getEncryptionKey(allowCreation: false)
         let sealedBox = try AES.GCM.SealedBox(combined: combined)
         var decryptedData = try AES.GCM.open(sealedBox, using: key)
-        let plaintext = String(decoding: decryptedData, as: UTF8.self)
-        // Securely wipe original data
-        decryptedData.withUnsafeMutableBytes { ptr in
-            for i in 0..<ptr.count { ptr[i] = 0 }
-        }
-        return plaintext
+        defer { decryptedData.resetBytes(in: 0..<decryptedData.count) }
+        return String(decoding: decryptedData, as: UTF8.self)
     }
-    
-    public let container: ModelContainer
-    public let context: ModelContext
-    
-    @Published public var recentCaptures: [CaptureRecord] = []
-    
-    private init() {
-        let schema = Schema([CaptureRecord.self])
-        // Non-sandboxed app: use the app-private Application Support directory.
-        // Using a group container here triggered a spurious "wants to access
-        // data from other apps" TCC prompt because the group identifier was not
-        // provisioned in entitlements. The app has no helper/extension to share
-        // with, so an app-group container is both unnecessary and the cause of
-        // the regression.
-        let capturesDir = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory()))
-            .appendingPathComponent("Textractor/Captures", isDirectory: true)
-        try? FileManager.default.createDirectory(at: capturesDir, withIntermediateDirectories: true)
-        let configuration = ModelConfiguration(
-            schema: schema,
-            url: capturesDir.appendingPathComponent("captures.store"),
-            allowsSave: true,
-            cloudKitDatabase: .none
-        )
-        do {
-            container = try ModelContainer(for: CaptureRecord.self, configurations: configuration)
-            context = ModelContext(container)
-            context.autosaveEnabled = true
-        } catch {
-            fatalError("Failed to create CaptureStore: \(error)")
-        }
-    }
-    
-    /// Re-encrypt all existing records when key version changes.
-    /// This performs a one-time migration on app launch after a version bump.
-    private func rotateAllExistingRecords(oldKeyVersion: Int?) async {
-        guard oldKeyVersion != nil else { return } // First launch, no records to rotate
-        
-        let allRecords = fetchAll()
-        guard !allRecords.isEmpty else { return }
-        
-        do {
-            // Get the current (new) key for re-encryption
-            let newKey = try getEncryptionKey()
-            
-            for record in allRecords {
-                guard !record.ocrText.isEmpty,
-                      let plaintext = try? decrypt(record.ocrText, nonce: record.ocrNonce) else {
-                    continue
-                }
-                
-                // Re-encrypt with the new key
-                let (newCombined, newNonce) = try encrypt(plaintext)
-                
-                // Update the record
-                record.ocrText = newCombined
-                record.ocrNonce = newNonce
-                record.decryptedocrText = nil // Clear plaintext cache
+
+    /// Earlier versions could autosave their plaintext cache. Keep the old field
+    /// in the schema, authenticate/recover its text, then clear it transactionally.
+    /// This is logical removal, not secure erasure of old SQLite pages or backups.
+    private func migrateLegacyPlaintext(in context: ModelContext) throws {
+        let records = try context.fetch(FetchDescriptor<CaptureRecord>())
+        var changed = false
+        for record in records {
+            guard let legacyText = record.decryptedocrText else { continue }
+            if record.ocrText.isEmpty {
+                let version = try currentKeyVersion()
+                let (ciphertext, nonce) = try encrypt(legacyText)
+                record.ocrText = ciphertext
+                record.ocrNonce = nonce
+                record.keyVersion = version
+            } else {
+                // Do not throw away the recovery copy if its key is unavailable.
+                _ = try decrypt(record.ocrText)
             }
-            
-            try context.save()
-            LoggerService.shared.info("[encryption] Rotated encryption key for \(allRecords.count) records")
-        } catch {
-            LoggerService.shared.error("[encryption] Key rotation failed: \(error)")
+            record.decryptedocrText = nil
+            changed = true
         }
+        if changed { try context.save() }
     }
-    
-    /// Save a new capture record.
+
+    /// Encrypt new OCR text before insertion; the decrypted OCR cache is transient.
     public func save(_ record: CaptureRecord) throws {
-        // Encrypt OCR text if provided as plaintext
-        if let plaintext = record.decryptedocrText, record.ocrNonce.isEmpty {
-            let (ciphertext, nonce) = try encrypt(plaintext)
-            record.ocrText = ciphertext
-            record.ocrNonce = nonce
-            record.decryptedocrText = nil // Clear plaintext after encryption
+        do {
+            let context = try requiredContext()
+            if let plaintext = record.decryptedOcrText, record.ocrText.isEmpty {
+                let version = try currentKeyVersion()
+                let (ciphertext, nonce) = try encrypt(plaintext)
+                record.ocrText = ciphertext
+                record.ocrNonce = nonce
+                record.keyVersion = version
+            }
+            record.decryptedocrText = nil
+            context.insert(record)
+            try context.save()
+            refreshRecent()
+        } catch {
+            context?.rollback()
+            storageError = error.localizedDescription
+            throw error
         }
-        context.insert(record)
-        try context.save()
-        refreshRecent()
     }
-    
-    /// Delete a capture record.
+
     public func delete(_ record: CaptureRecord) throws {
-        context.delete(record)
-        try context.save()
-        refreshRecent()
+        do {
+            let context = try requiredContext()
+            context.delete(record)
+            try context.save()
+            refreshRecent()
+        } catch {
+            context?.rollback()
+            storageError = error.localizedDescription
+            throw error
+        }
     }
-    
-    /// Update an existing record.
+
     public func update(_ record: CaptureRecord) throws {
-        try context.save()
-        refreshRecent()
+        do {
+            let context = try requiredContext()
+            record.decryptedocrText = nil
+            try context.save()
+            refreshRecent()
+        } catch {
+            context?.rollback()
+            storageError = error.localizedDescription
+            throw error
+        }
     }
-    
-    /// Fetch all captures sorted by date (newest first).
+
     public func fetchAll() -> [CaptureRecord] {
-        let descriptor = FetchDescriptor<CaptureRecord>(
-            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        let records = (try? context.fetch(descriptor)) ?? []
-        decryptAndCacheOcrText(for: records)
-        return records
+        fetchRecords(FetchDescriptor<CaptureRecord>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)]))
     }
-    
-    /// Fetch captures within a date range.
+
     public func fetch(from startDate: Date, to endDate: Date) -> [CaptureRecord] {
-        let descriptor = FetchDescriptor<CaptureRecord>(
+        fetchRecords(FetchDescriptor<CaptureRecord>(
             predicate: #Predicate { $0.createdAt >= startDate && $0.createdAt <= endDate },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        let records = (try? context.fetch(descriptor)) ?? []
-        decryptAndCacheOcrText(for: records)
-        return records
+        ))
     }
-    
-    /// Fetch captures matching a text query (simple contains).
+
     public func searchText(_ query: String) -> [CaptureRecord] {
-        // First fetch all records, then filter in memory using decrypted text
-        // (We can't use a predicate on encrypted Data)
-        let allRecords = fetchAll()
-        return allRecords.filter { record in
-            let text = record.decryptedOcrText ?? ""
-            return text.localizedStandardContains(query) ||
+        fetchAll().filter { record in
+            (record.decryptedOcrText ?? "").localizedStandardContains(query) ||
             record.notes.localizedStandardContains(query) ||
             record.summary.localizedStandardContains(query) ||
             record.tags.contains { $0.localizedStandardContains(query) }
         }
     }
-    
-    /// Fetch favorite captures.
+
     public func fetchFavorites() -> [CaptureRecord] {
-        let descriptor = FetchDescriptor<CaptureRecord>(
+        fetchRecords(FetchDescriptor<CaptureRecord>(
             predicate: #Predicate { $0.isFavorite == true },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        let records = (try? context.fetch(descriptor)) ?? []
-        decryptAndCacheOcrText(for: records)
-        return records
+        ))
     }
-    
-    /// Fetch captures by tag.
+
     public func fetchByTag(_ tag: String) -> [CaptureRecord] {
-        let descriptor = FetchDescriptor<CaptureRecord>(
+        fetchRecords(FetchDescriptor<CaptureRecord>(
             predicate: #Predicate { $0.tags.contains(tag) },
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-        )
-        let records = (try? context.fetch(descriptor)) ?? []
-        decryptAndCacheOcrText(for: records)
-        return records
+        ))
     }
-    
-    /// Decrypt OCR text and cache it in `decryptedocrText` for each record.
-    private func decryptAndCacheOcrText(for records: [CaptureRecord]) {
-        guard !records.isEmpty else { return }
+
+    private func fetchRecords(_ descriptor: FetchDescriptor<CaptureRecord>) -> [CaptureRecord] {
         do {
+            let records = try requiredContext().fetch(descriptor)
+            storageError = nil
             for record in records {
-                if !record.ocrText.isEmpty && !record.ocrNonce.isEmpty {
-                    record.decryptedocrText = try decrypt(record.ocrText, nonce: record.ocrNonce)
+                record.decryptedOcrText = nil
+                guard !record.ocrText.isEmpty else { continue }
+                do {
+                    record.decryptedOcrText = try decrypt(record.ocrText)
+                } catch {
+                    // One unreadable item must not hide other readable captures.
+                    storageError = error.localizedDescription
+                    LoggerService.shared.warning("Could not decrypt a capture; encrypted record kept")
                 }
             }
+            return records
         } catch {
-            LoggerService.shared.warning("Failed to decrypt OCR text: \(error)")
+            storageError = error.localizedDescription
+            LoggerService.shared.error("Could not read the capture library", error: error)
+            return []
         }
     }
-    
-    /// Refresh the recent captures cache.
+
     private func refreshRecent() {
-        recentCaptures = fetchAll().prefix(50).map { $0 }
+        recentCaptures = Array(fetchAll().prefix(50))
     }
-    
+
     /// Get captures grouped by day for timeline view.
     public func groupedByDay() -> [Date: [CaptureRecord]] {
         let all = fetchAll()
@@ -409,30 +432,34 @@ public final class CaptureStore: ObservableObject {
         return grouped
     }
     
-    /// Delete all captures (for testing/reset).
+    /// Delete all captures only for an explicit reset, without requiring decryption.
     public func deleteAll() throws {
-        let all = fetchAll()
-        for record in all {
-            context.delete(record)
+        do {
+            let context = try requiredContext()
+            let all = try context.fetch(FetchDescriptor<CaptureRecord>())
+            for record in all { context.delete(record) }
+            try context.save()
+            recentCaptures = []
+            storageError = nil
+        } catch {
+            context?.rollback()
+            storageError = error.localizedDescription
+            throw error
         }
-        try context.save()
-        refreshRecent()
     }
-    
-    /// Total count of captures.
+
     public var totalCount: Int {
-        (try? context.fetchCount(FetchDescriptor<CaptureRecord>())) ?? 0
+        guard let context else { return 0 }
+        return (try? context.fetchCount(FetchDescriptor<CaptureRecord>())) ?? 0
     }
-    
-    /// Total storage size of captured images.
+
     public var totalFileSize: Int64 {
         fetchAll().reduce(0) { $0 + $1.fileSize }
     }
 }
 
 // MARK: - Keychain Service (Standalone Helper)
-public final class Keychain {
-    private let tag = "com.example.textractor"
+public final class Keychain: CaptureKeyStoring {
     
     public func set(_ data: Data, forKey key: String) throws {
         let query: [String: Any] = [
@@ -442,34 +469,24 @@ public final class Keychain {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
         let status = SecItemAdd(query as CFDictionary, nil)
-        if status == errSecDuplicateItem {
-            // Update existing item
-            let updateQuery: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrAccount as String: key
-            ]
-            let attributes: [String: Any] = [
-                kSecValueData as String: data
-            ]
-            let updateStatus = SecItemUpdate(updateQuery as CFDictionary, attributes as CFDictionary)
-            if updateStatus != errSecSuccess {
-                throw keychainError(updateStatus)
-            }
-        } else if status != errSecSuccess {
-            throw keychainError(status)
-        }
+        // Creating an encryption key must not overwrite an item that appeared
+        // between lookup and insertion (for example in another running instance).
+        guard status == errSecSuccess else { throw keychainError(status) }
     }
-    
-    public func data(forKey key: String) -> Data? {
+
+    public func data(forKey key: String) throws -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
             kSecReturnData as String: true,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        return status == errSecSuccess ? (result as? Data) : nil
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else { throw keychainError(status) }
+        guard let data = result as? Data else { throw keychainError(errSecDecode) }
+        return data
     }
     
     public func delete(forKey key: String) throws {
@@ -494,7 +511,10 @@ public enum keychainError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .unexpectedStatus(let status):
-            return "Unexpected Keychain status: \(status)"
+            if status == errSecInteractionNotAllowed || status == errSecAuthFailed || status == errSecUserCanceled {
+                return "Unlock your login keychain and allow Textractor Pro access, then try again. Existing library records and keys have been kept."
+            }
+            return "The capture library could not access Keychain (status \(status)). Existing records and keys have been kept."
         }
     }
 }

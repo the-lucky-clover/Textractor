@@ -1,5 +1,5 @@
 /*
- nl-NL localization for Textractor
+ nl-NL localization for Textractor Pro
  Generated from Localization.swift
 */
 
@@ -37,7 +37,7 @@
 "history.limit" = "Keep last %d entries";
 "reduce.motion" = "Reduce motion";
 "telemetry" = "Local telemetry log";
-"about.tagline" = "Textractor · on-device OCR";
+"about.tagline" = "Textractor Pro · on-device OCR";
 "about.sub" = "Built for your privacy and your eyes.";
 "about.by" = "by Lucky Clover";
 "toast.copied" = "Copied to clipboard";
@@ -69,8 +69,8 @@
 "menu.history" = "History";
 "menu.app" = "App";
 "menu.settings" = "Settings…";
-"menu.quit" = "Quit Textractor";
-"onboarding.tour.title" = "Meet Textractor";
+"menu.quit" = "Quit Textractor Pro";
+"onboarding.tour.title" = "Meet Textractor Pro";
 "onboarding.tour.subtitle" = "Capture text on your screen with one keyboard shortcut.";
 "onboarding.tap_anywhere" = "Tap this anywhere";
 "onboarding.pick_capture_paste" = "Pick → capture → text on your clipboard";
@@ -92,16 +92,16 @@
 "onboarding.language.top" = "TOP";
 "onboarding.language.skip" = "Skip →";
 "onboarding.permissions.title" = "Permissions";
-"onboarding.permissions.subtitle" = "Textractor needs these to capture and transform text on your screen.";
+"onboarding.permissions.subtitle" = "Textractor Pro needs these to capture and transform text on your screen.";
 "onboarding.permission.screen_recording.title" = "Screen Recording";
 "onboarding.permission.screen_recording.detail" = "Required to capture regions, windows, and the full screen.";
-"onboarding.permissions.manual_hint" = "After opening System Settings, scroll to **Privacy & Security → Screen Recording**, find Textractor, and flip the switch ON. Then come back here.";
+"onboarding.permissions.manual_hint" = "After opening System Settings, scroll to **Privacy & Security → Screen Recording**, find Textractor Pro, and flip the switch ON. Then come back here.";
 "onboarding.back" = "← Back";
 "onboarding.done" = "Done";
 "onboarding.screen_recording_granted" = "Screen Recording granted — nice!";
 "onboarding.open_system_settings" = "Open System Settings";
-"onboarding.window.title" = "Welcome to Textractor";
-"capture.overlay.title" = "Textractor Capture";
+"onboarding.window.title" = "Welcome to Textractor Pro";
+"capture.overlay.title" = "Textractor Pro Capture";
 "capture.overlay.region_mode" = "Region  •  drag";
 "capture.overlay.window_mode" = "Window  •  click";
 "capture.overlay.freeform" = "Vrije vorm";

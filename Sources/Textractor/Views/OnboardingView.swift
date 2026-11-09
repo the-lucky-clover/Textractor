@@ -1,455 +1,83 @@
 import SwiftUI
 import AppKit
 
-/// First-launch onboarding with two skippable stages:
-///   1. Language picker — USA + UK pinned at the top-left of the grid.
-///   2. Permissions    — Screen Recording status with
-///                       "Open System Settings" buttons (the user has to flip
-///                       the switch manually since macOS won't grant these
-///                       programmatically).
-///
-/// Tapping Skip on either stage, or completing both, marks onboarding done so
-/// it never shows again — even after a factory reset.
+/// Every step can be skipped; replay never resets settings or requests permissions implicitly.
 public struct OnboardingRootView: View {
-
-    /// Resolved keyboard-shortcut label for the screen-capture hotkey, sourced
-    /// from the **live** `AppSettings` (honours the user's custom hotkey, if
-    /// any). Captured once at onboarding construction so we don't depend on a
-    /// global static that would always fall back to the factory default.
     let hotkeyLabel: String
-
-    /// Called once the user finishes or skips both stages.
-    /// `nil` = the user never picked a language (still gets automated OCR).
     var onComplete: (String?) -> Void
+    @State private var step = 0
+    @State private var language = "en-US"
+    @State private var choseLanguage = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    enum Stage: Int, Comparable {
-        case tour
-        case language
-        case permissions
-        static func < (lhs: Stage, rhs: Stage) -> Bool { lhs.rawValue < rhs.rawValue }
-    }
-
-    private static let stageOrder: [Stage] = [.tour, .language, .permissions]
-
-    @State private var stage: Stage = .tour
-    @State private var chosenLanguage: String? = nil
-
-    public init(hotkeyLabel: String, onComplete: @escaping (String?) -> Void) {
+    public init(hotkeyLabel: String, initialLanguage: String = "en-US", onComplete: @escaping (String?) -> Void) {
         self.hotkeyLabel = hotkeyLabel
+        self._language = State(initialValue: initialLanguage)
         self.onComplete = onComplete
     }
 
     public var body: some View {
-        ZStack {
-            // Stage 1 — tour / what we can do
-            if stage == .tour {
-                OnboardingTourView(hotkeyLabel: hotkeyLabel) {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                        stage = .language
-                    }
-                } onSkip: {
-                    onComplete(chosenLanguage)
-                }
-                .transition(.asymmetric(
-                    insertion: .move(edge: .leading).combined(with: .opacity),
-                    removal:   .move(edge: .leading).combined(with: .opacity)
-                ))
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Text("Textractor Pro").font(.title2.bold())
+                Spacer()
+                Text("\(step + 1) of 4").font(.caption.monospacedDigit())
+                    .accessibilityIdentifier("onboarding.progress")
             }
-
-            // Stage 2 — language
-            if stage == .language {
-                OnboardingLanguageView { code in
-                    chosenLanguage = code
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                        stage = .permissions
-                    }
-                } onSkip: {
-                    onComplete(chosenLanguage)
-                }
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal:   .move(edge: .leading).combined(with: .opacity)
-                ))
-            }
-
-            // Stage 3 — permissions
-            if stage == .permissions {
-                OnboardingPermissionsView {
-                    onComplete(chosenLanguage)
-                } onBack: {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                        stage = .language
-                    }
-                }
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal:   .move(edge: .trailing).combined(with: .opacity)
-                ))
-            }
-        }
-        .frame(width: 540, height: 480)
-        .background(Color(red: 0.043, green: 0.063, blue: 0.039))
-        .overlay(alignment: .top) { stageIndicator }
-    }
-
-    /// Tiny progress dots at the very top — one per stage in `stageOrder`.
-    private var stageIndicator: some View {
-        HStack(spacing: 6) {
-            ForEach(Self.stageOrder, id: \.rawValue) { s in
-                Circle()
-                    .fill(s == stage ? Color.white : Color.white.opacity(0.25))
-                    .frame(width: 5, height: 5)
-            }
-        }
-        .padding(.top, 8)
-    }
-}
-
-// MARK: - Stage 1: tour / capable features + keyboard shortcut
-
-private struct OnboardingTourView: View {
-    /// Live hotkey label captured at onboarding construction. Always non-empty
-    /// because the window controller reads it from the live `AppSettings` at
-    /// `show(...)` time.
-    var hotkeyLabel: String
-
-    var onContinue: () -> Void
-    var onSkip: () -> Void
-
-private var features: [(icon: String, title: String, detail: String)] {
-        [
-            ("viewfinder",             T.s("onboarding.feature.capture.title"),
-                                                        T.s("onboarding.feature.capture.detail")),
-            ("text.viewfinder",        T.s("onboarding.feature.ocr.title"),
-                                                        T.s("onboarding.feature.ocr.detail")),
-            ("sparkles",               T.s("onboarding.feature.ai.title"),
-                                                        T.s("onboarding.feature.ai.detail")),
-            ("doc.on.clipboard",       T.s("onboarding.feature.clipboard.title"),
-                                                        T.s("onboarding.feature.clipboard.detail")),
-            ("clock.arrow.circlepath", T.s("onboarding.feature.history.title"),
-                                                        T.s("onboarding.feature.history.detail")),
-            ("lock.shield",            "Privacy-first & offline",
-                                                        "All OCR runs on your Mac. Zero network calls. Your text never leaves this device."),
-            ("grid",                   T.s("onboarding.feature.grid.title"),
-                                                        T.s("onboarding.feature.grid.detail")),
-            ("arrow.up.left.and.arrow.down.right", T.s("onboarding.feature.space.title"),
-                                                        T.s("onboarding.feature.space.detail")),
-            ("chevron.left.forwardslash.chevron.right", T.s("onboarding.feature.code.title"),
-                                                        T.s("onboarding.feature.code.detail")),
-            ("arrow.uturn.backward",   T.s("onboarding.feature.undo.title"),
-                                                        T.s("onboarding.feature.undo.detail")),
-            ("arrow.left.arrow.right", T.s("onboarding.feature.translate.title"),
-                                                        T.s("onboarding.feature.translate.detail")),
-        ]
-    }
-
-    var body: some View {
-        VStack(spacing: 14) {
-            VStack(spacing: 6) {
-                Text(T.s("onboarding.tour.title")).font(.system(size: 22, weight: .heavy, design: .rounded)).foregroundStyle(.primary)
-                Text(T.s("onboarding.tour.subtitle")).font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            }
-            .padding(.top, 16).padding(.horizontal, 24)
-
-            // The hero shortcut — a single big key cap so the user can't miss it.
-            VStack(spacing: 6) {
-                Text(T.s("onboarding.tap_anywhere")).font(.system(size: 10, weight: .black, design: .monospaced)).kerning(0.8).foregroundStyle(.tertiary)
-                Text(hotkeyLabel)
-                    .font(.system(size: 36, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18).padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
-                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.22), lineWidth: 1))
-                            .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
-                    )
-                Text(T.s("onboarding.pick_capture_paste")).font(.system(size: 10)).foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 4)
-
+            ProgressView(value: Double(step + 1), total: 4).tint(BreakingDad.toxicGreen)
             ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(features, id: \.title) { feature in
-                        FeatureRow(icon: feature.icon, title: feature.title, detail: feature.detail)
+                VStack(alignment: .leading, spacing: 14) {
+                    switch step {
+                    case 0:
+                        Label("Capture. Review. Copy.", systemImage: "text.viewfinder").font(.title2.bold())
+                        Text("Press \(hotkeyLabel), select text on screen, then paste it wherever you work. Review captures in History. OCR runs on your Mac.")
+                        Text("For screenshots, grant Screen Recording when you are ready. Importing an image does not require that permission.")
+                    case 1:
+                        Label("Choose your recognition language", systemImage: "globe").font(.title2.bold())
+                        Picker("Language", selection: $language) {
+                            Text("Automatic").tag("")
+                            ForEach(AppSettings.availableOCRLanguages, id: \.code) { item in
+                                Text(item.name).tag(item.code)
+                            }
+                        }.accessibilityIdentifier("onboarding.language")
+                        Text("English (US) uses en-US. Automatic uses languages supported by this Mac. You can change this in Settings.")
+                    case 2:
+                        Label("Bring your iPhone or iPad", systemImage: "iphone.and.arrow.forward").font(.title2.bold())
+                        Text("Choose Import from iPhone or iPad in the capture menu, then Take Photo or Scan Documents in Apple's device menu.")
+                        Text("Use the same Apple Account with two-factor authentication. Keep devices nearby with Wi-Fi and Bluetooth enabled. Your Mac must support Continuity Camera.")
+                        Text("If no device appears, cancel and import a saved image. This does not require a separate Textractor Pro iOS app.")
+                    default:
+                        Label("Make it yours", systemImage: "slider.horizontal.3").font(.title2.bold())
+                        Text("Settings includes line-break control, QR and barcode recognition, read aloud, additive clipboard, and privacy options. Replay this tour any time from Settings.")
+                        Button("Open Screen Recording settings") {
+                            PermissionService.shared.openScreenRecordingSettings()
+                        }
+                        Text("Permission is optional until you capture the screen. Skip now and return later.").foregroundStyle(.secondary)
                     }
-                }.padding(.horizontal, 18)
+                }.frame(maxWidth: .infinity, alignment: .leading)
             }
-
             HStack {
+                Button("Skip tour") { onComplete(choseLanguage ? language : nil) }
+                    .accessibilityIdentifier("onboarding.skip")
                 Spacer()
-                Button(T.s("onboarding.skip")) { onSkip() }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Capsule().fill(.secondary.opacity(0.10)))
-                    .overlay(Capsule().stroke(.secondary.opacity(0.4), lineWidth: 0.8))
-                Button(T.s("onboarding.continue_next")) { onContinue() }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 14).padding(.vertical, 6)
-                    .background(Capsule().fill(Color.green.opacity(0.20)))
-                    .overlay(Capsule().stroke(Color.green.opacity(0.5), lineWidth: 0.8))
-                    .padding(.trailing, 16).padding(.bottom, 14)
-            }
-        }
-    }
-}
-
-/// Single-capsule row used inside the tour stage.
-private struct FeatureRow: View {
-    var icon: String
-    var title: String
-    var detail: String
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            ZStack {
-                Circle().fill(Color.green.opacity(0.14)).frame(width: 28, height: 28)
-                Image(systemName: icon).font(.system(size: 13, weight: .bold)).foregroundStyle(.green)
-            }
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
-                Text(detail).font(.system(size: 10)).foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 8).padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color.white.opacity(0.04))
-                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 0.7))
-        )
-    }
-}
-
-// MARK: - Stage 1: language picker
-
-private struct OnboardingLanguageView: View {
-
-    /// Called with the BCP-47 code the user tapped, or with `nil` if Skip.
-    var onPick: (String) -> Void
-    var onSkip: () -> Void
-
-    @State private var query: String = ""
-    private let pinned: [String] = ["en-US", "en-GB"]
-
-    private var visible: [AppSettings.CatalogEntry] {
-        let all = AppSettings.ocrLanguageCatalog
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return all }
-        let q = query.lowercased()
-        return all.filter {
-            $0.name.lowercased().contains(q) ||
-            $0.code.lowercased().contains(q) ||
-            $0.flag.contains(q)
-        }
-    }
-    private var pinnedEntries: [AppSettings.CatalogEntry] {
-        AppSettings.ocrLanguageCatalog.filter { pinned.contains($0.code) }
-    }
-    private var unpinned: [AppSettings.CatalogEntry] {
-        visible.filter { !pinned.contains($0.code) }
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 3) {
-                Text(T.s("onboarding.language.title"))
-                    .font(.system(size: 22, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.primary)
-                Text(T.s("onboarding.language.subtitle"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, 16)
-
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(.secondary)
-                TextField(T.s("onboarding.language.search"), text: $query)
-                    .textFieldStyle(.roundedBorder)
-            }
-            .padding(.horizontal, 16)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text(T.s("onboarding.language.top"))
-                            .font(.system(size: 9, weight: .black, design: .monospaced))
-                            .kerning(0.6).foregroundStyle(.tertiary)
-                        Spacer()
-                    }.padding(.horizontal, 16)
-
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 6), spacing: 10) {
-                        ForEach(pinnedEntries, id: \.code) { sphere($0, isPinned: true) }
-                        ForEach(unpinned, id: \.code)          { sphere($0, isPinned: false) }
-                    }
-                    .padding(.horizontal, 16)
+                if step > 0 {
+                    Button("Back") { step -= 1 }.accessibilityIdentifier("onboarding.back")
                 }
-                .padding(.bottom, 12)
-            }
-
-            HStack {
-                Spacer()
-                Button(T.s("onboarding.language.skip")) { onSkip() }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Capsule().fill(.secondary.opacity(0.15)))
-                    .overlay(Capsule().stroke(.secondary.opacity(0.5), lineWidth: 0.8))
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 14)
-            }
-        }
-    }
-
-    @ViewBuilder private func sphere(_ entry: AppSettings.CatalogEntry, isPinned: Bool) -> some View {
-        Button { onPick(entry.code) } label: {
-            VStack(spacing: 4) {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(colors: [Color.white, Color.secondary.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 56, height: 56)
-                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-                    Circle()
-                        .stroke(Color.white.opacity(0.9), lineWidth: isPinned ? 2 : 0.7)
-                        .frame(width: 56, height: 56)
-                    Text(entry.flag).font(.system(size: 30))
+                Button(step == 3 ? "Done" : "Continue") {
+                    if step == 1 { choseLanguage = true }
+                    if step == 3 { onComplete(choseLanguage ? language : nil) }
+                    else { step += 1 }
                 }
-                Text(entry.name)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .lineLimit(1).minimumScaleFactor(0.7)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("onboarding.next")
             }
-            .padding(.vertical, 4)
-            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
-        .help(entry.name)
+        .padding(28).frame(width: 540, height: 480)
+        .background(textractorHeaderBackground).preferredColorScheme(.dark)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: step)
     }
 }
 
-// MARK: - Stage 2: permissions
-
-private struct OnboardingPermissionsView: View {
-    var onDone: () -> Void
-    var onBack: () -> Void
-
-    @ObservedObject private var permissions = PermissionService.shared
-    private var screenGranted: Bool { permissions.screenRecordingGranted }
-    /// A short, transient label rendered after the user lands back from
-    /// System Settings (so they can confirm Textractor was added manually).
-    @State private var manualGrantHint: String? = nil
-
-    private let manualGrantHintText: String = T.s("onboarding.screen_recording_granted")
-
-    var body: some View {
-        VStack(spacing: 14) {
-            VStack(spacing: 3) {
-                Text(T.s("onboarding.permissions.title"))
-                    .font(.system(size: 22, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.primary)
-                Text(T.s("onboarding.permissions.subtitle"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-            }
-            .padding(.top, 16)
-
-            VStack(spacing: 10) {
-                permissionRow(
-                    title: T.s("onboarding.permission.screen_recording.title"),
-                    detail: T.s("onboarding.permission.screen_recording.detail"),
-                    granted: screenGranted,
-                    open: { PermissionService.shared.openScreenRecordingSettings() }
-                )
-            }
-            .padding(.horizontal, 18)
-
-            if let manualGrantHint {
-                Text(manualGrantHint)
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(.yellow)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 18)
-                    .transition(.opacity)
-            }
-
-            // Tiny note on how to grant manually — Screen Recording can't be
-            // granted programmatically; the user must flip the switch.
-            Text(T.s("onboarding.permissions.manual_hint"))
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 18)
-
-            HStack {
-                Button(T.s("onboarding.back")) { onBack() }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Capsule().fill(.secondary.opacity(0.10)))
-                    .overlay(Capsule().stroke(.secondary.opacity(0.4), lineWidth: 0.8))
-                Spacer()
-                Button(screenGranted ? T.s("onboarding.done") : T.s("onboarding.skip")) { onDone() }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 14).padding(.vertical, 6)
-                    .background(Capsule().fill(.secondary.opacity(0.15)))
-                    .overlay(Capsule().stroke(.secondary.opacity(0.5), lineWidth: 0.8))
-            }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 14)
-        }
-        .onChange(of: screenGranted) { newValue in
-            if newValue && manualGrantHint == nil {
-                manualGrantHint = manualGrantHintText
-            }
-        }
-    }
-
-    @ViewBuilder private func permissionRow(title: String, detail: String, granted: Bool, open: @escaping () -> Void) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(granted ? Color.green.opacity(0.15) : Color.yellow.opacity(0.15))
-                    .frame(width: 36, height: 36)
-                Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(granted ? .green : .yellow)
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
-                Text(detail).font(.system(size: 10)).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button(T.s("onboarding.open_system_settings")) { open() }
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
-                .buttonStyle(.plain)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(Capsule().fill(.secondary.opacity(0.15)))
-                .overlay(Capsule().stroke(.secondary.opacity(0.5), lineWidth: 0.8))
-        }
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.04))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.08), lineWidth: 0.8))
-        )
-    }
-}
-
-// MARK: - Window controller
-
-/// Drives the first-launch onboarding (language + permissions), then dismisses.
-/// Both stages are skippable — the user can complete or skip at any point and
-/// onboarding is recorded as done.
 @MainActor
 final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
@@ -476,6 +104,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     /// finishes or skips both stages (or dismisses the window via the close
     /// button — which we treat as an implicit Skip).
     func show(completion: @escaping (String?) -> Void) {
+        if let panel, panel.isVisible { panel.makeKeyAndOrderFront(nil); return }
         // Latch the completion up front so the close-button delegate path
         // can fire it even if the panel closes before any in-view callback.
         self.hasFinished = false
@@ -485,7 +114,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         // user-customized hotkey shortens the cycle; the factory `AppSettings.default`
         // would always show the app's hard-coded default.
         let liveHotkeyLabel = AppCoordinator.shared.appState.settings.resolvedHotkeyLabel
-        let view = OnboardingRootView(hotkeyLabel: liveHotkeyLabel, onComplete: { [weak self] chosen in
+        let view = OnboardingRootView(hotkeyLabel: liveHotkeyLabel, initialLanguage: AppCoordinator.shared.appState.settings.uiLanguage, onComplete: { [weak self] chosen in
             guard let self else { return }
             self.finish(with: chosen)
         })
@@ -501,8 +130,11 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.contentViewController = hosting
         panel.hidesOnDeactivate = false
-        panel.center()
+        panel.level = .floating
         hosting.view.frame = NSRect(origin: .zero, size: size)
+        hosting.view.layoutSubtreeIfNeeded()
+        panel.setContentSize(size)
+        panel.center()
 
         // Become the window's delegate so windowWillClose can clean up if the
         // user dismisses the panel without using an in-view Skip / Done button.

@@ -6,15 +6,24 @@ import Carbon.HIToolbox
 
 /// User-facing configuration. Persisted with `UserDefaults` via `SettingsStore`.
 ///
-/// Privacy posture (post-2.0): Textractor **always** runs OCR and discards the
-/// screenshot. The user can opt into keeping failed-OCR screenshots for
-/// recovery, but there is no "save every screenshot" mode. There is also no
-/// "where should I save?" picker; failed screenshots land in
-/// `~/Pictures/Textractor Screenshots/` so the user can still use macOS's
-/// built-in screen capture if they want different storage.
+/// OCR runs locally. Successful screenshots remain in temporary storage for
+/// history re-OCR while the files are available; failed screenshots are moved
+/// to the recovery folder until the user clears them. Text history is stored
+/// separately. Local diagnostics are disabled for fresh and reset settings.
 public struct AppSettings: Codable, Sendable {
     /// Weirdness 0% = strict, 100% = lenient / creative correction.
     public var weirdness: Double
+
+    public var recognizeBarcodes = false
+    public var readAloud = false
+    public var speechRate: Double = 0.5
+    public var additiveClipboard = false
+    public var persistAdditiveClipboard = false
+    public var clearAdditiveOnPaste = false
+    public var automaticallyOpenLinks = false
+    public var actionShortcuts: [String: ShortcutBinding] = [:]
+    public var disabledShortcuts: [String] = []
+    public var showSuccessNotifications = true
 
     /// User-vocab correction bias — Vision language-correction will favour these tokens.
     public var customVocabulary: [String]
@@ -158,16 +167,15 @@ public var ocrLanguages: [String] = []
     /// from the history context menu. Default ON.
     public var structuredExportEnabled: Bool
 
-    /// When enabled, automatically saves each capture (image + text) to
-    /// `~/Pictures/Textractor Captures/` with timestamped filenames.
-    /// Default OFF — captures are clipboard-only by default.
+    /// Legacy persisted key retained for compatibility. Automatic folder export
+    /// is not implemented and no toggle is presented for this inactive setting.
     public var autoSaveCaptures: Bool
 
     public init(
         weirdness: Double = 0.45,
         customVocabulary: [String] = [],
-        uiLanguage: String = "",
-        localTelemetryEnabled: Bool = true,
+        uiLanguage: String = "en-US",
+        localTelemetryEnabled: Bool = false,
         openPopoverOnCapture: Bool = false,
         lastUpdateCheckAt: Date? = nil,
         customHotkeyKeyCode: UInt32? = nil,
@@ -197,7 +205,7 @@ public var ocrLanguages: [String] = []
     ) {
         self.weirdness = weirdness
         self.customVocabulary = customVocabulary
-        self.uiLanguage = uiLanguage
+        self.uiLanguage = Self.normalizedLanguage(uiLanguage)
         self.localTelemetryEnabled = localTelemetryEnabled
         self.openPopoverOnCapture = openPopoverOnCapture
         self.windowCaptureAsTable = windowCaptureAsTable
@@ -230,6 +238,8 @@ public var ocrLanguages: [String] = []
     // MARK: - Codable migration
 
 private enum CodingKeys: String, CodingKey {
+        case recognizeBarcodes, readAloud, speechRate, additiveClipboard, showSuccessNotifications
+        case persistAdditiveClipboard, clearAdditiveOnPaste, automaticallyOpenLinks, actionShortcuts, disabledShortcuts
         case weirdness, customVocabulary, uiLanguage, localTelemetryEnabled, openPopoverOnCapture, lastUpdateCheckAt
         case customHotkeyKeyCode, customHotkeyModifiers, customHotkeyLabel, soundEffectsEnabled
         case pasteAsPlainText, wordWrapCaptured, windowCaptureAsTable, flattenText, reduceMotion
@@ -239,19 +249,30 @@ private enum CodingKeys: String, CodingKey {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        recognizeBarcodes = try container.decodeIfPresent(Bool.self, forKey: .recognizeBarcodes) ?? false
+        readAloud = try container.decodeIfPresent(Bool.self, forKey: .readAloud) ?? false
+        speechRate = min(1, max(0, try container.decodeIfPresent(Double.self, forKey: .speechRate) ?? 0.5))
+        additiveClipboard = try container.decodeIfPresent(Bool.self, forKey: .additiveClipboard) ?? false
+        persistAdditiveClipboard = try container.decodeIfPresent(Bool.self, forKey: .persistAdditiveClipboard) ?? false
+        clearAdditiveOnPaste = try container.decodeIfPresent(Bool.self, forKey: .clearAdditiveOnPaste) ?? false
+        automaticallyOpenLinks = try container.decodeIfPresent(Bool.self, forKey: .automaticallyOpenLinks) ?? false
+        actionShortcuts = try container.decodeIfPresent([String: ShortcutBinding].self, forKey: .actionShortcuts) ?? [:]
+        disabledShortcuts = try container.decodeIfPresent([String].self, forKey: .disabledShortcuts) ?? []
+        showSuccessNotifications = try container.decodeIfPresent(Bool.self, forKey: .showSuccessNotifications) ?? true
         weirdness = try container.decode(Double.self, forKey: .weirdness)
         customVocabulary = try container.decode([String].self, forKey: .customVocabulary)
-        var decodedUiLanguage = try container.decode(String.self, forKey: .uiLanguage)
+        let storedLanguage = try container.decodeIfPresent(String.self, forKey: .uiLanguage)
+        var decodedUiLanguage = storedLanguage ?? "en-US"
         // Migration: older builds stored the OCR language list in `ocrLanguages`.
-        // If `uiLanguage` is empty but legacy `ocrLanguages` has entries, promote
+        // If `uiLanguage` is absent but legacy `ocrLanguages` has entries, promote
         // the first one so the user does not lose their language preference.
-        if decodedUiLanguage.isEmpty,
+        if storedLanguage == nil,
            let legacyLangs = try container.decodeIfPresent([String].self, forKey: .ocrLanguages),
            let first = legacyLangs.first,
            !first.isEmpty {
             decodedUiLanguage = first
         }
-        self.uiLanguage = decodedUiLanguage
+        self.uiLanguage = Self.normalizedLanguage(decodedUiLanguage)
         localTelemetryEnabled = try container.decode(Bool.self, forKey: .localTelemetryEnabled)
         openPopoverOnCapture = try container.decode(Bool.self, forKey: .openPopoverOnCapture)
         lastUpdateCheckAt = try container.decodeIfPresent(Date.self, forKey: .lastUpdateCheckAt)
@@ -284,6 +305,16 @@ private enum CodingKeys: String, CodingKey {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(recognizeBarcodes, forKey: .recognizeBarcodes)
+        try container.encode(readAloud, forKey: .readAloud)
+        try container.encode(speechRate, forKey: .speechRate)
+        try container.encode(additiveClipboard, forKey: .additiveClipboard)
+        try container.encode(persistAdditiveClipboard, forKey: .persistAdditiveClipboard)
+        try container.encode(clearAdditiveOnPaste, forKey: .clearAdditiveOnPaste)
+        try container.encode(automaticallyOpenLinks, forKey: .automaticallyOpenLinks)
+        try container.encode(actionShortcuts, forKey: .actionShortcuts)
+        try container.encode(disabledShortcuts, forKey: .disabledShortcuts)
+        try container.encode(showSuccessNotifications, forKey: .showSuccessNotifications)
         try container.encode(weirdness, forKey: .weirdness)
         try container.encode(customVocabulary, forKey: .customVocabulary)
         try container.encode(uiLanguage, forKey: .uiLanguage)
@@ -310,6 +341,9 @@ private enum CodingKeys: String, CodingKey {
         try container.encode(clipboardImageOCR, forKey: .clipboardImageOCR)
         try container.encode(showConfidenceBadge, forKey: .showConfidenceBadge)
         try container.encode(structuredExportEnabled, forKey: .structuredExportEnabled)
+        try container.encode(sourceCodeMode, forKey: .sourceCodeMode)
+        try container.encode(translateAfterCapture, forKey: .translateAfterCapture)
+        try container.encode(translationTargetLanguage, forKey: .translationTargetLanguage)
         try container.encode(autoSaveCaptures, forKey: .autoSaveCaptures)
         // `ocrLanguages` is deprecated and intentionally omitted from new encodes.
     }
@@ -321,8 +355,8 @@ private enum CodingKeys: String, CodingKey {
     public static let `default` = AppSettings(
         weirdness: 0.45,
         customVocabulary: [],
-        uiLanguage: "",
-        localTelemetryEnabled: true,
+        uiLanguage: "en-US",
+        localTelemetryEnabled: false,
         openPopoverOnCapture: false,
         lastUpdateCheckAt: nil,
         customHotkeyKeyCode: nil,
@@ -377,6 +411,17 @@ public extension AppSettings {
     /// supports many more, this list covers the most commonly requested.
 static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
         ("en-US", "English (US)", "🇺🇸"),
+        ("uk-UA", "Ukrainian", "🇺🇦"),
+        ("cs-CZ", "Czech", "🇨🇿"),
+        ("da-DK", "Danish", "🇩🇰"),
+        ("nb-NO", "Norwegian", "🇳🇴"),
+        ("ro-RO", "Romanian", "🇷🇴"),
+        ("sv-SE", "Swedish", "🇸🇪"),
+        ("fi-FI", "Finnish", "🇫🇮"),
+        ("mr-IN", "Marathi", "🇮🇳"),
+        ("ars-SA", "Najdi Arabic", "🇸🇦"),
+        ("yue-Hans", "Cantonese (Simplified)", "🇨🇳"),
+        ("yue-Hant", "Cantonese (Traditional)", "🇭🇰"),
         ("en-GB", "English (UK)", "🇬🇧"),
         ("es-ES", "Spanish", "🇪🇸"),
         ("fr-FR", "French", "🇫🇷"),
@@ -400,6 +445,30 @@ static let ocrLanguageCatalog: [(code: String, name: String, flag: String)] = [
         ("zh-Hans", "Chinese (Simplified)", "🇨🇳"),
         ("zh-Hant", "Chinese (Traditional)", "🇹🇼"),
     ]
+
+    /// Offer only languages supported by the installed Vision runtime, including future additions.
+    static var availableOCRLanguages: [CatalogEntry] {
+        OCRService.automaticLanguages().map { code in
+            ocrLanguageCatalog.first { $0.code == code }
+                ?? (code, Locale(identifier: "en-US").localizedString(forIdentifier: code) ?? code, "🌐")
+        }.sorted { a, b in
+            if a.code == b.code { return false }
+            return a.code == "en-US" ? true : b.code == "en-US" ? false : a.name < b.name
+        }
+    }
+
+    /// Canonical picker values. Older builds used underscores, bare "en", or labels.
+    static func normalizedLanguage(_ value: String) -> String {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.isEmpty || value.lowercased() == "automatic" { return "" }
+        let normalized = value.replacingOccurrences(of: "_", with: "-").lowercased()
+        if ["en", "english", "english (us)", "english (united states)"].contains(normalized) {
+            return "en-US"
+        }
+        return ocrLanguageCatalog.first {
+            $0.code.lowercased() == normalized || $0.name.lowercased() == normalized
+        }?.code ?? OCRService.automaticLanguages().first { $0.lowercased() == normalized } ?? ""
+    }
 
     /// Bounded range exposed in the Settings slider.
     static let historyLimitRange: ClosedRange<Int> = 10...1000

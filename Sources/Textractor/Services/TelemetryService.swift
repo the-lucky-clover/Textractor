@@ -12,24 +12,29 @@ public final class TelemetryService {
     /// `AppSettings.localTelemetryEnabled` by `SettingsStore`. Low-level
     /// services read this instead of hardcoding `true`, so disabling telemetry
     /// in Settings actually stops all local logging.
-    public var isEnabled: Bool = true
+    private let enabledLock = NSLock()
+    private var enabled = false
+    public var isEnabled: Bool {
+        get { enabledLock.lock(); defer { enabledLock.unlock() }; return enabled }
+        set { enabledLock.lock(); defer { enabledLock.unlock() }; enabled = newValue }
+    }
 
     private let writeQueue = DispatchQueue(label: "com.textractor.telemetry", qos: .utility)
     private let dateFormatter: ISO8601DateFormatter
     private let encoder: JSONEncoder
 
-    private init() {
+    init(fileURL: URL? = nil) {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first ?? URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("Library/Application Support")
 
-        let dir = appSupport.appendingPathComponent("Textractor", isDirectory: true)
+        let dir = fileURL?.deletingLastPathComponent() ?? appSupport.appendingPathComponent("Textractor", isDirectory: true)
         if !FileManager.default.fileExists(atPath: dir.path) {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
-        self.fileURL = dir.appendingPathComponent("telemetry.jsonl")
+        self.fileURL = fileURL ?? dir.appendingPathComponent("telemetry.jsonl")
 
         dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -43,9 +48,9 @@ public final class TelemetryService {
     /// Records an event. Failures inside this method are swallowed — telemetry
     /// must never bring down the app.
     public func record(_ event: TelemetryEvent, telemetryEnabled: Bool) {
-        guard telemetryEnabled else { return }
+        guard telemetryEnabled, isEnabled else { return }
         writeQueue.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.isEnabled else { return }
             do {
                 let line = try self.encoder.encode(event)
                 guard let json = String(data: line, encoding: .utf8) else { return }
@@ -58,14 +63,16 @@ public final class TelemetryService {
 
     /// Stream-readable snapshot for the Settings UI.
     public func recent(limit: Int = 200) -> [TelemetryEvent] {
+        writeQueue.sync {
         guard let data = try? Data(contentsOf: fileURL) else { return [] }
         guard let str = String(data: data, encoding: .utf8) else { return [] }
-        let lines = str.split(separator: "\n").suffix(limit)
+        let lines = str.split(separator: "\n").suffix(max(0, limit))
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return lines.compactMap { line in
             guard let lineData = String(line).data(using: .utf8) else { return nil }
             return try? decoder.decode(TelemetryEvent.self, from: lineData)
+        }
         }
     }
 

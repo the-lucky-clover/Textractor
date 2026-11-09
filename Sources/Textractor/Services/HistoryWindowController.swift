@@ -29,7 +29,7 @@ final class HistoryWindowController: NSObject {
                 backing: .buffered,
                 defer: false
             )
-            win.title = "Textractor History"
+            win.title = "Textractor Pro History"
             win.contentViewController = hosting
             win.minSize = NSSize(width: 560, height: 420)
             win.isReleasedWhenClosed = false

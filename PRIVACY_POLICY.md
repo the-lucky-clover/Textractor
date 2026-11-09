@@ -1,164 +1,135 @@
-# Textractor Privacy Policy
+# Textractor Pro Privacy Policy
 
-**Effective Date:** September 1, 2026  
-**Last Updated:** September 1, 2026  
-**Contact:** pounds.1@example.com
+Last updated: November 9, 2026
 
----
+This policy describes the native Textractor Pro applications for macOS and iOS.
+The optional web companion in this repository is a separate service and has its own
+policy. Before a store release, the publisher must review this policy, publish the
+current version at the App Store privacy-policy URL, and complete the matching
+App Store privacy answers.
 
-## 1. Overview
+## Text recognition and local storage
 
-Textractor ("the App") is a macOS utility for capturing text from your screen via OCR (Optical Character Recognition). This privacy policy explains what data the App collects, how it is used, and your rights regarding that data.
+The native applications use Apple's Vision framework to recognize text on the
+device. They do not send captured images or recognized text to an OCR server.
+Text you capture or import can contain personal information, including information
+about other people.
 
-**Key Principle:** Textractor runs entirely on your device. No OCR images, extracted text, or personal data ever leave your Mac unless you explicitly choose to share them.
+**On macOS**, the app can capture a selected screen region or window and import
+images or Continuity Camera scans. It stores extracted text, capture timestamps,
+confidence information and source paths in local history. Ordinary history is a
+JSON file containing readable text; it is not protected by application-level
+encryption. The history entry limit is configurable, up to 1,000 records.
 
----
+Source images can remain in temporary storage for reprocessing. Images retained
+after a failed extraction are placed in the app's recovery location so the user
+can retry or remove them. Clearing text history does not promise to erase every
+source image. There is no seven-day automatic image-deletion policy.
 
-## 2. Data We Collect
+Optional additive-clipboard persistence saves a local JSON copy of the accumulated
+text. Disabling that persistence removes its saved batch file. Text already copied
+to the system clipboard can remain accessible to other applications until the
+clipboard is changed or cleared.
 
-### 2.1 Data Processed Locally (Never Transmitted)
+Optional Knowledge Mode saves additional capture records. The OCR text field uses
+AES-GCM encryption through Apple's CryptoKit, with the key in Keychain. Images,
+ordinary history, and fields such as notes, entities, tags, summaries and source
+paths are not all covered by that encryption. This app does not claim that every
+stored capture or metadata field is encrypted.
 
-The following data is processed **exclusively on your device** and never transmitted to any server:
+The current implementation keeps decrypted OCR in memory and clears the legacy persisted
+OCR cache when it can authenticate or recover those records. That cleanup does not securely
+erase older SQLite pages, write-ahead logs, exports or backups. If the original encryption key
+is missing or unavailable, the app retains the records and reports the problem; it does not
+replace an existing key to make an unreadable library appear empty.
 
-- **Screen captures** — Images captured via Screen Recording permission are processed locally by Apple's Vision framework for OCR. These images are saved only to your local cache directory (`~/Library/Caches/Textractor/`) and optionally to your chosen export location.
-- **Extracted text** — OCR results remain on your device. They are copied to your clipboard (at your direction), stored in your local history database, and optionally exported to files you choose.
-- **History records** — Timestamps, text previews, capture modes, and OCR confidence scores are stored in a local SQLite database (`~/Library/Application Support/Textractor/History/history.json`).
-- **Application settings** — Your preferences (hotkeys, language selection, redaction settings, translation target, etc.) are stored in `~/Library/Preferences/com.example.textractor.plist`.
+**On iOS**, selecting screenshots from Photos or Files copies the selected original
+images into the app's local archive. The app stores extracted text, source-image
+hashes, user corrections, speaker/date labels and a change history. Original
+images and archive files use iOS file protection. This is operating-system
+protection, not a separate password-encrypted archive provided by Textractor Pro.
+The app does not access the Messages database.
 
-### 2.2 Optional Telemetry (Opt-In Only)
+Preferences such as language, shortcuts and onboarding completion are stored
+locally. Native OCR and search do not require a Textractor account.
 
-If you enable **"Local Telemetry"** in Settings → Behavior, the App collects **anonymous, aggregated usage statistics** stored locally on your device:
+## Diagnostics
 
-- Capture mode used (region, window, full screen)
-- OCR success/failure rates
-- Text length distributions
-- Feature usage (translation, source code mode, PII redaction)
+Local telemetry is off for a fresh installation and after resetting to defaults.
+An existing saved choice is retained during an update. When enabled, diagnostic
+events are written locally and can contain event times, capture mode, success or
+failure, elapsed time, text counts and error details. These logs are not uploaded
+by the native telemetry implementation.
 
-**This data never leaves your device.** It is viewable only in the App's debug log and is deleted when you disable the setting or reset the App.
+Turning telemetry off stops new telemetry events. Use **Erase local diagnostics**
+to remove existing local telemetry and aggregate diagnostic counters. Optional
+file-based debug logs and the operating system's own logs have separate lifetimes.
+Review diagnostic files before choosing to share them, because error details can
+include file paths or information about a capture operation.
 
-### 2.3 Data You Explicitly Share
+## Sharing, exports and external services
 
-When you use the **Share** button in the capture toast, the extracted text is passed to macOS's native share sheet. You choose the destination (Mail, Messages, AirDrop, Notes, etc.). Textractor does not control or monitor what happens after the share sheet receives the data.
+The app can copy text to the system clipboard and pass text or files to the native
+share interface. You choose the receiving application or service. Exported PDF
+packets, original images and audit files can include the source material and
+corrections you selected. Copies outside the app are controlled by you and their
+receiving applications.
 
----
+Optional opening of recognized HTTP or HTTPS links is off by default. If enabled,
+the links open in your chosen browser, where the destination site's own privacy
+practices apply. Opening support, privacy or other external links also involves
+the browser or operating system and the destination service.
 
-## 3. Data We Do NOT Collect
+Mac App Store builds direct update requests to the App Store. Development builds
+can explicitly check the public GitHub release endpoint; GitHub receives the
+network request and ordinary connection information. That request does not include
+OCR text or screenshots. Native builds do not include an advertising or remote
+analytics SDK.
 
-- No personally identifiable information (name, email, Apple ID, etc.)
-- No network requests for analytics, tracking, or advertising
-- No crash reports sent automatically (you can manually share logs if desired)
-- No usage data sent to third parties
-- No cloud synchronization of history or settings
+Translation, shared-chat-link import and a working local language-model backend are
+not provided by this release candidate. The app does not submit content to a
+language-model service.
 
----
+## Permissions
 
-## 4. Third-Party Services
+- **Screen Recording on macOS:** used to capture screen content for recognition.
+  Permission can be changed in System Settings. Importing an image file does not
+  require access to the screen.
+- **Camera/Continuity Camera on macOS:** used when you choose to take a photo or
+  scan with a supported Apple device.
+- **User-selected files:** used for imports and exports.
+- **Selected photos on iOS:** the system photo picker supplies the items you select.
 
-### Apple Frameworks (On-Device Only)
+The Mac App Store configuration does not use cross-application Accessibility
+monitoring for automatic clipboard clearing or automate another app's scrolling.
+Development builds retain experimental controls with different system-permission
+requirements.
 
-Textractor uses the following Apple frameworks **entirely on-device**:
+## Retention and deletion
 
-- **Vision.framework** — OCR text recognition (runs locally on Apple Silicon Neural Engine or CPU)
-- **ScreenCaptureKit** — Screen/window capture (requires your explicit Screen Recording permission)
-- **NaturalLanguage.framework** — Language detection for translation (runs locally)
-- **CoreML / MLModel** — On-device translation (when available, macOS 14+)
+History, preferences, recovery files and local archives remain until removed by
+the appropriate app control or by you. Temporary and cache locations can also be
+managed by the operating system. Removing the app does not necessarily remove
+exports, clipboard contents, backups, or all macOS support files.
 
-No data is sent to Apple servers by these frameworks during normal operation.
+The Mac provides controls for clearing text history, clearing recovery images,
+erasing local diagnostics and resetting the app. A reset does not erase copies
+already exported to other locations or change system privacy permissions. A
+corrupt history file is preserved and reported rather than silently replaced with
+an empty history.
 
-### Open Source Dependencies
+iOS export creates copies for sharing or printing. Deleting an original from
+Photos does not delete the copy already imported into Textractor Pro. Device
+backup, Files providers and sharing destinations may retain additional copies
+according to your system settings and their policies. Textractor Pro does not
+operate a native cloud-sync service.
 
-- **swift-crypto** (Apple) — Local AES-GCM encryption for CaptureStore
-- **SwiftData** — Local persistence (SQLite on device)
+## Contact and policy changes
 
-These are compiled into the App binary and operate entirely locally.
+General project support is available through the
+[Textractor repository issue tracker](https://github.com/the-lucky-clover/Textractor/issues).
+Do not attach private screenshots, transcripts or diagnostic files to a public issue.
 
----
-
-## 5. Permissions
-
-| Permission | Purpose | Required? |
-|------------|---------|-----------|
-| **Screen Recording** | Capture screen regions, windows, or full screen for OCR | **Yes** (core functionality) |
-| **Accessibility** | *Not used* — Textractor does not auto-paste or control other apps | No |
-
-You can revoke Screen Recording permission at any time in **System Settings → Privacy & Security → Screen Recording**. The App will prompt you to re-grant it when needed.
-
----
-
-## 6. Data Retention
-
-| Data Type | Retention |
-|-----------|-----------|
-| Capture images (cache) | 7 days (auto-cleaned), or until manually cleared |
-| History records | Up to your configured limit (default 100, max 1000) |
-| Exported files | Until you delete them |
-| Settings / Preferences | Until you delete the App or reset settings |
-| Telemetry logs | Until you disable Local Telemetry or reset the App |
-
-You can clear all history and cache at any time via **Settings → Clear History** or **Settings → Factory Reset**.
-
----
-
-## 7. Your Rights
-
-Under GDPR, CCPA, and similar regulations, you have the right to:
-
-- **Access** — View all data the App stores locally (history, settings, cache)
-- **Rectification** — Edit or delete individual history entries
-- **Erasure** — Use "Clear History" or "Factory Reset" to delete all App data
-- **Portability** — Export history as JSON/CSV via the Structured Export feature
-- **Restriction** — Disable features (telemetry, translation, knowledge mode) individually
-- **Objection** — Opt out of all data processing by not using the App
-
-To exercise these rights, use the App's built-in controls. No server-side request is needed because all data resides on your device.
-
----
-
-## 8. Children's Privacy (COPPA)
-
-Textractor is not directed at children under 13. The App does not knowingly collect personal information from children. If you believe a child has provided personal data, contact us and we will assist with deletion.
-
----
-
-## 9. Security
-
-- **Encryption at rest** — CaptureStore encrypts OCR text using AES-GCM with keys stored in macOS Keychain
-- **No network exposure** — The App makes zero outbound network connections for core functionality
-- **Sandboxed** — Runs in macOS App Sandbox with minimal entitlements (ScreenCapture, UserSelectedFile)
-- **No code injection** — Does not inject code into other processes
-
----
-
-## 10. International Transfers
-
-Not applicable. All data processing occurs on your device within your jurisdiction.
-
----
-
-## 11. Changes to This Policy
-
-We may update this policy for new features or legal requirements. Changes will be posted in the App's release notes and on the GitHub repository. Continued use after changes constitutes acceptance.
-
----
-
-## 12. Contact
-
-For questions, concerns, or data requests:
-
-**Email:** pounds.1@example.com  
-**GitHub:** https://github.com/the-lucky-clover/Textractor
-
----
-
-## 13. App Store Compliance Notes
-
-- **App Store Review Guidelines § 5.1.1** — This policy is accessible from the App Store product page and within the App (Settings → Privacy Policy)
-- **App Store Review Guidelines § 5.1.2** — No user data is transmitted without explicit consent
-- **App Store Review Guidelines § 5.1.3** — Data collection is minimal and purpose-limited
-- **App Store Review Guidelines § 5.2** — No third-party analytics or advertising SDKs
-- **GDPR Art. 13/14** — Information provided at time of data collection (first launch, permission prompts)
-- **CCPA § 1798.100-199** — No sale of personal information; opt-out not needed (no collection)
-
----
-
-*Textractor is open source. You can audit the code at: https://github.com/the-lucky-clover/Textractor*
+Changes to native data handling should be accompanied by an updated policy and
+App Store privacy disclosures. The release checklist requires the publisher to
+verify its public support contact and policy URL before submission.

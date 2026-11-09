@@ -1,228 +1,128 @@
-# Textractor
+# Textractor Pro
 
-> **On-device, privacy-first OCR for macOS.** A cyberpunk menubar/TUI app that
-> extracts text from any region, window, full screen, file, or Continuity Camera
-> image, runs Vision OCR + NaturalLanguage inference locally, and places a
-> perfectly-formatted payload on your clipboard — ready to paste with ⌘V.
+Native text extraction for macOS 14+, with a separate iOS 17+ screenshot-review target.
+English (US), `en-US`, is the default OCR language.
 
----
+**Release status: implementation candidate.** The current release work, outstanding device
+checks, Apple-account requirements and archive commands are in the
+[release plan](qa/RELEASE_PLAN.md). The public name is **Textractor Pro**; availability in
+App Store Connect has not been verified. A passing source check is not a signed build,
+device signoff or App Store approval.
 
-## ✨ Feature set
+## macOS capabilities
 
-| Trigger | What happens |
+- Extract text from a selected region, window, full display or imported image using Apple Vision.
+- Import iPhone/iPad photos and document scans through macOS Continuity Camera.
+- Read QR/barcodes, hear extracted text aloud, and combine captures in an additive clipboard.
+- Reuse a previous region, configure capture shortcuts, control line breaks, add recognition
+  vocabulary and review capture history.
+- Use a separate stationary capture overlay on each connected display.
+- Skip onboarding or replay it from Settings without resetting the saved language.
+
+The [feature matrix](qa/FEATURE_MATRIX.md) and [parity audit](qa/PARITY_AUDIT.md) describe
+source implementation and remaining limits. Physical multi-display capture, Continuity Camera,
+VoiceOver and representative OCR quality still require evidence for this release candidate.
+Scroll stitching and translation are not advertised release capabilities. No measured
+accuracy advantage or full TextSniper parity is claimed.
+
+The App Store configuration excludes automatic scrolling and external paste-key observation,
+including their permission prompts. It routes update checks to the installed App Store.
+Development builds retain the experimental scroll/paste controls. Translation and local LLM
+generation report unavailable instead of supplying placeholder results.
+
+## Name and compatibility
+
+| Property | Value |
 |---|---|
-| **⌘⇧2** | Global hotkey opens the crosshair capture overlay from anywhere |
-| **Region button** | Freeform crosshair drag — capture any rectangle |
-| **Window button** | Hover highlights windows; click to extract all text (optional markdown-table mode) |
-| **Full Screen button** | Captures every display, sweeps every text block |
-| **Drop file / pick…** | Process any image (PNG / JPG / HEIC / TIFF) — works seamlessly with Continuity Camera |
-| **SPACE** | Inside overlay: toggle crosshair ↔ window mode |
-| **ESC** | Cancel a capture |
-| **Toast** | "Selected text was successfully added to clipboard." neon confirmation |
+| Public name / macOS bundle filename | `Textractor Pro` / `Textractor Pro.app` |
+| macOS bundle identifier | `com.textractor.app` |
+| macOS scheme, Swift module and executable | `Textractor` |
+| macOS version / build defaults | `2.0.0` / `2000` |
+| iOS bundle identifier / scheme | `com.textractor.app.ios` / `TextractorMobile` |
+| iOS version / build defaults | `1.0` / `1` |
 
-### Storage modes (per user choice, set in Settings → Screenshots)
+Existing preferences and storage identifiers retain the original identity. The two platform
+targets currently have different bundle identifiers; do not assume an existing universal
+purchase or shared App Store Connect record. Verify the actual Apple-account records before
+creating or changing them. Build numbers must also be checked against prior uploads.
 
-* **Ask each time** — toast shows `Save / Pick Where… / Delete / Always Save` buttons (8s default = delete)
-* **Auto-delete** — screenshot moves to Trash the moment text is copied
-* **Save to folder** — `~/Pictures/Textractor Screenshots/` (or your chosen folder)
+## Develop on a Mac
 
-### Inference weirdness
+Run from the repository root using a Mac with Xcode, its command-line tools and XcodeGen:
 
-A 0% → 100% slider that bends Vision's behavior: stricter at 0% (higher text-height threshold, no vocab, no aggressive correction) and aggressive at 100% (multi-language hints, retry on empty results, vocabulary bias, de-hyphenation across line-breaks). Use the **Reset to defaults** button to flip back to the curated baseline.
+```sh
+swift test --enable-code-coverage
+bash build.sh
+open 'dist/Textractor Pro.app'
+xcodegen generate
+open Textractor.xcodeproj
+```
 
-### Window → markdown table
+Choose `Textractor` for macOS or `TextractorMobile` for iOS. `build.sh` creates an ad-hoc
+development bundle; it does not install the app or produce an App Store submission. Screen
+capture requires Screen Recording permission. File import provides a separate OCR path.
 
-When the user enables "Convert window captures to Markdown tables," Textractor clusters `TextObservation`s into rows + columns by spatial alignment, emits a `| col1 | col2 |` table, and writes it as the pasteboard payload. Falls back to flat text when the alignment doesn't look tabular.
+For source/configuration checks, including metadata and privacy-manifest structure:
 
-### Typography-first output
+```sh
+python3 scripts/check_release_signoff.py --platform macos --stage candidate
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
+```
 
-`TextFormatter` produces an `NSAttributedString` with rounded font, monospace preformatted table rows, highlighted URLs/emails (teal underline), and shaded keyword callouts — written to the pasteboard as both `.string` and `.rtf`.
+Candidate validation does not require signing credentials or invent passed native/device
+checks. [Validation evidence](qa/VALIDATION.md) identifies previously tested commits; new
+implementation changes require fresh evidence.
 
-### Festive/psychological nudges
+## Prepare a Mac App Store archive
 
-* Streak counter ("X in session")
-* Toast chip with sentiment (positive = lime, negative = red, neutral = cyan, mixed = violet)
-* Letters (T · X · T) animating inside the menubar beaker
-* Glassmorphic bento with neon Blade-Runner-2049 rim-lighting
-* Click anywhere on the toast with haptic-feeling spring animation
+The signed App Store path is separate from the development bundle. Configure your actual
+Apple team and signing assets locally, then run:
 
----
+```sh
+TEAM_ID='YOUR_APPLE_TEAM_ID' bash scripts/archive_appstore.sh --platform macos --action archive
+```
 
-## 🎨 Design system
+`YOUR_APPLE_TEAM_ID` is an example to replace, not a configured credential. The script's
+default action is `archive`; `export` and `upload` are explicit actions. Follow the
+[release plan](qa/RELEASE_PLAN.md) for native QA, signing, evidence, metadata, export and
+upload. App Store review submission and public release are separate Apple-account actions.
 
-| Tile | Value |
+[Store metadata drafts](appstore/README.md) use the Textractor Pro name and leave unverified
+contact details, URLs, screenshots and account decisions incomplete. The submission gate
+rejects incomplete signoff. The short [release checklist](RELEASE_CHECKLIST.md) links to the
+same plan rather than defining a second release process.
+
+## iOS screenshot review
+
+The `TextractorMobile` target imports user-selected screenshots from Photos or Files. It
+preserves imported source bytes, extracts text on device, supports logged corrections and
+reviewable overlap suggestions, and creates numbered US Letter PDF packets. Search includes
+exact and fuzzy matching plus related-meaning search where Apple's English sentence model
+is available. Onboarding is skippable and replayable.
+
+This target does not read the Messages database, control Messages scrolling, infer missing
+dates, authenticate a conversation or certify court admissibility. Shared LLM-link import is
+not implemented. See [iOS capabilities and limits](qa/IOS_DIRECTION.md). iOS device and
+submission checks are tracked independently of the Mac release.
+
+## Project layout
+
+| Path | Purpose |
 |---|---|
-| Background | `#0A0B18` noir |
-| Cyber cyan | `#37F2FF` |
-| Magenta neon | `#FF3DCD` |
-| Acid lime | `#9DFF42` |
-| Holo violet | `#9E5BFF` |
-| Hazard red | `#FF2F4C` |
-| Amber laser | `#FFA41D` |
-| Type | SF Pro Rounded (headlines) · SF Mono (chips) |
+| `Sources/Textractor/` | macOS app, services, views and resources |
+| `Tests/` | macOS unit tests and executable UI playtests |
+| `ios/TextractorMobile/` | iOS import, OCR, review, search and PDF export |
+| `ios/TextractorMobileTests/`, `ios/TextractorMobileUITests/` | iOS regression and UI coverage |
+| `qa/` | Release plan, feature scope, evidence and signoff records |
+| `appstore/` | Draft platform-specific store metadata and screenshot instructions |
+| `scripts/` | Validation, benchmarks and explicit archive/export/upload tooling |
+| `fastlane/` | Wrapper lanes for the documented App Store process |
+| `webapp/`, `windows/` | Separate companion projects, outside native App Store signoff |
 
-Surfaces use `.ultraThinMaterial` with stacked neon strokes for skeuomorphic depth; glow is implemented via `shadow(color:radius:)` modifiers.
+The native OCR implementation uses Apple frameworks on device. Captures, extracted text,
+history, recovery files and exports can contain sensitive information. Review the
+[privacy policy](PRIVACY_POLICY.md), actual storage behavior and intended sharing destination
+before release. Source-level privacy declarations do not establish device-tested deletion
+or encryption across every storage path.
 
----
-
-## 🚀 Build & Run
-
-```bash
-git clone <repo> textractor
-cd textractor
-./build.sh              # release build → dist/Textractor.app
-open dist/Textractor.app
-```
-
-Or install to /Applications:
-
-```bash
-./install.sh
-```
-
-### Required permissions (one time only)
-
-> **System Settings → Privacy & Security → Screen Recording → enable Textractor**
-> **System Settings → Privacy & Security → Camera → enable Textractor** *(for Continuity Camera)*
-
-Without these, OCR returns empty and the toast surfaces a "Permissions" card.
-
----
-
-## 📁 Source layout
-
-```
-Sources/Textractor/
-├── AppCoordinator.swift           # pipeline, hotkey bridge, storage flow
-├── AppDelegate.swift              # LSUIElement runtime policy
-├── TextractorApp.swift            # @main, Settings scene host
-├── Models/
-│   ├── AppSettings.swift          # persisted settings + migration decoder
-│   ├── AppState.swift             # @Published state, ToastState, StorageDecision
-│   ├── CaptureMode.swift
-│   ├── CapturedImage.swift
-│   ├── ExtractionRecord.swift
-│   ├── HistoryRecord.swift
-│   ├── OCRResult.swift            # TextObservation + joined text
-│   ├── TelemetryEvent.swift
-│   └── TextractorError.swift
-├── Services/
-│   ├── AIInferenceService.swift   # NaturalLanguage sentiment + cleanup + keywords
-│   ├── ClipboardService.swift     # .string + .rtf + auto-⌘V
-│   ├── HistoryStore.swift
-│   ├── HistoryWindowController.swift
-│   ├── HotkeyManager.swift        # Carbon RegisterEventHotKey ⌘⇧2
-│   ├── LoggerService.swift        # OSLog wrapper
-│   ├── OCRService.swift           # Vision + self-healing retries
-│   ├── OnboardingState.swift
-│   ├── PasteFormatter.swift       # layout + cleanup transforms
-│   ├── PermissionService.swift    # CGPreflight*, AXIsProcessTrusted
-│   ├── ScreenshotService.swift    # region / window / fullscreen / file / video
-│   ├── SettingsStore.swift        # UserDefaults-backed, debounced writes
-│   ├── SettingsWindowController.swift
-│   ├── ShareService.swift         # NSSharingService Mail/Message/AirDrop
-│   ├── SoundManager.swift         # synthesized UI tones (gated by setting)
-│   ├── StatusBarController.swift  # NSStatusItem + popover
-│   ├── StorageService.swift       # save / trash / ask flow
-│   ├── TableFormatter.swift       # OCR observations → Markdown table
-│   ├── TelemetryService.swift     # local JSONL log
-│   ├── TextFormatter.swift        # typography NSAttributedString
-│   ├── ToastWindowController.swift
-│   └── UpdateService.swift        # local-only version check (no remote channel)
-├── Theme/
-│   └── BreakingDadTheme.swift     # Breaking Dad HUD: color, font, motion tokens
-└── Views/
-    ├── BannerView.swift           # wordmark banner + shimmer
-    ├── CaptureOverlayView.swift   # full-screen crosshair + window picker
-    ├── ClipboardToastView.swift   # animated toast, storage/share chips
-    ├── CreditsModalView.swift     # "Made with ❤️" modal → soundcloud
-    ├── HistoryView.swift          # screenshot thumbnails + extracted text
-    ├── MatrixRainView.swift
-    ├── MenuContentView.swift      # the menubar popover
-    ├── SplashScreen.swift
-    └── SettingsView.swift         # full settings window
-```
-
----
-
-## 🌐 Companion webapp
-
-`webapp/` is an **optional, separate** companion (static landing page + Cloudflare
-Worker) for users who want to offload heavy OCR to the cloud. It is **not** part
-of the macOS `.app` binary — the app itself has no network code and never talks
-to the webapp.
-
-* `webapp/frontend/` — static HTML/Tailwind landing page (Cloudflare Pages).
-* `webapp/backend/` — Cloudflare Worker exposing `/api/ocr`, `/api/pricing`, and
-  `/health`.
-
-### Webapp security
-
-* `/api/ocr` requires a `Authorization: Bearer <API_TOKEN>` token (Workers AI
-  secret). Without `API_TOKEN` set, the endpoint rejects all requests (401).
-* CORS is restricted to `ALLOWED_ORIGINS` (comma-separated env var).
-* `/api/ocr` enforces a 10 MB request-body cap.
-* User-supplied `text` is wrapped as untrusted **data** before being sent to
-  Workers AI so it can't carry prompt-injection instructions.
-
-Deploy (from `webapp/`):
-
-```bash
-npm install
-npm run deploy:frontend     # wrangler pages deploy frontend
-cd backend && wrangler deploy && wrangler secret put API_TOKEN
-```
-
----
-
-## 🩹 Self-healing pipeline
-
-```
-capture (region / window / screen / file)
-   ↓
-OCR (Vision)
-   ├── Step 1: accurate + weirdness-derived minTextHeight
-   ├── Step 2 (on empty): fast + no threshold
-   ├── Step 3 (on empty + permissive): latin language hints + vocab
-   └── Step 4 (on empty + vocab): vocab-only accurate
-   ↓
-AI.clean()            strip zero-width, smart-quote, de-hyphenate, collapse blanks
-   ↓
-TableFormatter        if windowCaptureAsTable && observations look tabular → MD table
-   ↓
-TextFormatter         wrap in NSAttributedString (rounded + mono + entity highlight)
-   ↓
-ClipboardService.copy(plain, attributed)   → .string + .rtf on the pasteboard
-ClipboardService.autoPasteIntoFrontmostApp()  → ⌘V synthesised via CGEvent
-   ↓
-governStorage
-   ├── ask      → wait for toast button (8s timeout default = delete)
-   ├── delete   → trash immediately
-   └── folder   → save to ~/Pictures/Textractor Screenshots/ (or chosen folder)
-   ↓
-Toast (kind=success|failure, sentiment chip, language, tokens)
-```
-
-Telemetry events fire at every step. No network is ever touched.
-
----
-
-## 🧰 Privacy posture
-
-* `LSUIElement` — no Dock icon, no app menu
-* `NSPrincipalClass` = `NSApplication`, single window
-* **Zero** network code in the macOS `.app` binary — it never opens a socket
-* All OCR → Apple's `Vision` (offline, on-device)
-* All NLP → Apple's `NaturalLanguage` (offline, on-device)
-* No third-party dependencies
-* Telemetry is JSONL to `~/Library/Application Support/Textractor/telemetry.jsonl`
-  (Settings → Footer toggle to disable; "Made with ❤️ by Lucky Clover" credits link
-  to https://soundcloud.com/lucky-clover)
-
-> Note: the optional `webapp/` companion (see "🌐 Companion webapp") is a
-> separate Cloudflare-hosted service and is **not** linked from the app. Using
-> it uploads images/text to Cloudflare Workers AI; it is entirely opt-in.
-
----
-
-Made with ❤️ by **Lucky Clover** — https://soundcloud.com/lucky-clover
+Made by [Lucky Clover](https://soundcloud.com/lucky-clover).

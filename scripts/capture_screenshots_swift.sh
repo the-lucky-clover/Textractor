@@ -1,88 +1,73 @@
 #!/usr/bin/env bash
-# Textractor Screenshot Automation - Swift-based (more reliable)
-# Uses the app's own UI testing target to drive screenshots
-#
-# Usage:
-#   ./scripts/capture_screenshots_swift.sh          # Capture all
-#   ./scripts/capture_screenshots_swift.sh --list   # List scenes
-
+# Capture actual Textractor Pro development UI via the existing XCTest suite.
+# These attachments are QA evidence, not approved App Store screenshots.
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-OUTPUT_DIR="${ROOT_DIR}/dist/screenshots"
-DERIVED_DATA="${ROOT_DIR}/build/Screenshots"
-
-mkdir -p "$OUTPUT_DIR"
-
-# Scene definitions matching the Swift test cases
+TEXTRACTOR_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$TEXTRACTOR_ROOT"
 SCENES=(
-  "testCaptureOverlay"
-  "testWindowCapture"
-  "testHistoryGrid"
-  "testSourceCodeMode"
-  "testTranslationSettings"
-  "testToastActions"
-  "testPIIRedaction"
+  testUSEnglishPersistsAfterRelaunch
+  testTourSkipAndReplay
+  testCameraCancellationReturnsToSettings
+  testCaptureOverlayActivatesAndEscapeReturnsToSettings
 )
-
-SCENE_NAMES=(
-  "01-capture-overlay"
-  "02-window-capture"
-  "03-history-grid"
-  "04-source-code-mode"
-  "05-translation-settings"
-  "06-toast-actions"
-  "07-pii-redaction"
-)
-
-capture_with_xcodebuild() {
-  local test_name="$1"
-  local output_name="$2"
-  
-  echo "📸 Running UI test: $test_name"
-  
-  # Build and run the specific UI test
-  xcodebuild test \
-    -scheme Textractor \
-    -destination 'platform=macOS' \
-    -derivedDataPath "$DERIVED_DATA" \
-    -only-testing:TextractorUITests/ScreenshotTests/"$test_name" \
-    2>&1 | tail -20
-  
-  # The test should save screenshot to OUTPUT_DIR
-  local screenshot_path="${DERIVED_DATA}/Attachments/${output_name}.png"
-  if [[ -f "$screenshot_path" ]]; then
-    cp "$screenshot_path" "$OUTPUT_DIR/${output_name}.png"
-    echo "✅ Saved: $OUTPUT_DIR/${output_name}.png"
-  else
-    echo "⚠️  Screenshot not found at expected path"
-    # Try to find it
-    find "$DERIVED_DATA" -name "*.png" -newer "$DERIVED_DATA" 2>/dev/null | head -5
-  fi
-}
-
-capture_all() {
-  echo "🎬 Starting Swift-based screenshot capture..."
-  echo "   Output: $OUTPUT_DIR"
-  echo ""
-  
-  for i in "${!SCENES[@]}"; do
-    capture_with_xcodebuild "${SCENES[$i]}" "${SCENE_NAMES[$i]}"
-    echo ""
-  done
-  
-  echo "🎉 Done! Screenshots in: $OUTPUT_DIR"
-  ls -la "$OUTPUT_DIR"/*.png 2>/dev/null
-}
-
-# Main
-if [[ "${1:-}" == "--list" ]]; then
-  echo "Available test scenes:"
-  for i in "${!SCENES[@]}"; do
-    echo "  ${SCENES[$i]} -> ${SCENE_NAMES[$i]}.png"
-  done
-  exit 0
+TEST_SELECTION=TextractorUITests/SettingsPlaytests
+case "${1:-}" in
+  --list)
+    printf '%s\n' "${SCENES[@]}"
+    exit 0
+    ;;
+  --test)
+    [[ $# -eq 2 ]] || { echo "Usage: $0 [--list|--test TEST_NAME]" >&2; exit 2; }
+    valid=false
+    for name in "${SCENES[@]}"; do
+      if [[ "$name" == "$2" ]]; then valid=true; fi
+    done
+    [[ "$valid" == true ]] || { echo "Unknown test; use --list." >&2; exit 2; }
+    TEST_SELECTION="${TEST_SELECTION}/$2"
+    ;;
+  "") ;;
+  --help|-h)
+    echo "Usage: $0 [--list|--test TEST_NAME]"
+    exit 0
+    ;;
+  *) echo "Usage: $0 [--list|--test TEST_NAME]" >&2; exit 2 ;;
+esac
+for tool in xcodegen xcodebuild xcrun python3; do
+  command -v "$tool" >/dev/null || { echo "Required tool is missing: $tool" >&2; exit 1; }
+done
+mkdir -p dist/screenshots
+RUN_DIR="$(mktemp -d "${TEXTRACTOR_ROOT}/dist/screenshots/run.XXXXXX")"
+RESULT="${RUN_DIR}/playtests.xcresult"
+xcodegen generate --spec "${TEXTRACTOR_ROOT}/project.yml"
+set +e
+xcodebuild test \
+  -project "${TEXTRACTOR_ROOT}/Textractor.xcodeproj" \
+  -scheme Textractor -configuration Debug -destination 'platform=macOS' \
+  -derivedDataPath "${RUN_DIR}/DerivedData" -resultBundlePath "$RESULT" \
+  "-only-testing:${TEST_SELECTION}" CODE_SIGNING_ALLOWED=NO 2>&1 | tee "${RUN_DIR}/tests.log"
+TEST_STATUS=${PIPESTATUS[0]}
+set -e
+if [[ -d "$RESULT" ]]; then
+  xcrun xcresulttool export attachments --path "$RESULT" --output-path "${RUN_DIR}/attachments"
+else
+  echo "Xcode produced no result bundle; inspect ${RUN_DIR}/tests.log" >&2
+  exit 1
 fi
+cat > "${RUN_DIR}/README.txt" <<'NOTE'
+Textractor Pro development UI attachments
 
-capture_all
+Images here were exported from the XCTest result bundle for this run. The tests
+exercise the Debug UI, not a distribution-signed sandboxed app. Test failures
+remain in tests.log and the result bundle. Inspect each image before use.
+These are not automatically approved or resized App Store screenshots; final
+listing screenshots must show the shipping build and complete review separately.
+NOTE
+python3 - "${RUN_DIR}/attachments" <<'CHECK'
+from pathlib import Path
+import sys
+images = list(Path(sys.argv[1]).rglob('*.png'))
+if not images:
+    raise SystemExit('No PNG attachments were exported; inspect the Xcode result bundle.')
+print(f'Exported {len(images)} actual UI-test PNG attachments to {sys.argv[1]}')
+CHECK
+exit "$TEST_STATUS"

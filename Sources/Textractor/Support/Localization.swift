@@ -13,7 +13,7 @@ public struct Localization: Sendable, Equatable, Identifiable {
     }
 
     public static let catalog: [Localization] = [
-        Localization("en-US", displayName: "English"),
+        Localization("en-US", displayName: "English (US)"),
         Localization("en-GB", displayName: "English (UK)"),
         Localization("es-ES", displayName: "Español"),
         Localization("fr-FR", displayName: "Français"),
@@ -81,11 +81,21 @@ public struct T: Sendable, Equatable {
            let bundle = Bundle(path: lprojPath) {
             return bundle
         }
-        // Development: SPM may place resources in Bundle.module
-        if #available(macOS 13, *),
+        if let url = Bundle.main.url(forResource: "Textractor_Textractor", withExtension: "bundle"),
+           let resources = Bundle(url: url),
+           let path = resources.path(forResource: language, ofType: "lproj") {
+            return Bundle(path: path)
+        }
+        // Raw SPM executables/tests can use the generated resource accessor.
+        // In an installed .app, that accessor can terminate the process when
+        // its original build directory is gone. Missing translations must fall
+        // back to bundled English instead of entering that fatal path.
+        #if SWIFT_PACKAGE
+        if Bundle.main.bundleURL.pathExtension != "app",
            let lprojURL = Bundle.module.url(forResource: language, withExtension: "lproj") {
             return Bundle(url: lprojURL)
         }
+        #endif
         return nil
     }
 

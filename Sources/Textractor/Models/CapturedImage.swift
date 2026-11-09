@@ -44,10 +44,10 @@ public struct CapturedImage: Identifiable, Sendable {
         self.screenIndex = screenIndex
     }
 
-    /// Pretty file name suitable for default folder save: `Textractor-2026-07-04-175412.png`.
+    /// Pretty file name suitable for a new user-visible capture export.
     public var suggestedFilename: String {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd-HHmmss"
-        return "Textractor-\(f.string(from: capturedAt))"
+        return "Textractor-Pro-\(f.string(from: capturedAt))"
     }
 }

@@ -13,7 +13,7 @@ public final class HotkeyManager {
 
     /// Signature 'TRC2' — uniquely identifies our hotkey in the OS event stream.
     private let signature: OSType = 0x54524332
-    private let hotKeyIDValue: UInt32 = 1
+    private let hotKeyIDValue: UInt32
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
@@ -33,7 +33,8 @@ public final class HotkeyManager {
     /// anywhere on the system.
     public var onHotkey: (() -> Void)?
 
-    private init() {}
+    init(id: UInt32 = 1) { hotKeyIDValue = id }
+    deinit { unregister() }
 
     // MARK: - Public registration
 
@@ -83,7 +84,7 @@ public final class HotkeyManager {
             eventKind: UInt32(kEventHotKeyPressed)
         )
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(
+        let handlerStatus = InstallEventHandler(
             GetApplicationEventTarget(),
             TextractorHotKeyCallback,
             1,
@@ -91,6 +92,11 @@ public final class HotkeyManager {
             selfPtr,
             &handlerRef
         )
+        guard handlerStatus == noErr else {
+            unregister()
+            return RegistrationResult(ok: false, conflict: false,
+                description: "Could not install shortcut handler (Carbon error \(handlerStatus)).")
+        }
 
         let hotKeyID = EventHotKeyID(signature: signature, id: hotKeyIDValue)
 
@@ -119,6 +125,7 @@ public final class HotkeyManager {
         )
 
         if status != noErr {
+            unregister()
             LoggerService.shared.error("Hotkey registration failed: status=\(status) keyCode=\(keyCode) modifiers=\(modifiers)")
             return RegistrationResult(
                 ok: false,
@@ -224,10 +231,11 @@ public final class HotkeyManager {
             Int(kVK_DownArrow):   "↓"
         ]
         if let label = map[keyCode] { return label }
-        let f1 = Int(kVK_F1)
-        let f12 = Int(kVK_F12)
-        if keyCode >= f1 && keyCode <= f12 {
-            return "F\(keyCode - f1 + 1)"
+        let functionKeys = [kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6,
+                            kVK_F7, kVK_F8, kVK_F9, kVK_F10, kVK_F11, kVK_F12,
+                            kVK_F13, kVK_F14, kVK_F15, kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20]
+        if let index = functionKeys.firstIndex(where: { Int($0) == keyCode }) {
+            return "F\(index + 1)"
         }
         return "Key \(keyCode)"
     }
@@ -252,14 +260,16 @@ public final class HotkeyManager {
         )
         guard status == noErr else { return status }
 
-        if hotKeyID.signature == 0x54524332 && hotKeyID.id == 1 {
+        if hotKeyID.signature == 0x54524332 {
             let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
+            guard hotKeyID.id == manager.hotKeyIDValue else { return OSStatus(eventNotHandledErr) }
             DispatchQueue.main.async {
                 manager.fireHotkey()
             }
+            return noErr
         }
 
-        return noErr
+        return OSStatus(eventNotHandledErr)
     }
 
     private func fireHotkey() {

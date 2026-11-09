@@ -1,0 +1,124 @@
+name: Textractor
+options:
+  deploymentTarget:
+    macOS: '14.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.9'
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  TextractorMobile:
+    type: application
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources: [ios/TextractorMobile]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.textractor.app.ios
+        PRODUCT_NAME: Textractor Pro
+        PRODUCT_MODULE_NAME: TextractorMobile
+        EXECUTABLE_NAME: TextractorMobile
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleName: Textractor Pro
+        INFOPLIST_KEY_CFBundleDisplayName: Textractor Pro
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        TARGETED_DEVICE_FAMILY: '1,2'
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MARKETING_VERSION: '1.0'
+        CURRENT_PROJECT_VERSION: '1'
+  TextractorMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources: [ios/TextractorMobileTests]
+    dependencies:
+      - target: TextractorMobile
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.textractor.app.ios.tests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Textractor Pro.app/TextractorMobile
+        BUNDLE_LOADER: $(TEST_HOST)
+  TextractorMobileUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources: [ios/TextractorMobileUITests]
+    dependencies:
+      - target: TextractorMobile
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.textractor.app.ios.uitests
+        TEST_TARGET_NAME: TextractorMobile
+  Textractor:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/Textractor
+        excludes:
+          - Info.plist
+          - Resources
+      - path: Sources/Textractor/Resources
+        buildPhase: resources
+        excludes:
+          - '*.entitlements'
+          - MenuBar
+      # StatusBarController resolves these images in the MenuBar subdirectory.
+      # A normal Xcode group flattens loose resource files during copying.
+      - path: Sources/Textractor/Resources/MenuBar
+        type: folder
+        buildPhase: resources
+        createIntermediateGroups: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.textractor.app
+        INFOPLIST_FILE: Sources/Textractor/Info.plist
+        PRODUCT_NAME: Textractor Pro
+        PRODUCT_MODULE_NAME: Textractor
+        EXECUTABLE_NAME: Textractor
+        MARKETING_VERSION: '2.0.0'
+        CURRENT_PROJECT_VERSION: '2000'
+        SKIP_INSTALL: NO
+      configs:
+        Debug:
+          ENABLE_APP_SANDBOX: NO
+        Release:
+          ENABLE_APP_SANDBOX: YES
+          CODE_SIGN_ENTITLEMENTS: Sources/Textractor/Resources/Textractor.release.entitlements
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) APP_STORE
+  TextractorUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [Tests/TextractorUITests]
+    dependencies:
+      - target: Textractor
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.textractor.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Textractor
+schemes:
+  TextractorMobile:
+    build:
+      targets:
+        TextractorMobile: all
+    test:
+      targets: [TextractorMobileTests, TextractorMobileUITests]
+      gatherCoverageData: true
+    archive:
+      config: Release
+  Textractor:
+    build:
+      targets:
+        Textractor: all
+    test:
+      targets: [TextractorUITests]
+      gatherCoverageData: true
+    archive:
+      config: Release

@@ -1,0 +1,30 @@
+{
+  "status": "draft",
+  "platform": "macos",
+  "locale": "en-US",
+  "name": "Textractor Pro",
+  "subtitle": "Copy text from your screen",
+  "version": "2.0.0",
+  "build": "2000",
+  "bundle_identifier": "com.textractor.app",
+  "description": "Turn text in screenshots, images and on-screen content into text you can copy and use.\n\nTextractor Pro is a menu-bar utility for Mac. Press your capture shortcut, select a region, and review the extracted text. You can also choose a window, capture a display or import a saved image.\n\nCAPTURE AND COPY\n• Extract text using Apple's on-device Vision recognition.\n• Start with English (US), choose a supported recognition language or use Automatic.\n• Capture the previous selection again without drawing it a second time.\n• Choose plain text and line-break options for the way you work.\n\nKEEP WORK MOVING\n• Combine several captures with an additive clipboard, then undo or clear the batch.\n• Review capture history and copy text again.\n• Read extracted text aloud, adjust the speaking rate or stop playback.\n• Recognize QR and barcode content.\n• Customize capture shortcuts and add your own recognition vocabulary.\n\nFROM PAPER TO TEXT\nUse macOS Continuity Camera to bring in a photo or document scan from a compatible iPhone or iPad. You can also import a saved image without granting Screen Recording access.\n\nYOUR CONTROLS\nScreen capture uses macOS Screen Recording permission. OCR processing runs on your Mac. Settings include history controls, optional local additive-history persistence, capture sounds and a replayable welcome tour. Review the privacy policy for storage, sharing and optional actions.\n\nRequires macOS 14 or later. Continuity Camera requires a compatible device and Apple configuration. Recognition quality depends on the source image and language; review extracted text before relying on it.",
+  "keywords": "ocr,screenshot,clipboard,recognition,scan,barcode,copy,extract,vision,document,reader",
+  "promotional_text": "Copy text from a selected screen region, window or image. Combine captures, review history and read text aloud with Textractor Pro for Mac.",
+  "review_notes": "Textractor Pro is a macOS menu-bar OCR utility. The existing bundle identifier is com.textractor.app; the user-facing app name is Textractor Pro. No Textractor account or reviewer login is required for the described native OCR flow.\n\n1. Launch the app and open its menu-bar icon. The welcome tour can be skipped; Settings offers Replay welcome tour.\n2. English (US) is the initial recognition language. The default region shortcut is Command-Shift-2; shortcuts can be customized in Settings.\n3. Grant Screen Recording access through macOS when testing screen capture. Select a region containing text, finish the selection, then paste into a text editor. Window and Full Screen are also available in the capture menu. Escape cancels a selection.\n4. To test OCR without screen capture, choose Pick Image File and select a PNG or JPEG containing readable text.\n5. Open History to review results. In Settings, test additive clipboard, line-break options, QR/barcode mode and read aloud with a suitable fixture. Link opening is opt-in.\n6. Continuity Camera uses Apple's nearby iPhone/iPad device menu for Take Photo or Scan Documents. It requires a compatible device configuration and does not require a separate Textractor iOS app. Cancel remains available if no device is present.\n\nOCR is performed with Apple Vision on the Mac. The privacy policy describes local history/recovery storage and explicit sharing actions. Review extraction before using it. The Mac App Store configuration excludes automatic scrolling and external paste-key monitoring; it does not request Accessibility permission for those features. Update checks open the App Store. Translation and local LLM generation are unavailable. The store description does not advertise these unavailable features or conversation authentication.\n\nBefore submission, the release owner must verify these steps on the signed store candidate, confirm public support/privacy URLs and supply actual review-contact details.",
+  "screenshot_paths": [],
+  "submission": {
+    "support_url": null,
+    "privacy_policy_url": null,
+    "review_contact": {
+      "first_name": null,
+      "last_name": null,
+      "email": null,
+      "phone": null
+    },
+    "pricing_confirmed": false,
+    "age_rating_confirmed": false,
+    "privacy_answers_confirmed": false,
+    "export_compliance_confirmed": false,
+    "content_rights_confirmed": false
+  }
+}

@@ -44,6 +44,12 @@ public enum FactoryResetService {
         // 3. Cache folder — empty `~/.Library/Caches/Textractor/`.
         let cacheFreedBytes = CacheService.shared.clearCache()
 
+        HistoryStore.shared.clearAll()
+        CaptureExtras.shared.discardAllHistory()
+        CaptureExtras.shared.stopSpeaking()
+        TelemetryService.shared.wipe()
+        AnalyticsService.shared.wipe()
+
         // 4. In-memory history list (the UI's "recent captures" sidebar).
         appState.recentCaptures.removeAll()
         appState.streakCount = 0
@@ -52,7 +58,7 @@ public enum FactoryResetService {
         appState.lastAnalysis = nil
 
         // 5. Reset hotkey registration (so it picks up any new defaults).
-        HotkeyManager.shared.register()
+        _ = ActionShortcuts.shared.configure(appState.settings)
 
         LoggerService.shared.info("[factory-reset] complete — captures=\(capturesDeleted), bytesFreed=\(cacheFreedBytes)")
 

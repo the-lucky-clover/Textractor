@@ -22,7 +22,9 @@ public enum CaptureMode: String, Codable, CaseIterable, Identifiable, Sendable {
   public var hint: String {
     switch self {
     case .crosshair: return "Drag a rectangle • SPACE → Window"
-    case .window: return "Hover highlights • click window • SPACE → Auto-Scroll"
+    case .window: return DistributionPolicy.supportsAutomaticScrolling
+        ? "Hover highlights • click window • SPACE → Auto-Scroll"
+        : "Hover highlights • click window • SPACE → Crosshair"
     case .autoScroll: return "Click window to auto-scroll • SPACE → Crosshair"
     }
   }
@@ -32,6 +34,14 @@ public enum CaptureMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case .crosshair: return "viewfinder"
     case .window: return "macwindow"
     case .autoScroll: return "arrow.down.to.line.alt"
+    }
+  }
+
+  public var nextAvailableMode: CaptureMode {
+    switch self {
+    case .crosshair: return .window
+    case .window: return DistributionPolicy.supportsAutomaticScrolling ? .autoScroll : .crosshair
+    case .autoScroll: return .crosshair
     }
   }
 }

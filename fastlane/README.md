@@ -1,207 +1,170 @@
-# Textractor fastlane Setup Guide
+# Textractor Pro: candidate archives and App Store delivery
 
-## Overview
-This directory contains fastlane configuration for automated Mac App Store deployments.
+The public product name is **Textractor Pro**. Existing identities remain
+`com.textractor.app` (Mac), `com.textractor.app.ios` (iOS), modules `Textractor` /
+`TextractorMobile`, and the same executable names. The app bundle is now
+`Textractor Pro.app`.
 
-## Prerequisites
+The previous pipeline combined an ad-hoc app bundle, notarization, a ZIP upload,
+and automatic release. This pipeline uses Xcode archives and App Store export.
+A local development build, unsigned CI archive, signed candidate, exported
+package, uploaded build and approved App Store release are different outcomes.
 
-### 1. Apple Developer Account
-- Active Apple Developer Program membership ($99/year)
-- Access to App Store Connect
+## 1. Validate source configuration
 
-### 2. Certificates & Profiles
-Create these in Apple Developer Portal:
-- **3rd Party Mac Developer Application** certificate
-- **3rd Party Mac Developer Installer** certificate
-- **Mac App Store** provisioning profile for `com.textractor.app`
+Run from the repository root:
 
-### 3. App Store Connect API Key
-1. Go to: https://appstoreconnect.apple.com/access/api
-2. Create a new key with **App Manager** role
-3. Download the `.p8` file (only once!)
-4. Note: **Issuer ID**, **Key ID**
-
-### 4. Match Repository (for certificate sync)
-Create a **private** Git repository:
-```bash
-# Example: https://github.com/yourorg/textractor-certificates
-# This stores encrypted certificates/profiles
+```sh
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
+python3 scripts/check_release_signoff.py --platform macos --stage candidate
+python3 scripts/check_release_signoff.py --platform ios --stage candidate
 ```
 
-## Local Setup
+Candidate validation does not require completed device testing or signing.
+Submission validation requires platform-specific evidence recorded in
+`qa/release-signoff.json`, including the actual archive version/build and source.
+Listing drafts are in `appstore/macos/en-US.json` and `appstore/ios/en-US.json`.
 
-### 1. Install fastlane
-```bash
-# Via Homebrew (recommended)
-brew install fastlane
+## 2. Create a development build or compile-only archive
 
-# Or via RubyGems
-sudo gem install fastlane -v 2.220.0
+On a Mac with Xcode, Python 3 and XcodeGen (`brew install xcodegen`):
+
+```sh
+bash build.sh
+open 'dist/Textractor Pro.app'
+bash scripts/archive_appstore.sh --platform macos --unsigned
+bash scripts/archive_appstore.sh --platform ios --unsigned
 ```
 
-### 2. Install dependencies
-```bash
-cd fastlane
-bundle install
+`build.sh` is an ad-hoc SPM development build; it does not exercise the App Store
+sandbox. The unsigned Xcode archive compiles the Release configuration, including
+the Mac `APP_STORE` code path, sandbox entitlements and bundled privacy manifest.
+It cannot be exported or uploaded by this tooling. The unsigned archive is not
+proof that a signed sandboxed app launches successfully on a device.
+
+Current iOS App Store submissions require Xcode 26 or newer; the helper checks
+that for iOS. macOS still requires a compatible Xcode supporting the app's macOS
+14 deployment target. Use Xcode's current supported upload tools.
+
+## 3. Create a signed candidate
+
+Configure the existing app identifiers and your team in Xcode with appropriate
+certificates and profiles, then export `TEAM_ID` in your shell. No Apple account,
+team, keychain password or review contact is hard-coded in this repository.
+The helper requires a clean working tree for signed archives.
+
+```sh
+export TEAM_ID='YOUR_10_CHARACTER_TEAM_ID'
+bash scripts/archive_appstore.sh --platform macos
 ```
 
-### 3. Configure environment
-```bash
-cp .env.example .env
-# Edit .env with your values
+The default Mac version/build remains **2.0.0 (2000)**; iOS remains **1.0 (1)**.
+Verify the next available build number in App Store Connect before overriding it:
+
+```sh
+bash scripts/archive_appstore.sh --platform macos --version 2.0.0 --build 2001
 ```
 
-Required `.env` variables:
-```bash
-# App Store Connect API (preferred)
-ASC_API_ISSUER_ID="your-issuer-id"
-ASC_API_KEY_ID="your-key-id"
-ASC_API_KEY_PATH="/absolute/path/to/AuthKey_XXXXXXXXXX.p8"
+The example build `2001` is illustrative, not verified as unused. Overrides are
+passed to Xcode and do not edit tracked files. Already existing archive paths
+are rejected; choose a new build or `--archive-path` instead of overwriting them.
 
-# Match
-MATCH_PASSWORD="your-match-repo-passphrase"
-MATCH_GIT_URL="https://github.com/yourorg/textractor-certificates.git"
+If Xcode needs to contact Apple to manage provisioning, add the explicit
+`--allow-provisioning-updates` flag. API authentication is optional when Xcode
+already has an authenticated account. For API authentication set all three:
 
-# App
-APP_IDENTIFIER="com.textractor.app"
-TEAM_ID="YOUR_TEAM_ID"
+- `ASC_API_KEY_PATH`: local path to your `.p8` key, outside the repository.
+- `ASC_API_KEY_ID`: key identifier.
+- `ASC_API_ISSUER_ID`: issuer identifier.
+
+Partial or missing API key files cause an error. Without these variables,
+Xcode uses its configured account and fails if that account cannot sign/export.
+The helper does not create a keychain, install certificates or run `fastlane match`.
+
+Default signed archive locations:
+
+- Mac: `dist/appstore/macos/2.0.0-2000/Textractor Pro.xcarchive`
+- iOS: `dist/appstore/ios/1.0-1/Textractor Pro.xcarchive`
+
+Unsigned archives use a `-unsigned` suffix in the version directory. Archives
+contain source and app hashes, commit, platform, actual versions, team and Xcode
+version in `TextractorPro-provenance.json`. Export/upload rejects changed app
+bytes, changed shipping inputs, wrong identity/team and unsigned CI archives.
+
+## 4. Export for distribution validation
+
+```sh
+bash scripts/archive_appstore.sh --platform macos --action export
 ```
 
-### 4. Initialize match
-```bash
-# First time only - creates certs/profiles in match repo
-fastlane match appstore
+For a custom build/path, provide the same `--version` / `--build` or an explicit
+`--archive-path`. The generated `ExportOptions.plist` uses `app-store-connect`
+and the `export` destination. Xcode exports a Mac installer package (`.pkg`) or
+an iOS app (`.ipa`). It does not upload here. Automatic version/build management
+is disabled so the package retains the version recorded in the archive evidence.
+
+Validate the signed, sandboxed result and complete the required device, privacy,
+metadata and App Store validation checks before marking any signoff as passed.
+Mac App Store packaging does not run Developer ID notarization or Gatekeeper
+assessment; those belong to a separately configured direct-distribution path.
+
+## 5. Explicitly upload an approved archive
+
+```sh
+bash scripts/archive_appstore.sh --platform macos --action upload
 ```
 
-### 5. Test build
-```bash
-fastlane mac build
+This reads the archive's actual version/build, verifies its provenance, and runs
+the submission gate. Xcode then performs an export with destination `upload`.
+The command stops if required release evidence is incomplete. Upload success
+means Apple accepted the transfer; inspect processing and validation in App Store
+Connect. The helper does not submit for review, publish, create tags or send
+messages. App name acceptance is a separate App Store Connect check.
+
+## Optional Fastlane wrappers
+
+The shell/Python workflow needs no Ruby gems. Existing Fastlane users can run
+`bundle install` from `fastlane/`, then:
+
+```sh
+bundle exec fastlane mac build
+bundle exec fastlane mac build unsigned:true
+bundle exec fastlane mac export
+bundle exec fastlane mac upload
+bundle exec fastlane mac build platform:ios
 ```
 
-## Available Lanes
+`mac release` is now an archive-only compatibility alias. `deploy_appstore.sh`
+also defaults to archive only and accepts the same explicit action flags.
+No legacy notarization, automatic-review, automatic-release or Slack lane remains.
 
-| Lane | Description |
-|------|-------------|
-| `fastlane mac release` | Full pipeline: build → sign → notarize → upload → tag |
-| `fastlane mac build` | Build .app bundle only |
-| `fastlane mac notarize` | Notarize existing build |
-| `fastlane mac upload` | Upload to App Store Connect |
-| `fastlane mac screenshots` | Capture App Store screenshots |
+## Screenshot evidence
 
-## CI/CD (GitHub Actions)
+`bash scripts/capture_screenshots.sh` runs the existing `SettingsPlaytests` UI
+tests and exports their real XCTest attachments into a unique directory under
+`dist/screenshots/`. Use `--list` to list tests or `--test TEST_NAME` for one flow.
+The Swift runner delegates to the same script. Missing result bundles, missing
+PNG attachments and failing tests return an error. These Debug UI attachments
+are labeled QA evidence and are not approved listing screenshots. The press-kit
+generator produces artwork and a pending capture plan, not UI evidence.
 
-The workflows in `.github/workflows/` handle automated releases:
+## CI
 
-### `.github/workflows/release.yml`
-Triggers on: `git push origin v2.0.0` (tag push)
-- Builds, tests, notarizes, uploads
-- Creates GitHub Release
-- Sends Slack notifications
+`Textractor Pro QA` validates candidate configuration and release logic before
+starting native jobs. macOS and iOS jobs compile unsigned Release archives in
+addition to unit/UI checks. Mac UI tests use the Debug configuration and do not
+constitute sandbox testing. The manual `Prepare Textractor Pro App Store
+Candidate` workflow only compiles and preserves an unsigned archive, including
+provenance. It has no signing secrets and cannot upload or publish.
 
-### `.github/workflows/ci.yml`
-Triggers on: push to main, pull requests
-- Linting, tests, security scan
-- Release candidate verification on tag push
+## Primary references
 
-### Required GitHub Secrets
-Configure in: Settings → Secrets → Actions
+- [Creating distribution-signed code for macOS](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac)
+- [Archive export files](https://help.apple.com/xcode/mac/current/en.lproj/deva1f2ab5a2.html)
+- [Uploading builds and supported Xcode versions](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds)
+- [Preparing your app for distribution](https://developer.apple.com/documentation/xcode/preparing-your-app-for-distribution)
+- [Xcode 15 API-key upload support](https://developer.apple.com/documentation/xcode-release-notes/xcode-15-release-notes)
 
-| Secret | Description |
-|--------|-------------|
-| `ASC_API_ISSUER_ID` | App Store Connect API Issuer ID |
-| `ASC_API_KEY_ID` | App Store Connect API Key ID |
-| `ASC_API_KEY` | Base64-encoded AuthKey_XXXXXXXXXX.p8 |
-| `MATCH_PASSWORD` | Match repository passphrase |
-| `MATCH_GIT_URL` | Private cert repo URL |
-| `APPLE_ID` | Your Apple ID email |
-| `TEAM_ID` | Apple Developer Team ID |
-| `SLACK_WEBHOOK_URL` | (optional) Slack notifications |
-
-### Base64-encode the API key:
-```bash
-base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy
-# Paste into ASC_API_KEY secret
-```
-
-## Manual Release Process
-
-If you prefer manual control:
-
-```bash
-# 1. Ensure clean git state
-git status
-
-# 2. Update version in Info.plist (or let fastlane handle it)
-# /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 2.0.0" Sources/Textractor/Info.plist
-
-# 3. Run full release
-fastlane mac release
-
-# Or step by step:
-fastlane mac build
-fastlane mac notarize
-fastlane mac upload
-fastlane mac tag_release
-```
-
-## Troubleshooting
-
-### "No matching provisioning profile found"
-```bash
-# Regenerate profiles
-fastlane match appstore --force
-```
-
-### "Notarization failed"
-```bash
-# Check notarytool log
-xcrun notarytool log <submission-id> \
-  --issuer $ASC_API_ISSUER_ID \
-  --key-id $ASC_API_KEY_ID \
-  --key $ASC_API_KEY_PATH
-```
-
-### "Code signing failed"
-```bash
-# Verify certificates in keychain
-security find-identity -v -p codesigning
-
-# Clean derived data
-rm -rf ~/Library/Developer/Xcode/DerivedData/Textractor-*
-```
-
-### "App Store Connect upload failed"
-```bash
-# Check Transporter logs
-xcrun transporter logs
-```
-
-## Version Management
-
-Fastlane reads version from:
-1. Git tags (`git describe --tags`)
-2. Info.plist (`CFBundleShortVersionString`)
-
-Build number = git commit count (`git rev-list --count HEAD`)
-
-To release v2.0.0:
-```bash
-git tag -a v2.0.0 -m "Release 2.0.0"
-git push origin v2.0.0
-# GitHub Actions triggers release workflow
-```
-
-## Security Notes
-
-- **Never commit** `.env`, `AuthKey_*.p8`, or match repo credentials
-- Use GitHub Secrets for CI/CD
-- Rotate API keys periodically
-- Match repo should be private with limited access
-
-## Resources
-
-- [fastlane docs](https://docs.fastlane.tools)
-- [App Store Connect API](https://developer.apple.com/app-store-connect/api/)
-- [notarytool guide](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution)
-- [Transporter](https://developer.apple.com/app-store/transporter/)
-- [Match](https://docs.fastlane.tools/actions/match/)
+Use `xcodebuild -help` on the build Mac for the export options supported by the
+installed Xcode. Signing and App Store acceptance have not been verified by
+static checks or unsigned CI builds.

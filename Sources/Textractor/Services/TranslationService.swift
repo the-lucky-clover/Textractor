@@ -2,10 +2,8 @@ import Foundation
 import AppKit
 import NaturalLanguage
 
-/// On-device translation using Apple's `NLLanguageRecognizer` + `MLModel`
-/// (or system translation if available). Snip-to-translate: after OCR,
-/// translate the recognized text to the user's chosen target language.
-/// Everything runs on-device, nothing leaves the Mac.
+/// Language detection and translation capability boundary.
+/// No translation backend is installed; callers retain the original OCR text.
 public final class TranslationService {
 
     public static let shared = TranslationService()
@@ -35,6 +33,8 @@ public final class TranslationService {
         ("zh-Hant", "Chinese (Traditional)")
     ]
 
+    public static let isAvailable = false
+
     private init() {}
 
     /// Translate a string to the target language code (BCP-47 like "es", "ja", "zh-Hans").
@@ -52,9 +52,7 @@ public final class TranslationService {
         // Skip if source matches target
         if detected.lowercased() == targetCode.lowercased() { return nil }
 
-        // For now, use a placeholder - in production this would use
-        // Apple's Translation framework (macOS 14+) or a local model
-        return "[Translation to \(targetCode) would appear here]\n\(text)"
+        return nil // Never replace clipboard text with a simulated translation.
     }
 
     /// Detect the language of a string using NLLanguageRecognizer.

@@ -27,18 +27,20 @@ public final class AnalyticsService {
     
     // MARK: - Persistence
     private let fileURL: URL
+    private let telemetry: TelemetryService
     private let queue = DispatchQueue(label: "com.textractor.analytics", qos: .utility)
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     
-    private init() {
+    init(fileURL: URL? = nil, telemetry: TelemetryService = .shared) {
+        self.telemetry = telemetry
         osLogger = Logger(subsystem: subsystem, category: category)
         
         // Store in Caches so it's cleaned up automatically
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let analyticsDir = cacheDir.appendingPathComponent("Textractor/Analytics", isDirectory: true)
+        let analyticsDir = fileURL?.deletingLastPathComponent() ?? cacheDir.appendingPathComponent("Textractor/Analytics", isDirectory: true)
         try? FileManager.default.createDirectory(at: analyticsDir, withIntermediateDirectories: true)
-        fileURL = analyticsDir.appendingPathComponent("analytics.json")
+        self.fileURL = fileURL ?? analyticsDir.appendingPathComponent("analytics.json")
         
         encoder.dateEncodingStrategy = .iso8601
         decoder.dateDecodingStrategy = .iso8601
@@ -52,7 +54,9 @@ public final class AnalyticsService {
     /// Call this whenever you catch an error you want to track locally.
     /// - Parameter category: The type of error (e.g., .captureFailed, .ocrFailed, .clipboardFailed)
     public func recordError(_ category: ErrorCategory) {
+        guard telemetry.isEnabled else { return }
         queue.async {
+            guard self.telemetry.isEnabled else { return }
             self.errorCounts[category, default: 0] += 1
             self.persist()
         }
@@ -61,7 +65,9 @@ public final class AnalyticsService {
     /// Record a successful capture by mode.
     /// - Parameter mode: The capture mode used (.crosshair, .window)
     public func recordCapture(mode: CaptureMode) {
+        guard telemetry.isEnabled else { return }
         queue.async {
+            guard self.telemetry.isEnabled else { return }
             self.captureCounts[mode, default: 0] += 1
             self.persist()
         }
@@ -70,7 +76,9 @@ public final class AnalyticsService {
     /// Record an OCR language used.
     /// - Parameter language: The BCP-47 language code (e.g., "en-US", "es-ES")
     public func recordOCRLanguage(_ language: String) {
+        guard telemetry.isEnabled else { return }
         queue.async {
+            guard self.telemetry.isEnabled else { return }
             self.ocrLanguageCounts[language, default: 0] += 1
             self.persist()
         }

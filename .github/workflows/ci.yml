@@ -1,186 +1,141 @@
-# Textractor CI Pipeline
-# .github/workflows/ci.yml
-#
-# Runs on: push to main, pull requests
-# Tests: build, unit tests, linting
-
-name: CI
-
+name: Textractor Pro QA
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-
-env:
-  APP_IDENTIFIER: com.textractor.app
-  SCHEME: Textractor
-
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: qa-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  # ---------------------------------------------------------------------------
-  # Lint & Format
-  # ---------------------------------------------------------------------------
-  lint:
-    name: Lint & Format
-    runs-on: macos-14
-    timeout-minutes: 10
-    
+  release-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: SwiftFormat
+      - uses: actions/checkout@v4
+      - name: Test release tooling and measurement logic
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Validate candidate configuration
         run: |
-          if command -v swiftformat &> /dev/null; then
-            swiftformat --lint Sources/
-          else
-            echo "swiftformat not installed, skipping..."
-          fi
-      
-      - name: SwiftLint
+          python3 scripts/check_release_signoff.py --platform macos --stage candidate
+          python3 scripts/check_release_signoff.py --platform ios --stage candidate
+      - name: Validate shell entry points
         run: |
-          if command -v swiftlint &> /dev/null; then
-            swiftlint lint Sources/
-          else
-            echo "swiftlint not installed, skipping..."
-          fi
-
-  # ---------------------------------------------------------------------------
-  # Build & Test
-  # ---------------------------------------------------------------------------
-  test:
-    name: Build & Test
-    runs-on: macos-14
-    timeout-minutes: 30
-    
+          for script in build.sh install.sh deploy_appstore.sh scripts/archive_appstore.sh scripts/capture_screenshots.sh scripts/capture_screenshots_swift.sh scripts/generate_press_kit.sh; do
+            bash -n "$script"
+          done
+  ios:
+    needs: release-config
+    runs-on: macos-15
+    timeout-minutes: 25
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
         with:
-          fetch-depth: 0
-      
-      - name: Cache Swift packages
-        uses: actions/cache@v4
-        with:
-          path: .build
-          key: swift-packages-${{ hashFiles('Package.resolved') }}
-          restore-keys: |
-            swift-packages-
-      
-      - name: Build
-        run: swift build -c release
-      
-      - name: Run tests
-        run: swift test --parallel
-      
-      - name: Build .app bundle
-        run: ./build.sh
-      
-      - name: Verify build
+          xcode-version: latest-stable
+      - name: Generate mobile project
         run: |
-          codesign --verify --deep --strict --verbose=2 dist/Textractor.app
-          spctl --assess --type execute --verbose dist/Textractor.app
-
-  # ---------------------------------------------------------------------------
-  # Security Scan
-  # ---------------------------------------------------------------------------
+          brew install xcodegen
+          xcodegen generate
+      - name: Test iOS screenshot review and print packet
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          mkdir -p qa-ios
+          ios_device=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for runtime,items in d["devices"].items() if "iOS" in runtime for x in items if x["name"].startswith("iPhone")))')
+          xcodebuild test -project Textractor.xcodeproj -scheme TextractorMobile -destination "platform=iOS Simulator,id=$ios_device" -parallel-testing-enabled NO -resultBundlePath qa-ios/mobile.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee qa-ios/tests.log
+      - name: Compile iOS App Store archive without signing
+        run: |
+          set -o pipefail
+          bash scripts/archive_appstore.sh --platform ios --unsigned --archive-path dist/appstore/ios-ci.xcarchive 2>&1 | tee qa-ios/archive.log
+          cp dist/appstore/ios-ci.xcarchive/TextractorPro-provenance.json qa-ios/archive-provenance.json
+      - name: Export iOS playtest screenshots
+        if: always()
+        timeout-minutes: 2
+        run: |
+          if [ -d qa-ios/mobile.xcresult ]; then
+            xcrun xcresulttool export attachments --path qa-ios/mobile.xcresult --output-path qa-ios/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: textractor-ios-qa-${{ github.sha }}
+          path: qa-ios/
+          retention-days: 14
   security:
-    name: Security Scan
-    runs-on: macos-14
-    timeout-minutes: 10
-    
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Check for secrets
-        uses: gitleaks/gitleaks-action@v2
-        with:
-          args: --config=.gitleaks.toml --verbose
-      
-      - name: Dependency audit
-        run: |
-          # Check for vulnerable dependencies
-          if command -v swift package audit &> /dev/null; then
-            swift package audit
-          fi
-
-  # ---------------------------------------------------------------------------
-  # Code Coverage
-  # ---------------------------------------------------------------------------
-  coverage:
-    name: Code Coverage
-    runs-on: macos-14
-    timeout-minutes: 20
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Run tests with coverage
-        run: |
-          swift test --parallel --enable-code-coverage
-      
-      - name: Generate coverage report
-        run: |
-          xcrun llvm-cov export \
-            -format="lcov" \
-            .build/debug/TextractorPackageTests.xctest/Contents/MacOS/TextractorPackageTests \
-            -instr-profile .build/debug/codecov/default.profdata \
-            > coverage.lcov
-      
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: coverage.lcov
-          flags: unittests
-          name: textractor-coverage
-        continue-on-error: true
-
-  # ---------------------------------------------------------------------------
-  # Build Verification (Release Candidate)
-  # ---------------------------------------------------------------------------
-  verify_release:
-    name: Verify Release Build
-    runs-on: macos-14
-    timeout-minutes: 30
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: Build release
-        run: ./build.sh
-      
-      - name: Verify signatures
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  native:
+    needs: release-config
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Build and test native services
         run: |
-          codesign --verify --deep --strict --verbose=2 dist/Textractor.app
-          codesign -d -v --entitlements :- dist/Textractor.app
-          spctl --assess --type execute --verbose dist/Textractor.app
-      
-      - name: Check entitlements
+          set -o pipefail
+          mkdir -p qa-results
+          export TEXTRACTOR_QA_OUTPUT="$PWD/qa-results"
+          swift test --enable-code-coverage 2>&1 | tee qa-results/unit-tests.log
+      - name: Score measured OCR results
+        run: python3 scripts/benchmark_report.py qa-results/ocr-measurements.json --output qa-results/ocr-summary.json
+      - name: Test App Store capture and settings policy
+        if: ${{ !cancelled() }}
         run: |
-          codesign -d --entitlements :- dist/Textractor.app | grep -E "app-sandbox|files.user-selected|device.camera"
-      
-      - name: Verify version
+          set -o pipefail
+          # Use a separate scratch directory so store flags cannot contaminate
+          # the direct-development build or reuse its compiled test modules.
+          swift test --scratch-path "$RUNNER_TEMP/textractor-appstore-tests" -Xswiftc -DAPP_STORE --filter 'ReleaseSafetyTests|SettingsRegressionTests' 2>&1 | tee qa-results/appstore-unit-tests.log
+      - name: Build standalone bundle
+        id: bundle
+        if: ${{ !cancelled() }}
+        run: bash build.sh
+      - name: Verify development bundle
+        if: ${{ !cancelled() && steps.bundle.outcome == 'success' }}
+        run: codesign --verify --deep --strict 'dist/Textractor Pro.app'
+      - name: Generate UI test project
+        id: ui_project
+        if: ${{ !cancelled() }}
         run: |
-          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" dist/Textractor.app/Contents/Info.plist)
-          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" dist/Textractor.app/Contents/Info.plist)
-          echo "Version: $VERSION, Build: $BUILD"
-          # Verify tag matches
-          TAG_VERSION=${GITHUB_REF_NAME#v}
-          if [ "$VERSION" != "$TAG_VERSION" ]; then
-            echo "❌ Version mismatch: Info.plist=$VERSION, Tag=$TAG_VERSION"
-            exit 1
+          brew install xcodegen
+          xcodegen generate
+      - name: Compile App Store configuration without signing
+        if: ${{ !cancelled() && steps.ui_project.outcome == 'success' }}
+        run: |
+          set -o pipefail
+          bash scripts/archive_appstore.sh --platform macos --unsigned --archive-path dist/appstore/macos-ci.xcarchive 2>&1 | tee qa-results/archive.log
+          cp dist/appstore/macos-ci.xcarchive/TextractorPro-provenance.json qa-results/archive-provenance.json
+          python3 scripts/verify_macos_bundle.py 'dist/appstore/macos-ci.xcarchive/Products/Applications/Textractor Pro.app' --require-universal
+      - name: Playtest Settings and onboarding
+        if: ${{ !cancelled() && steps.ui_project.outcome == 'success' }}
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          xcodebuild test -project Textractor.xcodeproj -scheme Textractor -destination 'platform=macOS' -resultBundlePath qa-results/playtests.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee qa-results/playtests.log
+      - name: Export playtest screenshots
+        if: always()
+        timeout-minutes: 2
+        run: |
+          if [ -d qa-results/playtests.xcresult ]; then
+            xcrun xcresulttool export attachments --path qa-results/playtests.xcresult --output-path qa-results/screenshots
           fi
-          echo "✅ Version matches tag"
-      
-      - name: Upload release candidate
+      - name: Preserve evidence even on failure
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Textractor-release-candidate
-          path: dist/Textractor.app
-          retention-days: 7
+          name: textractor-pro-qa-${{ github.sha }}
+          path: qa-results/
+          retention-days: 14

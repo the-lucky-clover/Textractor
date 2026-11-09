@@ -1,0 +1,30 @@
+{
+  "status": "draft",
+  "platform": "ios",
+  "locale": "en-US",
+  "name": "Textractor Pro",
+  "subtitle": "Review screenshots, export PDF",
+  "version": "1.0",
+  "build": "1",
+  "bundle_identifier": "com.textractor.app.ios",
+  "description": "Turn selected screenshots into a reviewable transcript and a numbered PDF packet.\n\nTextractor Pro for iPhone and iPad imports screenshots you choose from Photos or Files, recognizes their text on device and keeps each OCR block linked to its imported source.\n\nREVIEW WITH CONTEXT\n• Open a source image while reviewing extracted text.\n• Correct recognition errors while retaining the original OCR and a change log.\n• Review overlap suggestions yourself, keep both regions or exclude a repeated region reversibly.\n• Add labeled timestamps and assign message direction when building a reconstructed layout.\n\nFIND AND EXPORT\n• Search with exact or typo-tolerant matching.\n• Use related-meaning search when Apple's English sentence model is available, with an explicit fuzzy-search fallback.\n• Create numbered US Letter PDFs with black text on white pages.\n• Include optional grayscale source pages, original image exports and audit JSON.\n\nImported source bytes are retained separately from reviewed text. Source checksums are checked before export; they identify the imported files, not the authenticity of a conversation. Reconstructed layouts and user-entered timestamps are labeled.\n\nThe app works with screenshots you select. It does not read your Messages database, infer missing dates, authenticate senders or certify court admissibility. It does not import shared AI conversation links or screen recordings.\n\nRequires iOS 17 or later. English (US) is the default recognition language. Review OCR and the exported packet against the originals before sharing or printing.",
+  "keywords": "ocr,screenshot,transcript,pdf,print,review,search,conversation,archive,document,export",
+  "promotional_text": "Review selected screenshots with links to their originals, correct OCR, inspect overlaps and export numbered PDF packets for reading or printing.",
+  "review_notes": "This is the separate iOS screenshot-review target, bundle ID com.textractor.app.ios. It imports user-selected screenshots from Photos or Files; it does not access the Messages database. No Textractor account is required for the described flow.\n\nUse fictional conversation screenshots. Import two overlapping images, inspect original-linked OCR, correct one block and review its change log. Review overlap suggestions explicitly; nothing should be silently excluded. Search the transcript using exact and fuzzy modes, then export a numbered US Letter PDF with an optional source appendix. User-entered timestamps and reconstructed message directions are labeled.\n\nRelated-meaning search depends on Apple's English sentence model; the interface identifies its fuzzy fallback when the model is unavailable. Imported byte checksums support source-integrity checking but do not authenticate people or conversations.\n\nBefore submission, complete physical Photos/Files import, sharing, search-quality, accessibility and print checks, confirm the final iPhone/iPad screenshots, and supply public support/privacy URLs plus actual review-contact details.",
+  "screenshot_paths": [],
+  "submission": {
+    "support_url": null,
+    "privacy_policy_url": null,
+    "review_contact": {
+      "first_name": null,
+      "last_name": null,
+      "email": null,
+      "phone": null
+    },
+    "pricing_confirmed": false,
+    "age_rating_confirmed": false,
+    "privacy_answers_confirmed": false,
+    "export_compliance_confirmed": false,
+    "content_rights_confirmed": false
+  }
+}

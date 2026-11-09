@@ -165,6 +165,17 @@ public struct SourceCodeDetector {
     }
 
     private static func detectLanguage(_ text: String, metrics m: Metrics) -> String? {
+        // Shared keywords (return, import, for) are weak evidence. Prefer
+        // language-specific declarations before the fallback keyword score.
+        func matches(_ pattern: String) -> Bool {
+            text.range(of: pattern, options: .regularExpression) != nil
+        }
+        if matches(#"(?m)^\s*package\s+\w+"#) { return "go" }
+        if matches(#"(?m)^\s*(?:pub\s+)?(?:async\s+)?fn\s+\w+"#) { return "rust" }
+        if matches(#"(?m)^\s*(?:async\s+)?def\s+\w+\([^\n]*\)\s*(?:->[^\n:]+)?\s*:"#) { return "python" }
+        if matches(#"(?m)^\s*(?:(?:public|private|internal|static|class|override|mutating)\s+)*func\s+\w+(?:<[^\n>]+>)?\s*\("#) {
+            return "swift"
+        }
         let lower = text.lowercased()
         let tokens = lower.components(separatedBy: CharacterSet.alphanumerics.inverted)
         let tokenSet = Set(tokens)

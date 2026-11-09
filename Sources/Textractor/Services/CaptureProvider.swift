@@ -255,7 +255,11 @@ public struct BuiltInCaptureProviders {
         
         public func capture() async throws -> CapturedImage {
             if #available(macOS 13.0, *) {
-                return try await screenshotService.captureFromContinuityCamera()
+                let captures = try await screenshotService.captureFromContinuityCamera()
+                guard captures.count == 1, let capture = captures.first else {
+                    throw ScreenshotError.processingFailed("For multi-page scans, use Import from iPhone or iPad in the main capture menu.")
+                }
+                return capture
             } else {
                 throw ScreenshotError.continuityCameraNotAvailable
             }

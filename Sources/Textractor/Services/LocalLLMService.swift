@@ -46,9 +46,11 @@ public struct DetailedEntity: Sendable, Codable, Equatable {
 }
 
 /// Local LLM service for advanced AI enrichment (summarization, QA, detailed entity extraction).
-/// Uses llama.cpp via C API for on-device inference. Falls back to Apple NL if model unavailable.
+/// No model runtime is linked in this build. Unsupported operations fail explicitly;
+/// the regular OCR analysis path continues to use Apple NaturalLanguage.
 public final class LocalLLMService {
     public static let shared = LocalLLMService()
+    public static let isAvailable = false
 
     public enum ModelType: String, Codable, CaseIterable {
         case tinyLlama = "TinyLlama-1.1B-Chat-v1.0-Q4_K_M.gguf"
@@ -113,29 +115,13 @@ public final class LocalLLMService {
         return false
     }
 
-    /// Download a model from a URL (for user-initiated downloads)
+    /// Downloads stay unavailable until a verified model runtime is integrated.
     public func downloadModel(from url: URL, to modelType: ModelType) async throws -> URL {
-        let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let modelsDir = docsURL.appendingPathComponent("Models")
-        try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
-
-        let destination = modelsDir.appendingPathComponent(modelType.rawValue)
-        let (localURL, _) = try await URLSession.shared.download(from: url, delegate: nil)
-        try FileManager.default.moveItem(at: localURL, to: destination)
-        return destination
+        throw LocalLLMError.unavailable
     }
 
-    /// Load the model into memory (llama.cpp initialization)
     public func loadModel(_ type: ModelType) async throws {
-        guard modelExists(type) else {
-            throw LocalLLMError.modelNotFound(type.rawValue)
-        }
-
-        // In a real implementation, this would initialize llama.cpp
-        // For now, we simulate loading
-        try await Task.sleep(nanoseconds: 500_000_000) // Simulate load time
-        isModelLoaded = true
-        currentModel = type
+        throw LocalLLMError.unavailable
     }
 
     /// Unload the model to free memory
@@ -147,15 +133,7 @@ public final class LocalLLMService {
 
     /// Generate a completion from a prompt
     public func generate(prompt: String, config: ModelConfig? = nil) async throws -> String {
-        guard isModelLoaded else {
-            throw LocalLLMError.modelNotLoaded
-        }
-
-        let effectiveConfig = config ?? self.config
-        
-        // In a real implementation, this would call llama.cpp
-        // For now, we simulate with a template-based response
-        return try await simulateGeneration(prompt: prompt, config: effectiveConfig)
+        throw LocalLLMError.unavailable
     }
 
     /// Summarize text
@@ -221,33 +199,12 @@ public final class LocalLLMService {
         return []
     }
 
-    // MARK: - Private
 
-    private func simulateGeneration(prompt: String, config: ModelConfig) async throws -> String {
-        // Simulate processing time
-        try await Task.sleep(nanoseconds: 500_000_000)
-        
-        // Template responses based on prompt content
-        if prompt.contains("summarize") || prompt.contains("summary") {
-            return "This text discusses key technical concepts including API usage, error handling, and configuration patterns. The main points cover authentication flows, error handling strategies, and configuration management best practices."
-        } else if prompt.contains("key point") || prompt.contains("bullet") {
-            return "- Authentication flow uses OAuth 2.0 with PKCE\n- Error handling implements exponential backoff\n- Configuration supports environment-based overrides\n- Logging includes structured fields for observability"
-        } else if prompt.contains("entity") || prompt.contains("JSON") {
-            return """
-            [
-              {"type": "PRODUCT", "value": "OAuth 2.0", "confidence": 0.95, "context": "authentication flow uses OAuth 2.0"},
-              {"type": "CODE", "value": "PKCE", "confidence": 0.9, "context": "with PKCE extension"},
-              {"type": "ERROR", "value": "exponential backoff", "confidence": 0.85, "context": "error handling implements exponential backoff"}
-            ]
-            """
-        }
-        
-        return "Generated response for: \(prompt.prefix(50))..."
-    }
 }
 
 /// Errors for LocalLLMService
 public enum LocalLLMError: Error, LocalizedError {
+    case unavailable
     case modelNotFound(String)
     case modelNotLoaded
     case generationFailed(String)
@@ -255,6 +212,7 @@ public enum LocalLLMError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
+        case .unavailable: return "Local language-model generation is unavailable in this build. OCR and text analysis remain available."
         case .modelNotFound(let name): return "Model not found: \(name)"
         case .modelNotLoaded: return "Model not loaded. Call loadModel() first."
         case .generationFailed(let msg): return "Generation failed: \(msg)"

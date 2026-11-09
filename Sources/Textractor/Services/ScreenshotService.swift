@@ -20,7 +20,7 @@ public enum ScreenshotError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .permissionDenied:    return "Screen Recording permission is required. Grant it in System Settings → Privacy & Security → Screen Recording, then re-launch Textractor."
+        case .permissionDenied:    return "Screen Recording permission is required. Grant it in System Settings → Privacy & Security → Screen Recording, then re-launch Textractor Pro."
         case .noDisplay:           return "No displays were detected."
         case .noWindow:            return "The selected window is not visible."
         case .imageCreationFailed: return "CoreGraphics could not build a screenshot."
@@ -119,17 +119,17 @@ public final class ScreenshotService: NSObject {
             throw ScreenshotError.noDisplay
         }
         let centerPoint = CGPoint(x: rect.midX, y: rect.midY)
-        let screen = screens.first(where: { $0.frame.contains(centerPoint) }) ?? NSScreen.main ?? screens[0]
+        guard let screen = screens.first(where: { $0.frame.contains(centerPoint) }) else { throw ScreenshotError.noDisplay }
         let screenIndex = screens.firstIndex(of: screen) ?? 0
 
         let content = try await SCShareableContent.current
-        guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else {
+        guard let display = scDisplay(for: screen, in: content) else {
             throw ScreenshotError.noDisplay
         }
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         let full = try await captureCGImage(filter: filter)
         let scale = CGFloat(full.width) / max(screen.frame.width, 1)
-        let cropped = cropDisplayImage(full, displayFrame: screen.frame, scale: scale, toGlobalRect: rect)
+        let cropped = try cropDisplayImage(full, displayFrame: screen.frame, scale: scale, toGlobalRect: rect)
 
         return try writeToDisk(cropped, mode: .crosshair, origin: .region, rect: rect, screenIndex: screenIndex)
     }
@@ -157,15 +157,11 @@ public final class ScreenshotService: NSObject {
         guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
             throw ScreenshotError.noWindow
         }
-        let targetDisplayScreen: NSScreen = (NSScreen.screens.first { $0.frame.intersects(window.bounds) } ?? NSScreen.main)!
-        guard let display = scDisplay(for: targetDisplayScreen, in: content) ?? content.displays.first else {
-            throw ScreenshotError.noDisplay
-        }
-        let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [scWindow])
-        let fullImage = try await captureCGImage(filter: filter)
-        let scale = CGFloat(fullImage.width) / max(targetDisplayScreen.frame.width, 1)
-        let cropped = cropDisplayImage(fullImage, displaySizePoints: targetDisplayScreen.frame.size, scale: scale, toLocalRect: window.bounds)
-        let captured = try writeToDisk(cropped, mode: .window, origin: .window, rect: window.bounds, screenIndex: 0)
+        // Capture the selected window directly, including windows spanning multiple displays.
+        // WindowDescriptor.bounds is Quartz-global, not display-local AppKit coordinates.
+        let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+        let image = try await captureCGImage(filter: filter)
+        let captured = try writeToDisk(image, mode: .window, origin: .window, rect: window.bounds, screenIndex: 0)
         return (captured, window)
     }
 
@@ -189,7 +185,7 @@ public final class ScreenshotService: NSObject {
         var results: [CapturedImage] = []
         for (index, screen) in displays.enumerated() {
             let screenFrame = screen.frame
-            guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else { continue }
+            guard let display = scDisplay(for: screen, in: content) else { continue }
             let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
             guard let full = try? await captureCGImage(filter: filter) else { continue }
             do {
@@ -252,7 +248,7 @@ public final class ScreenshotService: NSObject {
         )
 
         let content = try await SCShareableContent.current
-        guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else {
+        guard let display = scDisplay(for: screen, in: content) else {
             throw ScreenshotError.noDisplay
         }
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
@@ -278,20 +274,20 @@ public final class ScreenshotService: NSObject {
         let screen = screens[index]
 
         let content = try await SCShareableContent.current
-        guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else {
+        guard let display = scDisplay(for: screen, in: content) else {
             throw ScreenshotError.noDisplay
         }
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         let full = try await captureCGImage(filter: filter)
         let scale = CGFloat(full.width) / max(screen.frame.width, 1)
-        let cropped = cropDisplayImage(full, displaySizePoints: screen.frame.size, scale: scale, toLocalRect: rect)
+        let cropped = try cropDisplayImage(full, displaySizePoints: screen.frame.size, scale: scale, toLocalRect: rect)
 
         return try writeToDisk(cropped, mode: .crosshair, origin: .region, rect: rect, screenIndex: index)
     }
 
     /// Load an arbitrary image file (PNG/JPG/HEIC) — used by drag-and-drop,
     /// "Open File…", and Continuity-Camera driven workflows.
-    public func captureFromFile(at url: URL) async throws -> CapturedImage {
+    public func captureFromFile(at url: URL, origin: CapturedImage.Origin = .file) async throws -> CapturedImage {
         LoggerService.shared.info("Loading image file: \(url.path)")
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             throw ScreenshotError.fileLoadFailed(url)
@@ -306,7 +302,7 @@ public final class ScreenshotService: NSObject {
         return try writeToDisk(
             img,
             mode: .crosshair,
-            origin: .fullscreen,
+            origin: origin,
             rect: CGRect(x: 0, y: 0, width: w, height: h),
             screenIndex: 0
         )
@@ -328,48 +324,20 @@ public final class ScreenshotService: NSObject {
         )
     }
 
-    /// Check if Continuity Camera is available on this Mac with a nearby iOS device.
-    @available(macOS 13.0, *)
-    public func isContinuityCameraAvailable() async -> Bool {
-        // Check if there's at least one iOS device nearby that supports Continuity Camera
-        // We use a lightweight check by trying to enumerate devices
-        // For now, return true on macOS 13+ as the system handles the availability UI
-        return true
-    }
-
-    // MARK: - Continuity Camera Support
-
-    /// Capture an image using the Continuity Camera (iPhone/iPad as webcam).
-    /// macOS presents a native system sheet when an iPhone is held near the
-    /// computer asking the user to "Take Photo" or "Scan Documents".
-    /// On older macOS versions or without a nearby device, throws.
-    @available(macOS 13.0, *)
+    /// Receive native AppKit device imports, including every page of a scan.
     @MainActor
-    public func captureFromContinuityCamera() async throws -> CapturedImage {
-        LoggerService.shared.info("Starting Continuity Camera capture")
-
-        // macOS exposes Continuity Camera via ImageCaptureCore's ICCameraDevice;
-        // we rely on the system-provided `IKDeviceBrowserViewController`-style
-        // file dialog that automatically surfaces nearby iOS devices when the
-        // user opens an NSOpenPanel on a supported version.
-        let openPanel = NSOpenPanel()
-        openPanel.canChooseFiles = true
-        openPanel.canChooseDirectories = false
-        openPanel.allowsMultipleSelection = false
-        openPanel.allowedContentTypes = [.image]
-        openPanel.prompt = "Insert from iPhone"
-
-        let response = await withCheckedContinuation { continuation in
-            openPanel.begin { response in
-                continuation.resume(returning: response)
+    public func captureFromContinuityCamera() async throws -> [CapturedImage] {
+        let urls = try await ContinuityCameraController.shared.capture()
+        defer {
+            if let directory = urls.first?.deletingLastPathComponent() {
+                try? FileManager.default.removeItem(at: directory)
             }
         }
-
-        guard response == .OK, let url = openPanel.url else {
-            throw ScreenshotError.continuityCameraNotAvailable
+        var captures: [CapturedImage] = []
+        for url in urls {
+            captures.append(try await captureFromFile(at: url, origin: .continuityCamera))
         }
-
-        return try await ingestFile(at: url, origin: .continuityCamera)
+        return captures
     }
 
     /// Capture frames from a video URL at regular intervals and run OCR on each.
@@ -494,7 +462,11 @@ public final class ScreenshotService: NSObject {
         filter: SCContentFilter,
         configuration: SCStreamConfiguration = SCStreamConfiguration()
     ) async throws -> CGImage {
-        try await withCheckedThrowingContinuation { continuation in
+        let scale = CGFloat(filter.pointPixelScale)
+        configuration.width = max(1, Int((filter.contentRect.width * scale).rounded(.up)))
+        configuration.height = max(1, Int((filter.contentRect.height * scale).rounded(.up)))
+        configuration.showsCursor = false
+        return try await withCheckedThrowingContinuation { continuation in
             SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration) { image, error in
                 if let error {
                     continuation.resume(throwing: ScreenshotError.processingFailed("ScreenCaptureKit: \(error.localizedDescription)"))
@@ -526,16 +498,16 @@ public final class ScreenshotService: NSObject {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { throw ScreenshotError.noDisplay }
         let centerPoint = CGPoint(x: rect.midX, y: rect.midY)
-        let screen = screens.first { $0.frame.contains(centerPoint) } ?? NSScreen.main ?? screens[0]
+        guard let screen = screens.first(where: { $0.frame.contains(centerPoint) }) else { throw ScreenshotError.noDisplay }
 
         let content = try await SCShareableContent.current
-        guard let display = scDisplay(for: screen, in: content) ?? content.displays.first else {
+        guard let display = scDisplay(for: screen, in: content) else {
             throw ScreenshotError.noDisplay
         }
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         let full = try await captureCGImage(filter: filter)
         let scale = CGFloat(full.width) / max(screen.frame.width, 1)
-        let cropped = cropDisplayImage(full, displayFrame: screen.frame, scale: scale, toGlobalRect: rect)
+        let cropped = try cropDisplayImage(full, displayFrame: screen.frame, scale: scale, toGlobalRect: rect)
         return cropped
     }
 
@@ -546,29 +518,15 @@ public final class ScreenshotService: NSObject {
         displayFrame: CGRect,
         scale: CGFloat,
         toGlobalRect rect: CGRect
-    ) -> CGImage {
-        let dx = (rect.minX - displayFrame.minX) * scale
-        let dy = (displayFrame.maxY - rect.maxY) * scale
-        let crop = CGRect(x: dx, y: dy, width: rect.width * scale, height: rect.height * scale)
-        let clamped = crop.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        guard !clamped.isEmpty, let cropped = image.cropping(to: clamped) else { return image }
+    ) throws -> CGImage {
+        guard let crop = CaptureDisplayGeometry.pixelCrop(globalRect: rect, displayFrame: displayFrame,
+                imageSize: CGSize(width: image.width, height: image.height)),
+              let cropped = image.cropping(to: crop) else { throw ScreenshotError.imageCreationFailed }
         return cropped
     }
 
-    /// Crop a display-sized `CGImage` down to a rect expressed in the display's
-    /// own local coordinate space (AppKit bottom-left origin, points).
-    private func cropDisplayImage(
-        _ image: CGImage,
-        displaySizePoints: CGSize,
-        scale: CGFloat,
-        toLocalRect rect: CGRect
-    ) -> CGImage {
-        let dx = rect.minX * scale
-        let dy = (displaySizePoints.height - rect.maxY) * scale
-        let crop = CGRect(x: dx, y: dy, width: rect.width * scale, height: rect.height * scale)
-        let clamped = crop.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        guard !clamped.isEmpty, let cropped = image.cropping(to: clamped) else { return image }
-        return cropped
+    private func cropDisplayImage(_ image: CGImage, displaySizePoints: CGSize, scale: CGFloat, toLocalRect rect: CGRect) throws -> CGImage {
+        try cropDisplayImage(image, displayFrame: CGRect(origin: .zero, size: displaySizePoints), scale: scale, toGlobalRect: rect)
     }
 
     // MARK: - Helpers
@@ -625,6 +583,9 @@ public final class ScreenshotService: NSObject {
         maxScrolls: Int = 50,
         overlap: CGFloat = 100
     ) async throws -> CapturedImage {
+        #if APP_STORE
+        throw ScreenshotError.processingFailed("Automatic scrolling is unavailable in this edition. Capture a visible region or import saved screenshots.")
+        #else
         try ensureScreenRecordingAccess()
 
         // Find the window descriptor
@@ -641,23 +602,33 @@ public final class ScreenshotService: NSObject {
         var stitchedImage = firstImage
         var previousImage = firstImage
         var scrollCount = 0
-        var isAtBottom = false
+        let boundedScrolls = min(max(maxScrolls, 0), 50)
+        let boundedInterval = min(max(scrollInterval, 0.1), 3.0)
+        let boundedOverlap = min(max(overlap, 0), CGFloat(firstImage.height - 1))
 
-        while scrollCount < 50 && !isAtBottom {
+        while scrollCount < boundedScrolls {
+            try Task.checkCancellation()
+            scrollCount += 1
             // Scroll down using AppleScript
+            guard let owner = window.ownerName else { throw ScreenshotError.noWindow }
+            let escapedOwner = owner.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
             let scrollScript = """
             tell application "System Events"
-                tell process "\(window.ownerName ?? "")"
-                    key code 125 -- down arrow
+                tell process "\(escapedOwner)"
+                    set frontmost to true
+                    key code 125
                 end tell
             end tell
             """
-
-            let script = NSAppleScript(source: scrollScript)
-            script?.executeAndReturnError(nil)
+            var scriptError: NSDictionary?
+            NSAppleScript(source: scrollScript)?.executeAndReturnError(&scriptError)
+            if scriptError != nil {
+                throw ScreenshotError.processingFailed("Scrolling needs permission to control the selected app. Capture a region instead or enable automation in System Settings.")
+            }
 
             // Wait for scroll animation
-            try await Task.sleep(nanoseconds: UInt64(0.5 * 1_000_000_000))
+            try await Task.sleep(nanoseconds: UInt64(boundedInterval * 1_000_000_000))
 
             // Capture current state
             let currentCapture = try await captureWindow(windowID)
@@ -671,13 +642,15 @@ public final class ScreenshotService: NSObject {
             }
 
             // Stitch the new image below the previous one
-            stitchedImage = stitchImagesVertically(top: stitchedImage, bottom: currentImage, overlap: 100)
+            guard stitchedImage.height + currentImage.height - Int(boundedOverlap) <= 32_000 else {
+                throw ScreenshotError.processingFailed("Scroll capture reached the 32,000-pixel limit. Capture a shorter section.")
+            }
+            stitchedImage = try ScrollImageComposer.append(top: stitchedImage, bottom: currentImage, overlap: Int(boundedOverlap))
             previousImage = currentImage
         }
         
         // Save the final stitched image
         let url = try persist(cgImage: stitchedImage)
-        let rect = CGRect(x: 0, y: 0, width: stitchedImage.width, height: stitchedImage.height)
         
         return CapturedImage(
             mode: .autoScroll,
@@ -686,6 +659,7 @@ public final class ScreenshotService: NSObject {
             fileURL: url,
             screenIndex: 0
         )
+        #endif
     }
 
     /// Compare two images for similarity (0.0 to 1.0)
@@ -694,7 +668,6 @@ public final class ScreenshotService: NSObject {
         
         let width = min(img1.width, img2.width)
         let height = min(img1.height, img2.height)
-        let bytesPerPixel = 4
         let bytesPerRow = width * 4
         
         var pixels1 = [UInt8](repeating: 0, count: width * height * 4)
@@ -729,38 +702,10 @@ public final class ScreenshotService: NSObject {
         }
         
         let similarity = 1.0 - Double(differentPixels) / Double(totalPixels)
-        return similarity >= 0.98
+        return similarity >= threshold
     }
     
-    /// Stitch two images vertically with overlap
-    private func stitchImagesVertically(top: CGImage, bottom: CGImage, overlap: CGFloat) -> CGImage {
-        let topHeight = top.height
-        let bottomHeight = bottom.height
-        let overlapInt = Int(overlap)
-        
-        let newHeight = topHeight + bottomHeight - overlapInt
-        let width = max(top.width, bottom.width)
-        
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let context = CGContext(
-            data: nil,
-            width: width,
-            height: newHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        )!
-        
-        // Draw top image
-        context.draw(top, in: CGRect(x: 0, y: 0, width: top.width, height: topHeight))
-        
-        // Draw bottom image, overlapping by 'overlap' pixels
-        let bottomY = topHeight - overlapInt
-        context.draw(bottom, in: CGRect(x: 0, y: bottomY, width: bottom.width, height: bottomHeight))
-        
-        return context.makeImage()!
-    }
+
     
     /// Load a CGImage from a file URL
     private func loadCGImage(from url: URL) -> CGImage? {

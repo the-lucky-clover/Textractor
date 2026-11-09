@@ -3,25 +3,23 @@ import PackageDescription
 
 let package = Package(
     name: "Textractor",
-    defaultLocalization: "en-US",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v14)
     ],
     products: [
         .executable(name: "Textractor", targets: ["Textractor"])
     ],
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "2.0.0")
-    ],
+    dependencies: [],
     targets: [
         .executableTarget(
             name: "Textractor",
-            dependencies: [
-                .product(name: "Crypto", package: "swift-crypto")
-            ],
+            dependencies: [],
             path: "Sources/Textractor",
             exclude: [
-                "Info.plist"
+                "Info.plist",
+                "Resources/Textractor.entitlements",
+                "Resources/Textractor.release.entitlements"
             ],
             resources: [
                 .process("Resources")
@@ -31,6 +29,7 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
+                .linkedFramework("PDFKit"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("Vision"),
                 .linkedFramework("NaturalLanguage"),
@@ -47,10 +46,7 @@ let package = Package(
         .testTarget(
             name: "TextractorTests",
             dependencies: ["Textractor"],
-            path: "Tests/TextractorTests",
-            resources: [
-                .process("Resources")
-            ]
+            path: "Tests/TextractorTests"
         )
     ]
 )

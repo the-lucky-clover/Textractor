@@ -10,16 +10,26 @@ import AppKit
 @MainActor
 public final class SettingsStore: ObservableObject {
 
-    public static let shared = SettingsStore()
+    public static let shared: SettingsStore = {
+        #if DEBUG
+        if let suite = ProcessInfo.processInfo.environment["TEXTRACTOR_UI_TEST_SUITE"],
+           suite.hasPrefix("com.textractor.uitest."), let defaults = UserDefaults(suiteName: suite) {
+            return SettingsStore(userDefaults: defaults, appliesSystemEffects: false)
+        }
+        #endif
+        return SettingsStore()
+    }()
     public static let defaultsKey = "com.textractor.settings.v1"
     private static let onboardingKey = "com.textractor.onboardingCompleted"
 
     @Published public private(set) var current: AppSettings
 
     private let userDefaults: UserDefaults
+    private let appliesSystemEffects: Bool
     private var pendingPersist: DispatchWorkItem?
 
-    private init(userDefaults: UserDefaults = .standard) {
+    init(userDefaults: UserDefaults = .standard, appliesSystemEffects: Bool = true) {
+        self.appliesSystemEffects = appliesSystemEffects
         self.userDefaults = userDefaults
         if let data = userDefaults.data(forKey: Self.defaultsKey),
            let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) {
@@ -33,9 +43,11 @@ public final class SettingsStore: ObservableObject {
     // MARK: - Mutating
 
     public func update(_ settings: AppSettings) {
-        self.current = settings
-        applySideEffects(for: settings)
-        schedulePersist(settings)
+        var normalized = settings
+        normalized.uiLanguage = AppSettings.normalizedLanguage(settings.uiLanguage)
+        self.current = normalized
+        applySideEffects(for: normalized)
+        schedulePersist(normalized)
     }
 
     /// Convenience sugar.
@@ -74,7 +86,11 @@ public final class SettingsStore: ObservableObject {
     // MARK: - Internals
 
     /// Apply cross-component side effects of the new settings (sounds, etc.).
-private func applySideEffects(for settings: AppSettings) {
+    private func applySideEffects(for settings: AppSettings) {
+        T.sharedLanguage.value = settings.uiLanguage
+        guard appliesSystemEffects else { return }
+        CaptureExtras.shared.configure(settings: settings)
+        _ = ActionShortcuts.shared.configure(settings)
         SoundManager.enabled = settings.soundEffectsEnabled
         TelemetryService.shared.isEnabled = settings.localTelemetryEnabled
         // Push the user's chosen UI language into the global localization
@@ -88,24 +104,29 @@ private func applySideEffects(for settings: AppSettings) {
     
     /// Apply the dock presence setting by updating activation policy and status bar.
     private func applyDockPresence(_ presence: AppSettings.DockPresence) {
-        let newPolicy: NSApplication.ActivationPolicy
-        switch presence {
-        case .menuBarOnly:
-            newPolicy = .accessory
-        case .dockOnly, .both:
-            newPolicy = .regular
-        }
-        
+        let newPolicy = Self.activationPolicy(for: presence)
+
         // Only change if different to avoid unnecessary UI flicker
-        if NSApp.activationPolicy() != newPolicy {
-            NSApp.setActivationPolicy(newPolicy)
+        if let app = NSApp, app.activationPolicy() != newPolicy {
+            app.setActivationPolicy(newPolicy)
         }
-        
+
         // Notify AppCoordinator to show/hide status bar
         NotificationCenter.default.post(
             name: NSNotification.Name("DockPresenceChanged"),
             object: presence
         )
+    }
+
+    /// Shared by settings changes and startup. Launch must preserve a saved
+    /// Dock-only preference instead of hiding the app's only entry point.
+    static func activationPolicy(for presence: AppSettings.DockPresence) -> NSApplication.ActivationPolicy {
+        switch presence {
+        case .menuBarOnly:
+            return .accessory
+        case .dockOnly, .both:
+            return .regular
+        }
     }
 
     /// Coalesce rapid `update` calls so we only encode + write once per quiet

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generate Textractor logo assets from source SVG
+# Generate Textractor Pro logo assets from source SVG
 # Requires: imagemagick (brew install imagemagick), rsvg-convert (brew install librsvg)
 
 set -euo pipefail
@@ -133,7 +133,7 @@ cat > "${LOGOS_DIR}/logo-horizontal.svg" << 'SVGEOF'
   <!-- Text -->
   <text x="380" y="240" font-family="-apple-system, SF Pro Display, sans-serif" 
         font-size="80" font-weight="700" fill="url(#accentGrad)" 
-        dominant-baseline="middle">Textractor</text>
+        dominant-baseline="middle">Textractor Pro</text>
   <text x="380" y="290" font-family="-apple-system, SF Pro Text, sans-serif" 
         font-size="24" fill="#E6EADC" opacity="0.7"
         dominant-baseline="middle">Privacy-first OCR for Mac</text>
@@ -173,8 +173,8 @@ cat > "${LOGOS_DIR}/logo-vertical.svg" << 'SVGEOF'
   </g>
   <!-- Text -->
   <text x="200" y="420" font-family="-apple-system, SF Pro Display, sans-serif" 
-        font-size="64" font-weight="700" fill="url(#accentGrad)" 
-        text-anchor="middle" dominant-baseline="middle">Textractor</text>
+        font-size="40" font-weight="700" fill="url(#accentGrad)"
+        text-anchor="middle" dominant-baseline="middle">Textractor Pro</text>
   <text x="200" y="470" font-family="-apple-system, SF Pro Text, sans-serif" 
         font-size="20" fill="#E6EADC" opacity="0.7"
         text-anchor="middle" dominant-baseline="middle">Privacy-first OCR for Mac</text>
@@ -253,23 +253,27 @@ fi
 cp "${LOGOS_DIR}/logo-source.svg" "${LOGOS_DIR}/favicon.svg"
 echo "  ✅ favicon.svg"
 
-# Create placeholder screenshots structure
+# Document pending screenshot work; logo generation does not capture app UI.
 cat > "${SCREENSHOTS_DIR}/README.md" << 'EOF'
-# App Store Screenshots
+# Textractor Pro screenshot plan — pending capture and review
 
-Place your 1280x800 screenshots here:
+This script generates logo artwork only. No UI screenshots or release evidence
+are created by generating this press kit.
 
-| File | Description |
-|------|-------------|
-| `01-capture-overlay.png` | Region capture with live OCR preview grid |
-| `02-window-capture.png` | Window picker mode |
-| `03-history-grid.png` | History with thumbnails |
-| `04-source-code-mode.png` | Settings: Source Code Mode enabled |
-| `05-translation-settings.png` | Translation target language picker |
-| `06-toast-actions.png` | Toast with Translate/Format Code buttons |
-| `07-pii-redaction.png` | Privacy: PII Redaction enabled |
+Capture the shipping app and review proposed listing images for:
 
-Run `../scripts/capture_screenshots.sh` to automate capture.
+| Scene | Required content |
+|-------|------------------|
+| Region capture | The actual capture overlay and selected sample text |
+| Window capture | Supported window capture from the shipping build |
+| History | Real history UI using non-sensitive sample data |
+| Formatting | Implemented formatting controls and actual OCR output |
+| Privacy | Current data retention and permission controls |
+
+Translation and scroll automation are not proposed App Store screenshots.
+`bash scripts/capture_screenshots.sh` from the repository root exports actual
+Debug UI-test attachments for QA. Those attachments do not replace final signed
+build screenshots, App Store dimension checks or content review.
 EOF
 
 echo ""

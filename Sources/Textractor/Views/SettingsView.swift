@@ -11,37 +11,27 @@ public struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @State private var firstLoad: Bool = false
     @State private var confirmFactoryReset: Bool = false
+    @State private var confirmClearHistory = false
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @State private var lastFactoryReset: FactoryResetService.Report?
 
     public init() {}
 
     private static let headerBackground = textractorHeaderBackground
     private var appeared: Bool { firstLoad }
-    private var reduceMotion: Bool { appState.settings.reduceMotion }
+    private var reduceMotion: Bool { appState.settings.reduceMotion || systemReduceMotion }
     /// Observable binding to `PermissionService`. Drops the previous
     /// `Timer.publish(...).autoconnect()` poll — the service now updates
     /// its `@Published` flag in response to display-config events.
     @ObservedObject private var permissions = PermissionService.shared
+    @ObservedObject private var history = HistoryStore.shared
     private var screenRecordingGranted: Bool { permissions.screenRecordingGranted }
 
     // MARK: - Banner
 
     private let bannerWidth: CGFloat = 252
-    private var bannerAspect: CGFloat { 384.0 / 1171.0 }
-    private var bannerDisplayWidth: CGFloat { bannerWidth * 1.05 }
-    private var bannerHeight: CGFloat { bannerWidth * bannerAspect * 0.95 }
-
-    @ViewBuilder private var banner: some View {
-        if let nsImage = loadBannerImage() {
-            ShimmerBanner(
-                image: nsImage,
-                width: bannerDisplayWidth,
-                height: bannerHeight,
-                animate: !appState.settings.reduceMotion
-            )
-            .frame(maxWidth: .infinity, alignment: .center)
-            .offset(y: -(bannerDisplayWidth - bannerWidth) / 2)
-        }
+    private var banner: some View {
+        ProductBanner(width: bannerWidth, animate: !reduceMotion)
     }
 
     public var body: some View {
@@ -51,7 +41,11 @@ public struct SettingsView: View {
                 .introReveal(0, appeared: firstLoad, animate: !reduceMotion)
 
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button("Replay welcome tour") { AppCoordinator.shared.replayOnboarding() }
+                        .accessibilityIdentifier("settings.onboarding.replay")
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+
                     // Permissions at top ONLY if not yet granted — critical for capture to work
                     if !screenRecordingGranted {
                         sectionLabel(T.s("section.permissions")).introReveal(1, appeared: firstLoad, animate: !reduceMotion)
@@ -67,6 +61,8 @@ public struct SettingsView: View {
 sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
             languagePicker.introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
             
+            // Keep unavailable functionality explicit; never offer simulated output.
+            if TranslationService.isAvailable {
             // MARK: - Snip-to-translate (auto-detect source, pick target)
             ToggleRow(
                 title: T.s("translate.after.capture"),
@@ -94,6 +90,13 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
             .pickerStyle(.menu)
             .introReveal(screenRecordingGranted ? 2 : 3, appeared: firstLoad, animate: !reduceMotion)
 
+            } else {
+                Text(T.s("translation.unavailable"))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+            }
+
                     sectionLabel(T.s("section.formatting")).introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("paste.plain"), icon: "doc.on.clipboard", isOn: pasteAsPlainTextBinding)
                         .introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
@@ -102,6 +105,8 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                     ToggleRow(title: T.s("table.markdown"), icon: "tablecells", isOn: windowCaptureBinding)
                         .introReveal(screenRecordingGranted ? 3 : 4, appeared: firstLoad, animate: !reduceMotion)
 
+                    CaptureOptionsView()
+
                     sectionLabel(T.s("section.updates")).introReveal(screenRecordingGranted ? 4 : 5, appeared: firstLoad, animate: !reduceMotion)
                     updatesBlock.introReveal(screenRecordingGranted ? 4 : 5, appeared: firstLoad, animate: !reduceMotion)
 
@@ -109,12 +114,24 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                     ToggleRow(title: T.s("privacy.pii"), icon: "eye.slash", isOn: piiBinding)
                         .introReveal(screenRecordingGranted ? 5 : 6, appeared: firstLoad, animate: !reduceMotion)
                     piiStatusRow.introReveal(screenRecordingGranted ? 5 : 6, appeared: firstLoad, animate: !reduceMotion)
+                    Text("Text history and recovery images are stored locally. Source images can remain in temporary storage. Sharing and exporting use the destination you choose.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                    Link("Privacy policy", destination: URL(string: "https://github.com/the-lucky-clover/Textractor/blob/main/PRIVACY_POLICY.md")!)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
 
                     sectionLabel(T.s("section.history")).introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
                     Row(T.s("history.open"), icon: "clock.arrow.circlepath") { AppCoordinator.shared.showHistoryWindow() }
                         .introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
                     historyLimitBlock.introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
-                    Row(T.s("history.clear"), icon: "trash", role: .destructive) { HistoryStore.shared.clearAll() }
+                    if let storageError = history.storageError {
+                        Text(storageError).font(.caption).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                    }
+                    Row(T.s("history.clear"), icon: "trash", role: .destructive) { confirmClearHistory = true }
+                        .accessibilityIdentifier("settings.history.clear")
                         .introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
                     Row(T.s("history.cache.clear"), icon: "tray.2", role: .destructive) { CacheService.shared.clearCache() }
                         .introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
@@ -132,14 +149,19 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("telemetry"), icon: "chart.bar", isOn: telemetryBinding)
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    Text("Local diagnostics are off by default. Turning them off stops new entries; saved entries remain until erased.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                    Row("Erase local diagnostics", icon: "trash", role: .destructive) {
+                        TelemetryService.shared.wipe()
+                        AnalyticsService.shared.wipe()
+                    }
                     ToggleRow(title: T.s("knowledge.mode"), icon: "brain.head.profile", isOn: knowledgeModeBinding)
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("extended.logging"), icon: "doc.text.magnifyingglass", isOn: extendedLoggingBinding)
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("menubar.color.icon"), icon: "paintpalette", isOn: menubarColorIconBinding)
-                        .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
-
-                    ToggleRow(title: T.s("auto.save.captures"), icon: "square.and.arrow.down", isOn: autoSaveCapturesBinding)
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
 
                     // Hidden easter-egg: Ahoy Mode. Decorates toasts / menu copy
@@ -234,8 +256,14 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
             .frame(maxHeight: 560)
         }
         .background(Self.headerBackground)
+        .preferredColorScheme(.dark)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .frame(width: bannerWidth)
+        .accessibilityIdentifier("settings.root")
+        .confirmationDialog(T.s("history.clear.confirm"), isPresented: $confirmClearHistory, titleVisibility: .visible) {
+            Button(T.s("history.clear"), role: .destructive) { HistoryStore.shared.clearAll() }
+            Button(T.s("settings.factory.confirm.cancel"), role: .cancel) {}
+        }
         .onAppear {
             firstLoad = true
         }
@@ -262,11 +290,12 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
         Text(title.uppercased())
             .font(.system(size: 10, weight: .semibold, design: .rounded))
             .kerning(0.6)
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(BreakingDad.chalk.opacity(0.72))
+            .accessibilityAddTraits(.isHeader)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 10)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
+            .padding(.top, 14)
+            .padding(.bottom, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -296,23 +325,35 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
     // MARK: - Language (single source of truth for UI + OCR)
 
     private var languagePicker: some View {
-        Picker(selection: languageBinding) {
-            Text(T.s("language.automatic")).tag("")
-            ForEach(AppSettings.ocrLanguageCatalog, id: \.code) { loc in
-                Text("\(loc.flag) \(loc.name)").tag(loc.code)
+        VStack(alignment: .leading, spacing: 8) {
+            Label(T.s("language"), systemImage: "globe")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(BreakingDad.chalk)
+            Picker(T.s("language"), selection: languageBinding) {
+                Text(T.s("language.automatic")).tag("")
+                if !appState.settings.uiLanguage.isEmpty,
+                   !AppSettings.availableOCRLanguages.contains(where: { $0.code == appState.settings.uiLanguage }) {
+                    Text(appState.settings.uiLanguage + " (unavailable on this Mac)").tag(appState.settings.uiLanguage).disabled(true)
+                }
+                ForEach(AppSettings.availableOCRLanguages, id: \.code) { loc in
+                    Text(loc.name).tag(loc.code)
+                }
             }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "globe")
-                    .font(.system(size: 13, weight: .medium)).frame(width: 20, alignment: .center)
-                    .foregroundStyle(BreakingDad.toxicGreen)
-                Text(T.s("language"))
-                    .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
-                Spacer(minLength: 8)
-            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("settings.language")
+            Text(appState.settings.uiLanguage.isEmpty
+                 ? T.s("language.automatic.help")
+                 : T.s("language.selected.help", args: appState.settings.uiLanguage))
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(BreakingDad.chalk.opacity(0.75))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("settings.language.status")
         }
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .pickerStyle(.menu)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10).fill(BreakingDad.deepGreen.opacity(0.22)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(BreakingDad.toxicGreen.opacity(0.35)))
     }
 
     // MARK: - History & Privacy blocks
@@ -340,9 +381,7 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                     .foregroundStyle(BreakingDad.toxicGreen)
                 Text(String(format: T.s("history.limit"), appState.settings.historyEntryLimit))
                     .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
             }
             .padding(.horizontal, 10).padding(.vertical, 4)
@@ -386,12 +425,14 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                 VStack(alignment: .leading, spacing: 0) {
                     Text("\(T.s("version.label"))  \(UpdateService.versionDescription)")
                         .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
+                    if !DistributionPolicy.isAppStoreBuild {
                     Text("\(T.s("version.last_checked")) \(UpdateService.relativeLastChecked(appState.settings.lastUpdateCheckAt))")
                         .font(.system(size: 9, weight: .regular)).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer(minLength: 8)
                 Button { checkForUpdates() } label: {
-                    Text(T.s("version.check_now")).font(.system(size: 11, weight: .semibold)).foregroundStyle(BreakingDad.toxicGreen)
+                    Text(UpdateService.actionTitle).font(.system(size: 11, weight: .semibold)).foregroundStyle(BreakingDad.toxicGreen)
                 }
                 .buttonStyle(.plain)
             }
@@ -400,7 +441,6 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
     }
 
     private func checkForUpdates() {
-        appState.updateSettings { $0.lastUpdateCheckAt = Date() }
         UpdateService.shared.presentUpToDateAlert()
     }
 
@@ -415,7 +455,7 @@ private var aboutBlockV2: some View {
             Image(systemName: "heart.fill")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(BreakingDad.toxicGreen)
-                .symbolEffect(.pulse, options: .repeat(3), value: firstLoad)
+                .symbolEffect(.pulse, options: .repeat(3), value: firstLoad && !reduceMotion)
 
 // 2) Tagline + sub — stacked vertically, full width breathing room
             VStack(alignment: .center, spacing: 4) {
@@ -544,10 +584,6 @@ private var aboutBlockV2: some View {
         Binding(get: { appState.settings.translationTargetLanguage },
                 set: { v in appState.updateSettings { $0.translationTargetLanguage = v } })
     }
-    private var autoSaveCapturesBinding: Binding<Bool> {
-        Binding(get: { appState.settings.autoSaveCaptures },
-                set: { v in appState.updateSettings { $0.autoSaveCaptures = v } })
-    }
 
     private func openLogFolder() {
         LoggerService.shared.openLogFolder()
@@ -625,9 +661,7 @@ private struct Row: View {
                 Text(title)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(isHovered ? Color.white : baseTitle)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
             }
             .padding(.horizontal, 10)
@@ -654,35 +688,18 @@ private struct ToggleRow: View {
     @State private var isHovered: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Row 1: icon + label (full width, no truncation)
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 20, alignment: .center)
-                    .foregroundStyle(isHovered ? Color.white : BreakingDad.toxicGreen)
-                Text(title)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(isHovered ? Color.white : .primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 8)
-            }
-            // Row 2: toggle indented to the right (below and to the right)
-            HStack(spacing: 10) {
-                Spacer(minLength: 20) // indent: icon placeholder
-                Toggle("", isOn: $isOn).toggleStyle(BdToggleStyle()).labelsHidden()
-            }
+        Toggle(isOn: $isOn) {
+            Label(title, systemImage: icon)
+                .font(.system(size: 13))
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .tint(BreakingDad.toxicGreen)
+        .accessibilityLabel(title)
+        .padding(.horizontal, 10).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isHovered ? BreakingDad.toxicGreen : Color.clear))
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            isHovered = hovering
-            if hovering { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
-        }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .background(RoundedRectangle(cornerRadius: 7).fill(BreakingDad.deepGreen.opacity(0.12)))
     }
 }
 

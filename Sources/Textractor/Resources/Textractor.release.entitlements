@@ -5,33 +5,33 @@
     <!-- App Sandbox is REQUIRED for Mac App Store -->
     <key>com.apple.security.app-sandbox</key>
     <true/>
-    
+
     <!-- File access for user-selected files (export, import) -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
-    
+
     <!-- Camera access for Continuity Camera (iPhone/iPad photo capture) -->
     <key>com.apple.security.device.camera</key>
     <true/>
-    
-    <!-- NO network access - all processing is on-device -->
-    <!-- com.apple.security.network.client: false -->
+
+    <!-- The App Store edition processes OCR locally and delegates updates to the App Store. -->
+
     <!-- com.apple.security.network.server: false -->
-    
+
     <!-- NO unsigned executable memory, JIT, or dyld env vars for App Store -->
     <!-- These would cause rejection -->
     <!-- com.apple.security.cs.allow-unsigned-executable-memory: false -->
     <!-- com.apple.security.cs.allow-jit: false -->
     <!-- com.apple.security.cs.allow-dyld-environment-variables: false -->
     <!-- com.apple.security.cs.disable-library-validation: false -->
-    
+
     <!-- NO personal information access -->
     <!-- com.apple.security.personal-information.addressbook: false -->
     <!-- com.apple.security.personal-information.calendars: false -->
-    
+
     <!-- NO microphone access -->
     <!-- com.apple.security.device.audio-input: false -->
-    
+
     <!-- NO USB, Bluetooth, or location access -->
     <!-- com.apple.security.device.usb: false -->
     <!-- com.apple.security.device.bluetooth: false -->

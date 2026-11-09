@@ -36,3 +36,8 @@ target/
 # Temporary files
 *.tmp
 *.temp
+
+qa-results/
+qa-ios/
+dist/
+__pycache__/

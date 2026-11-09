@@ -93,7 +93,7 @@ final class SettingsWindowController: NSObject {
         // edge should land roughly where the popover's top edge does.
         var originY = anchor.minY - size.height - 6
 
-        if let screen = NSScreen.main {
+        if let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }) ?? NSScreen.main {
             let vis = screen.visibleFrame
             originX = min(max(originX, vis.minX), vis.maxX - size.width)
             // If the screen is short and the window would poke above the

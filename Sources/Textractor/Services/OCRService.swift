@@ -36,14 +36,9 @@ public final class OCRService {
         var revisionsUsed: [(String, Int)] = []
         var observations: [TextObservation] = []
 
-        // English / Automatic mode uses a single English recogniser
-        // ("en-US") so Vision's language correction stays within the English
-        // lexicon and never substitutes words from other scripts — that cross-
-        // language substitution was the source of "mangled" OCR. The 14-language
-        // superset is only used when a non-English language is explicitly chosen.
-        let isEnglishMode = preferredLanguages.isEmpty
-            || preferredLanguages.first?.lowercased().hasPrefix("en") == true
-        let ocrLanguages: [String] = isEnglishMode ? ["en-US"] : preferredLanguages
+        let isEnglishMode = preferredLanguages.count == 1
+            && preferredLanguages[0].lowercased().hasPrefix("en")
+        let ocrLanguages = preferredLanguages.isEmpty ? Self.automaticLanguages() : preferredLanguages
 
         // Step 1: accurate, baseline threshold derived from weirdness
         let trial1 = await Task.detached(priority: .userInitiated) { () -> [TextObservation] in
@@ -52,7 +47,7 @@ public final class OCRService {
                 level: .accurate,
                 languages: ocrLanguages,
                 minTextHeight: Self.threshold(for: currentWeirdness),
-                vocab: []
+                vocab: customVocabulary
             )
         }.value
         observations = trial1
@@ -77,7 +72,7 @@ public final class OCRService {
                     level: .accurate,
                     languages: ocrLanguages,
                     minTextHeight: Self.threshold(for: currentWeirdness),
-                    vocab: [],
+                    vocab: customVocabulary,
                     disableLanguageCorrection: true
                 )
             }.value
@@ -92,6 +87,28 @@ public final class OCRService {
             }
         }
 
+        // Some short upright vertical CJK columns are omitted even while neighboring
+        // columns succeed. Reflow original glyph pixels on uniform backgrounds and
+        // recognize them horizontally. Keep existing observations unchanged.
+        let isExplicitCJK = preferredLanguages.count == 1 &&
+            ["ja", "zh", "ko", "yue"].contains { preferredLanguages[0].hasPrefix($0) }
+        if isExplicitCJK, observations.contains(where: { $0.boundingBox.height > $0.boundingBox.width * 1.5 }) {
+            let existing = observations
+            let additional = await Task.detached(priority: .userInitiated) {
+                Self.recoverVerticalColumns(cgImage, existing: existing, languages: ocrLanguages, vocabulary: customVocabulary)
+            }.value
+            for candidate in additional {
+                let overlaps = observations.contains {
+                    let intersection = $0.boundingBox.intersection(candidate.boundingBox)
+                    return !intersection.isNull && intersection.width * intersection.height >
+                        min($0.boundingBox.width * $0.boundingBox.height,
+                            candidate.boundingBox.width * candidate.boundingBox.height) * 0.3
+                }
+                if !overlaps { observations.append(candidate) }
+            }
+            revisionsUsed.append(("vertical-reflow", 1))
+        }
+
         // Self-heal Step 1: try .fast when accurate produced nothing.
         if observations.isEmpty {
             TelemetryService.shared.record(
@@ -104,7 +121,7 @@ public final class OCRService {
                     level: .fast,
                     languages: ocrLanguages,
                     minTextHeight: 0.0,
-                    vocab: []
+                    vocab: customVocabulary
                 )
             }.value
             revisionsUsed.append(("fast", 1))
@@ -147,7 +164,7 @@ public final class OCRService {
         let result = OCRResult(
             rawObservations: observations,
             recognizedAtSeconds: Date().timeIntervalSince(started),
-            languageCandidates: [],
+            languageCandidates: preferredLanguages,
             revisionsUsed: revisionsUsed
         )
 
@@ -170,6 +187,21 @@ public final class OCRService {
 
     // MARK: - Synchronous wrapper
 
+    private static func recoverVerticalColumns(_ image: CGImage, existing: [TextObservation], languages: [String], vocabulary: [String]) -> [TextObservation] {
+        let widths = existing.filter { $0.boundingBox.height > $0.boundingBox.width * 1.5 }
+            .map { $0.boundingBox.width }.sorted()
+        guard !widths.isEmpty else { return [] }
+        return VerticalTextReflow.columns(in: image, glyphWidth: widths[widths.count / 2]).compactMap { column in
+            guard !existing.contains(where: { $0.boundingBox.intersects(column.box) }) else { return nil }
+            let recognized = runSync(cgImage: column.image, level: .accurate, languages: languages,
+                                     minTextHeight: 0, vocab: vocabulary, disableLanguageCorrection: true)
+            guard !recognized.isEmpty else { return nil }
+            let text = recognized.sorted { $0.boundingBox.minX < $1.boundingBox.minX }.map(\.text).joined()
+            return TextObservation(text: text,
+                confidence: recognized.map(\.confidence).reduce(0, +) / Float(recognized.count), boundingBox: column.box)
+        }
+    }
+
     private static func runSync(
         cgImage: CGImage,
         level: VNRequestTextRecognitionLevel,
@@ -184,6 +216,7 @@ public final class OCRService {
         // substituting identifiers, paths and operators. The dense-text path
         // (English captures only) turns it off.
         request.usesLanguageCorrection = !disableLanguageCorrection
+        request.automaticallyDetectsLanguage = (languages?.count ?? 0) != 1
         if let languages, !languages.isEmpty {
             // Vision's .fast level only reliably handles 1-2 languages, so it
             // always gets a single language. .accurate can handle more, but the
@@ -210,7 +243,11 @@ public final class OCRService {
             } else {
                 effective = languages
             }
-            request.recognitionLanguages = effective
+            let supported = (try? request.supportedRecognitionLanguages()) ?? ["en-US"]
+            let supportedSet = Set(supported)
+            let filtered = effective.filter { supportedSet.contains($0) }
+            if filtered.isEmpty, languages.count == 1 { return [] }
+            if !filtered.isEmpty { request.recognitionLanguages = filtered }
         }
         request.minimumTextHeight = Float(minTextHeight)
         if !vocab.isEmpty {
@@ -302,11 +339,13 @@ public final class OCRService {
     /// `Locale.preferredLanguages` the user has, deduped, preserving order so
     /// the leading English code wins for English-only text.
     static func automaticLanguages() -> [String] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        let supported = (try? request.supportedRecognitionLanguages()) ?? ["en-US"]
         var seen = Set<String>()
         var ordered: [String] = []
-        for code in automaticLanguageCatalog + Locale.preferredLanguages {
-            let key = code.lowercased()
-            if seen.insert(key).inserted { ordered.append(code) }
+        for code in ["en-US"] + Locale.preferredLanguages + supported {
+            if supported.contains(code), seen.insert(code).inserted { ordered.append(code) }
         }
         return ordered
     }

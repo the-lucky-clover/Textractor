@@ -68,11 +68,11 @@ enum TextractorError: Error, LocalizedError {
         case .lowConfidence:
             return "Auto-heal will attempt to correct common OCR mistakes. Try a higher-resolution selection."
         case .clipboardWriteFailed:
-            return "Quit and relaunch Textractor. If the issue persists, check for conflicting clipboard managers."
+            return "Quit and relaunch Textractor Pro. If the issue persists, check for conflicting clipboard managers."
         case .hotkeyRegistrationFailed:
             return "Another app may be using ⌘⇧2. Change the hotkey in Settings."
         case .permissionDenied(let perm):
-            return "Open System Settings → Privacy & Security → \(perm) and enable Textractor."
+            return "Open System Settings → Privacy & Security → \(perm) and enable Textractor Pro."
         case .imageTooSmall:
             return "Drag a larger selection rectangle."
         case .imageCorrupted:
