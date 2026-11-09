@@ -1,30 +1,89 @@
 {
-  "status": "blocked",
-  "tested_commit": "f6250f3ded365f956347ac034399161d77020b59",
-  "evidence": [
-    "https://github.com/the-lucky-clover/Textractor/actions/runs/42376263273",
-    "https://github.com/the-lucky-clover/Textractor/actions/runs/42375364762",
-    "https://github.com/the-lucky-clover/Textractor/actions/runs/42365315493"
-  ],
-  "checks": {
-    "native_build": "passed",
-    "unit_tests": "passed",
-    "ui_playtests": "passed",
-    "ocr_benchmark": "passed",
-    "continuity_photo": "pending-device",
-    "continuity_multipage": "pending-device",
-    "camera_cancel": "passed",
-    "voiceover": "pending-device",
-    "multi_display": "pending-device",
-    "scroll_stitching": "pending-device",
-    "signing": "pending-credentials",
-    "app_store_name": "pending-app-store-connect",
-    "ios_build": "passed",
-    "ios_unit_tests": "passed",
-    "ios_ui_playtests": "passed",
-    "ios_physical_import": "pending-device",
-    "ios_print_review": "pending-device",
-    "ios_search_quality": "pending-device",
-    "representative_ocr": "pending-corpus"
+  "schema_version": 2,
+  "product_name": "Textractor Pro",
+  "platforms": {
+    "macos": {
+      "status": "blocked",
+      "version": "2.0.0",
+      "build": "2000",
+      "tested_commit": null,
+      "checks": {
+        "configuration": "pending-validation",
+        "privacy_review": "pending-owner-review",
+        "metadata": "pending-app-store-connect",
+        "app_store_name": "pending-app-store-connect",
+        "signing": "pending-credentials",
+        "native_build": "pending-validation",
+        "unit_tests": "pending-validation",
+        "ui_playtests": "pending-validation",
+        "release_archive": "pending-validation",
+        "sandbox_launch": "pending-device",
+        "ocr_benchmark": "pending-validation",
+        "representative_ocr": "pending-corpus",
+        "continuity_photo": "pending-device",
+        "continuity_multipage": "pending-device",
+        "camera_cancel": "pending-device",
+        "voiceover": "pending-device",
+        "multi_display": "pending-device",
+        "screen_recording_permissions": "pending-device",
+        "history_migration": "pending-device",
+        "app_store_validation": "pending-app-store-connect"
+      },
+      "evidence": {}
+    },
+    "ios": {
+      "status": "blocked",
+      "version": "1.0",
+      "build": "1",
+      "tested_commit": null,
+      "checks": {
+        "configuration": "pending-validation",
+        "privacy_review": "pending-owner-review",
+        "metadata": "pending-app-store-connect",
+        "app_store_name": "pending-app-store-connect",
+        "signing": "pending-credentials",
+        "ios_build": "pending-validation",
+        "ios_unit_tests": "pending-validation",
+        "ios_ui_playtests": "pending-validation",
+        "release_archive": "pending-validation",
+        "ios_physical_import": "pending-device",
+        "ios_print_review": "pending-device",
+        "ios_search_quality": "pending-corpus",
+        "voiceover": "pending-device",
+        "archive_recovery": "pending-device",
+        "app_store_validation": "pending-app-store-connect"
+      },
+      "evidence": {}
+    }
+  },
+  "previous_validation": {
+    "status": "blocked",
+    "tested_commit": "f6250f3ded365f956347ac034399161d77020b59",
+    "evidence": [
+      "https://github.com/the-lucky-clover/Textractor/actions/runs/42376263273",
+      "https://github.com/the-lucky-clover/Textractor/actions/runs/42375364762",
+      "https://github.com/the-lucky-clover/Textractor/actions/runs/42365315493"
+    ],
+    "checks": {
+      "native_build": "passed",
+      "unit_tests": "passed",
+      "ui_playtests": "passed",
+      "ocr_benchmark": "passed",
+      "continuity_photo": "pending-device",
+      "continuity_multipage": "pending-device",
+      "camera_cancel": "passed",
+      "voiceover": "pending-device",
+      "multi_display": "pending-device",
+      "scroll_stitching": "pending-device",
+      "signing": "pending-credentials",
+      "app_store_name": "pending-app-store-connect",
+      "ios_build": "passed",
+      "ios_unit_tests": "passed",
+      "ios_ui_playtests": "passed",
+      "ios_physical_import": "pending-device",
+      "ios_print_review": "pending-device",
+      "ios_search_quality": "pending-device",
+      "representative_ocr": "pending-corpus"
+    }
   }
 }

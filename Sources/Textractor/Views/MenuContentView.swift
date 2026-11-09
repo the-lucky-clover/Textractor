@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 public struct MenuContentView: View {
 
 @ObservedObject var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     var onCaptureRegion: () -> Void
     var onCaptureWindow: () -> Void
     var onCaptureFullScreen: () -> Void
@@ -50,6 +51,7 @@ public struct MenuContentView: View {
     /// Drives the staggered fly-in / scale-up / fade intro. Reset on close so
     /// the animation replays every time the popover opens.
     @State private var appeared = false
+    private var reduceMotion: Bool { appState.settings.reduceMotion || systemReduceMotion }
 
     public var body: some View {
         VStack(spacing: 0) {
@@ -58,43 +60,42 @@ public struct MenuContentView: View {
             // so the popover edges hug the artwork instead of clipping it.
             banner
                 .background(Self.headerBackground)
-                .introReveal(0, appeared: appeared)
+                .introReveal(0, appeared: appeared, animate: !reduceMotion)
 
             // The full menu — sized to fit the popover with no internal scroll.
             // Quit is pinned below so it's always visible.
             VStack(alignment: .leading, spacing: 1) {
-sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
+sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared, animate: !reduceMotion)
                 MenuRow(T.s("menu.region"), icon: "viewfinder") { onClose(); onCaptureRegion() }
-                    .introReveal(2, appeared: appeared)
+                    .introReveal(2, appeared: appeared, animate: !reduceMotion)
                 MenuRow("Capture previous region", icon: "arrow.uturn.backward") {
                     onClose(); AppCoordinator.shared.capturePreviousRegion()
                 }.disabled(AppCoordinator.shared.previousRegion == nil || appState.isCapturing)
                 MenuRow(T.s("menu.window"), icon: "macwindow") { onClose(); onCaptureWindow() }
-                    .introReveal(3, appeared: appeared)
+                    .introReveal(3, appeared: appeared, animate: !reduceMotion)
                 MenuRow(T.s("menu.fullscreen"), icon: "rectangle.dashed.badge.record") { onClose(); onCaptureFullScreen() }
-                    .introReveal(4, appeared: appeared)
+                    .introReveal(4, appeared: appeared, animate: !reduceMotion)
                 MenuRow(T.s("menu.continuity_camera"), icon: "camera.viewfinder") { onClose(); onCaptureContinuityCamera() }
-                    .introReveal(5, appeared: appeared)
+                    .introReveal(5, appeared: appeared, animate: !reduceMotion)
+                #if !APP_STORE
                 MenuRow(T.s("menu.auto_scroll"), icon: "arrow.down.doc") { onClose(); onCaptureAutoScroll() }
-                    .introReveal(6, appeared: appeared)
+                    .introReveal(6, appeared: appeared, animate: !reduceMotion)
+                #endif
 
-                sectionLabel(T.s("menu.library")).introReveal(7, appeared: appeared)
+                sectionLabel(T.s("menu.library")).introReveal(7, appeared: appeared, animate: !reduceMotion)
                 MenuRow(T.s("menu.pick_file"), icon: "photo.on.rectangle") { pickImageFile() }
-                    .introReveal(7, appeared: appeared)
+                    .introReveal(7, appeared: appeared, animate: !reduceMotion)
                 MenuRow(T.s("menu.history"),          icon: "clock.arrow.circlepath") { onClose(); onShowHistory() }
-                    .introReveal(8, appeared: appeared)
+                    .introReveal(8, appeared: appeared, animate: !reduceMotion)
 
-                sectionLabel(T.s("menu.shortcuts")).introReveal(9, appeared: appeared)
-                ShortcutRow(key: "⌘⇧2", label: T.s("shortcut.capture_region")).introReveal(10, appeared: appeared)
-                ShortcutRow(key: "⌥⌘⇧2", label: T.s("shortcut.capture_window")).introReveal(10, appeared: appeared)
-                ShortcutRow(key: "⌃⌘⇧2", label: T.s("shortcut.capture_fullscreen")).introReveal(10, appeared: appeared)
-                ShortcutRow(key: "⌘H", label: T.s("shortcut.history")).introReveal(10, appeared: appeared)
-                ShortcutRow(key: "⌘,", label: T.s("shortcut.settings")).introReveal(10, appeared: appeared)
-                ShortcutRow(key: "⌘Q", label: T.s("shortcut.quit")).introReveal(10, appeared: appeared)
+                sectionLabel(T.s("menu.shortcuts")).introReveal(9, appeared: appeared, animate: !reduceMotion)
+                ShortcutRow(key: appState.settings.resolvedHotkeyLabel, label: T.s("shortcut.capture_region")).introReveal(10, appeared: appeared, animate: !reduceMotion)
+                ShortcutRow(key: "⌘,", label: T.s("shortcut.settings")).introReveal(10, appeared: appeared, animate: !reduceMotion)
+                ShortcutRow(key: "⌘Q", label: T.s("shortcut.quit")).introReveal(10, appeared: appeared, animate: !reduceMotion)
 
-                sectionLabel(T.s("menu.app")).introReveal(11, appeared: appeared)
+                sectionLabel(T.s("menu.app")).introReveal(11, appeared: appeared, animate: !reduceMotion)
                 MenuRow(T.s("menu.settings"),         icon: "gearshape")         { onClose(); onOpenSettings() }
-                    .introReveal(10, appeared: appeared)
+                    .introReveal(10, appeared: appeared, animate: !reduceMotion)
             }
             .padding(.horizontal, 8)
             .padding(.top, 0)
@@ -103,9 +104,9 @@ sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
             // Quit is pinned to the bottom of the popover — always reachable
             // without scrolling.
             Divider().padding(.horizontal, 8).padding(.vertical, 4)
-                .introReveal(10, appeared: appeared)
+                .introReveal(10, appeared: appeared, animate: !reduceMotion)
             MenuRow(T.s("menu.quit"), icon: "power", role: .destructive) { onClose(); onQuit() }
-                .introReveal(11, appeared: appeared)
+                .introReveal(11, appeared: appeared, animate: !reduceMotion)
                 .padding(.horizontal, 8)
 
             // Subtle version footer for visual closure — also pinned, never cut.
@@ -115,7 +116,7 @@ sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.top, 4)
                 .padding(.bottom, 8)
-                .introReveal(12, appeared: appeared)
+                .introReveal(12, appeared: appeared, animate: !reduceMotion)
                 .accessibilityLabel("Version \(UpdateService.versionDescription)")
         }
         .background(Self.headerBackground)
@@ -148,12 +149,13 @@ sectionLabel(T.s("menu.capture")).introReveal(1, appeared: appeared)
     /// corners. This is the only branding element in the popover.
     private var bannerWidth: CGFloat { 232 }
     private var banner: some View {
-        ProductBanner(width: bannerWidth, animate: !appState.settings.reduceMotion)
+        ProductBanner(width: bannerWidth, animate: !reduceMotion)
     }
 
     // MARK: - Helpers
 
     private func pickImageFile() {
+        onClose()
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -241,23 +243,24 @@ private struct MenuRow: View {
 private struct IntroReveal: ViewModifier {
     let index: Int
     let appeared: Bool
+    let animate: Bool
 
     func body(content: Content) -> some View {
         content
-            .opacity(appeared ? 1 : 0)
-            .scaleEffect(appeared ? 1 : 0.94, anchor: .center)
-            .offset(y: appeared ? 0 : 12)
+            .opacity(appeared || !animate ? 1 : 0)
+            .scaleEffect(appeared || !animate ? 1 : 0.94, anchor: .center)
+            .offset(y: appeared || !animate ? 0 : 12)
             .animation(
-                .spring(response: 0.44, dampingFraction: 0.78)
-                    .delay(Double(index) * 0.035),
+                animate ? .spring(response: 0.44, dampingFraction: 0.78)
+                    .delay(Double(index) * 0.035) : nil,
                 value: appeared
             )
     }
 }
 
 private extension View {
-    func introReveal(_ index: Int, appeared: Bool) -> some View {
-        modifier(IntroReveal(index: index, appeared: appeared))
+    func introReveal(_ index: Int, appeared: Bool, animate: Bool) -> some View {
+        modifier(IntroReveal(index: index, appeared: appeared, animate: animate))
     }
 }
 

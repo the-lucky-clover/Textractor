@@ -45,6 +45,15 @@ private struct SplashView: View {
                 .frame(width: cardSize.width, height: cardSize.height)
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .opacity(opacity)
+                .overlay(alignment: .bottom) {
+                    Text("Textractor Pro")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18).padding(.vertical, 9)
+                        .background(Capsule().fill(.black.opacity(0.8)))
+                        .padding(.bottom, 22)
+                        .opacity(opacity)
+                }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear(perform: runAnimation)

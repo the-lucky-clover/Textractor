@@ -19,7 +19,7 @@ struct CreditsModalView: View {
                     .font(.system(size: 36, weight: .light))
                     .foregroundStyle(.tertiary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Textractor")
+                    Text("Textractor Pro")
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                     Text("Built with care")

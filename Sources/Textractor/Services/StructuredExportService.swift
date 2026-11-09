@@ -149,7 +149,7 @@ public final class StructuredExportService: ObservableObject {
     private func exportMarkdown(records: [HistoryRecord]) -> Data? {
         var lines: [String] = []
 
-        lines.append("# Textractor Export")
+        lines.append("# Textractor Pro Export")
         lines.append("")
         lines.append("*Exported on \(formatTimestamp(Date()))*")
         lines.append("")
@@ -177,7 +177,7 @@ public final class StructuredExportService: ObservableObject {
     public func saveToFile(record: HistoryRecord, format: ExportFormat, panelTitle: String) {
         let savePanel = NSSavePanel()
         savePanel.title = panelTitle
-        savePanel.nameFieldStringValue = "Textractor-\(formatTimestamp(Date())).\(format.fileExtension)"
+        savePanel.nameFieldStringValue = "Textractor-Pro-\(formatTimestamp(Date())).\(format.fileExtension)"
         savePanel.allowedContentTypes = [format.utType]
 
         savePanel.begin { [weak self] response in
@@ -196,7 +196,7 @@ public final class StructuredExportService: ObservableObject {
     public func saveAllToFile(format: ExportFormat, panelTitle: String) {
         let savePanel = NSSavePanel()
         savePanel.title = panelTitle
-        savePanel.nameFieldStringValue = "Textractor-Export-\(formatTimestamp(Date())).\(format.fileExtension)"
+        savePanel.nameFieldStringValue = "Textractor-Pro-Export-\(formatTimestamp(Date())).\(format.fileExtension)"
         savePanel.allowedContentTypes = [format.utType]
 
         savePanel.begin { [weak self] response in

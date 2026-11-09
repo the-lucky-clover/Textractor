@@ -272,7 +272,7 @@ private struct HistoryCard: View {
     private func exportRecord(_ record: HistoryRecord, format: ExportFormat) {
         let savePanel = NSSavePanel()
         let timestamp = ISO8601DateFormatter().string(from: record.capturedAt).replacingOccurrences(of: ":", with: "-")
-        savePanel.nameFieldStringValue = "Textractor_\(record.id.uuidString.prefix(8))_\(timestamp)"
+        savePanel.nameFieldStringValue = "Textractor-Pro_\(record.id.uuidString.prefix(8))_\(timestamp)"
 
         switch format {
         case .markdown:
@@ -306,7 +306,7 @@ private struct HistoryCard: View {
 
     static func generateMarkdown(_ record: HistoryRecord) -> String {
         var md = ""
-        md += "# Textractor Capture\n\n"
+        md += "# Textractor Pro Capture\n\n"
         md += "**ID:** \(record.id.uuidString)\n"
         md += "**Date:** \(record.capturedAt.formatted())\n"
         md += "**Mode:** \(CaptureMode(rawValue: record.mode.rawValue)?.label ?? record.mode.rawValue)\n"

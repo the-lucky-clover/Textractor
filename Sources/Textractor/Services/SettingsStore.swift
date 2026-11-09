@@ -104,24 +104,29 @@ public final class SettingsStore: ObservableObject {
     
     /// Apply the dock presence setting by updating activation policy and status bar.
     private func applyDockPresence(_ presence: AppSettings.DockPresence) {
-        let newPolicy: NSApplication.ActivationPolicy
-        switch presence {
-        case .menuBarOnly:
-            newPolicy = .accessory
-        case .dockOnly, .both:
-            newPolicy = .regular
-        }
-        
+        let newPolicy = Self.activationPolicy(for: presence)
+
         // Only change if different to avoid unnecessary UI flicker
         if let app = NSApp, app.activationPolicy() != newPolicy {
             app.setActivationPolicy(newPolicy)
         }
-        
+
         // Notify AppCoordinator to show/hide status bar
         NotificationCenter.default.post(
             name: NSNotification.Name("DockPresenceChanged"),
             object: presence
         )
+    }
+
+    /// Shared by settings changes and startup. Launch must preserve a saved
+    /// Dock-only preference instead of hiding the app's only entry point.
+    static func activationPolicy(for presence: AppSettings.DockPresence) -> NSApplication.ActivationPolicy {
+        switch presence {
+        case .menuBarOnly:
+            return .accessory
+        case .dockOnly, .both:
+            return .regular
+        }
     }
 
     /// Coalesce rapid `update` calls so we only encode + write once per quiet

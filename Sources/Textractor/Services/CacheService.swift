@@ -13,14 +13,15 @@ public final class CacheService {
     public static let shared = CacheService()
 
     /// Folder for un-trashable captured screenshots (failed OCR).
-    public var recoveryFolder: URL { AppSettings.defaultRecoveryFolder() }
+    public let recoveryFolder: URL
 
     /// Live, computed byte size of the recovery folder.
     public var byteCount: Int {
         Self.directoryBytes(at: recoveryFolder)
     }
 
-    private init() {
+    init(recoveryFolder: URL = AppSettings.defaultRecoveryFolder()) {
+        self.recoveryFolder = recoveryFolder
         try? FileManager.default.createDirectory(
             at: recoveryFolder,
             withIntermediateDirectories: true
@@ -33,18 +34,29 @@ public final class CacheService {
     /// Cancels, or the cache is cleared.
     @discardableResult
     public func saveRecoveryImage(_ capture: CapturedImage) throws -> URL {
-        try? FileManager.default.createDirectory(at: recoveryFolder, withIntermediateDirectories: true)
+        let fm = FileManager.default
+        try fm.createDirectory(at: recoveryFolder, withIntermediateDirectories: true)
+        let source = capture.fileURL.standardizedFileURL
+        // A failed retry already owns a recovery file. Moving it onto itself
+        // used to delete the only original before attempting the move.
+        guard fm.fileExists(atPath: source.path) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        if source.resolvingSymlinksInPath().deletingLastPathComponent().path == recoveryFolder.resolvingSymlinksInPath().path {
+            return source
+        }
+        // Captures can share the same timestamp, including within one second.
+        // A fresh identifier avoids replacing either capture's original bytes.
         let dest = recoveryFolder
-            .appendingPathComponent(capture.suggestedFilename)
+            .appendingPathComponent("\(capture.suggestedFilename)-\(UUID().uuidString)")
             .appendingPathExtension("png")
-        try? FileManager.default.removeItem(at: dest)
         do {
-            try FileManager.default.moveItem(at: capture.fileURL, to: dest)
+            try fm.moveItem(at: source, to: dest)
         } catch {
-            // move can fail if the source is gone (e.g. already trashed). Fall
-            // back to copy + delete so recovery still lands the image.
-            try FileManager.default.copyItem(at: capture.fileURL, to: dest)
-            try? FileManager.default.removeItem(at: capture.fileURL)
+            // Cross-volume moves may require copy + delete. Never remove the
+            // source unless the copy succeeded; never replace another file.
+            try fm.copyItem(at: source, to: dest)
+            try? fm.removeItem(at: source)
         }
         return dest
     }
@@ -105,15 +117,9 @@ public final class CacheService {
     static func trash(url: URL) -> Bool {
         let fm = FileManager.default
         do {
-            let trash = try fm.url(
-                for: .trashDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: false
-            )
-            let dest = trash.appendingPathComponent(url.lastPathComponent)
-            try? fm.removeItem(at: dest)
-            try fm.moveItem(at: url, to: dest)
+            // Let Finder choose a collision-free Trash destination. Do not
+            // delete an unrelated item already in Trash with the same name.
+            try fm.trashItem(at: url, resultingItemURL: nil)
             return true
         } catch {
             let removed = (try? fm.removeItem(at: url)) != nil

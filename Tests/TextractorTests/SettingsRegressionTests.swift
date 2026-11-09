@@ -74,6 +74,27 @@ final class SettingsRegressionTests: XCTestCase {
         XCTAssertEqual(decoded.speechRate, 0.25)
     }
 
+    func testFormattingAndDormantTranslationPreferencesSurviveRelaunch() throws {
+        let suite = "com.textractor.test.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = SettingsStore(userDefaults: defaults, appliesSystemEffects: false)
+        store.mutate {
+            $0.sourceCodeMode = true
+            $0.translateAfterCapture = true
+            $0.translationTargetLanguage = "ja-JP"
+        }
+        store.flushPendingPersist()
+
+        let restored = SettingsStore(userDefaults: defaults, appliesSystemEffects: false).current
+        XCTAssertTrue(restored.sourceCodeMode)
+        XCTAssertTrue(restored.translateAfterCapture)
+        XCTAssertEqual(restored.translationTargetLanguage, "ja-JP")
+        XCTAssertEqual(restored.uiLanguage, "en-US")
+        // Preserving an old preference does not enable an absent translator.
+        XCTAssertFalse(TranslationService.isAvailable)
+    }
+
     func testBatchPreservesRepeatedMessagesAndUndo() {
         var batch = CaptureAccumulator()
         XCTAssertTrue(batch.append("Yes"))

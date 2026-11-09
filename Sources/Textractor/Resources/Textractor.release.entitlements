@@ -2,9 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- User-initiated GitHub release checks; captured text is not sent. -->
-    <key>com.apple.security.network.client</key>
-    <true/>
     <!-- App Sandbox is REQUIRED for Mac App Store -->
     <key>com.apple.security.app-sandbox</key>
     <true/>
@@ -17,7 +14,7 @@
     <key>com.apple.security.device.camera</key>
     <true/>
 
-    <!-- OCR processing stays on-device; release checks use HTTPS. -->
+    <!-- The App Store edition processes OCR locally and delegates updates to the App Store. -->
 
     <!-- com.apple.security.network.server: false -->
 

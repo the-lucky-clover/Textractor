@@ -86,9 +86,12 @@ public struct T: Sendable, Equatable {
            let path = resources.path(forResource: language, ofType: "lproj") {
             return Bundle(path: path)
         }
-        // Development: SPM may place resources in Bundle.module
+        // Raw SPM executables/tests can use the generated resource accessor.
+        // In an installed .app, that accessor can terminate the process when
+        // its original build directory is gone. Missing translations must fall
+        // back to bundled English instead of entering that fatal path.
         #if SWIFT_PACKAGE
-        if #available(macOS 13, *),
+        if Bundle.main.bundleURL.pathExtension != "app",
            let lprojURL = Bundle.module.url(forResource: language, withExtension: "lproj") {
             return Bundle(url: lprojURL)
         }

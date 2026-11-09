@@ -6,12 +6,10 @@ import Carbon.HIToolbox
 
 /// User-facing configuration. Persisted with `UserDefaults` via `SettingsStore`.
 ///
-/// Privacy posture (post-2.0): Textractor **always** runs OCR and discards the
-/// screenshot. The user can opt into keeping failed-OCR screenshots for
-/// recovery, but there is no "save every screenshot" mode. There is also no
-/// "where should I save?" picker; failed screenshots land in
-/// `~/Pictures/Textractor Screenshots/` so the user can still use macOS's
-/// built-in screen capture if they want different storage.
+/// OCR runs locally. Successful screenshots remain in temporary storage for
+/// history re-OCR while the files are available; failed screenshots are moved
+/// to the recovery folder until the user clears them. Text history is stored
+/// separately. Local diagnostics are disabled for fresh and reset settings.
 public struct AppSettings: Codable, Sendable {
     /// Weirdness 0% = strict, 100% = lenient / creative correction.
     public var weirdness: Double
@@ -169,16 +167,15 @@ public var ocrLanguages: [String] = []
     /// from the history context menu. Default ON.
     public var structuredExportEnabled: Bool
 
-    /// When enabled, automatically saves each capture (image + text) to
-    /// `~/Pictures/Textractor Captures/` with timestamped filenames.
-    /// Default OFF — captures are clipboard-only by default.
+    /// Legacy persisted key retained for compatibility. Automatic folder export
+    /// is not implemented and no toggle is presented for this inactive setting.
     public var autoSaveCaptures: Bool
 
     public init(
         weirdness: Double = 0.45,
         customVocabulary: [String] = [],
         uiLanguage: String = "en-US",
-        localTelemetryEnabled: Bool = true,
+        localTelemetryEnabled: Bool = false,
         openPopoverOnCapture: Bool = false,
         lastUpdateCheckAt: Date? = nil,
         customHotkeyKeyCode: UInt32? = nil,
@@ -344,6 +341,9 @@ private enum CodingKeys: String, CodingKey {
         try container.encode(clipboardImageOCR, forKey: .clipboardImageOCR)
         try container.encode(showConfidenceBadge, forKey: .showConfidenceBadge)
         try container.encode(structuredExportEnabled, forKey: .structuredExportEnabled)
+        try container.encode(sourceCodeMode, forKey: .sourceCodeMode)
+        try container.encode(translateAfterCapture, forKey: .translateAfterCapture)
+        try container.encode(translationTargetLanguage, forKey: .translationTargetLanguage)
         try container.encode(autoSaveCaptures, forKey: .autoSaveCaptures)
         // `ocrLanguages` is deprecated and intentionally omitted from new encodes.
     }
@@ -356,7 +356,7 @@ private enum CodingKeys: String, CodingKey {
         weirdness: 0.45,
         customVocabulary: [],
         uiLanguage: "en-US",
-        localTelemetryEnabled: true,
+        localTelemetryEnabled: false,
         openPopoverOnCapture: false,
         lastUpdateCheckAt: nil,
         customHotkeyKeyCode: nil,

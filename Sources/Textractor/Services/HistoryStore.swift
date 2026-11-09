@@ -1,22 +1,21 @@
 import Foundation
 import Combine
 
-/// Stores a rolling history of *extracted text only* per capture. Bounded by
+/// Stores a rolling history of extracted text and source-image paths. Bounded by
 /// `AppSettings.historyEntryLimit` (slider 10…1000).
 ///
-/// As of Textractor 2.x, capture screenshots are *never* retained — OCR'd text
-/// is the only durable artefact of a capture, and the user's machine is left
-/// with no surprises. The `directory` only ever holds `*.txt` payloads (also
-/// optional — the text lives inline in `records` for instant reads).
-/// "Cache" lifetime data (the screenshots Textractor failed to extract, kept
-/// for the user to retry) is unrelated to history and lives under
-/// `~/Pictures/Textractor Screenshots/`; `CacheService` is responsible for that.
+/// Text is stored in plaintext JSON. Successful source images currently remain
+/// in the capture temporary directory for re-OCR while those files are available.
+/// Clearing text history does not erase the system temporary directory. Failed
+/// images live in the separate recovery folder managed by `CacheService`.
 @MainActor
 public final class HistoryStore: ObservableObject {
 
     public static let shared = HistoryStore()
 
     @Published public private(set) var records: [HistoryRecord] = []
+    @Published public private(set) var storageError: String?
+    private var loadFailed = false
 
     private let directory: URL
     private let metadataURL: URL
@@ -85,16 +84,25 @@ public final class HistoryStore: ObservableObject {
     // MARK: - Persistence
 
     private func load() {
-        guard let data = try? Data(contentsOf: metadataURL),
-              let decoded = try? JSONDecoder().decode([HistoryRecord].self, from: data) else {
-            return
+        guard FileManager.default.fileExists(atPath: metadataURL.path) else { return }
+        do {
+            let data = try Data(contentsOf: metadataURL)
+            records = try JSONDecoder().decode([HistoryRecord].self, from: data)
+        } catch {
+            loadFailed = true
+            storageError = "Saved history could not be read. Its original file has been retained; new captures can still be copied, but history writes are paused. Back up history.json before using Clear history to start again."
         }
-        records = decoded
     }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(records) else { return }
-        try? data.write(to: metadataURL, options: .atomic)
+        guard !loadFailed else { return }
+        do {
+            let data = try JSONEncoder().encode(records)
+            try data.write(to: metadataURL, options: .atomic)
+            storageError = nil
+        } catch {
+            storageError = "History could not be saved: \(error.localizedDescription)"
+        }
         recomputeSize()
     }
 
@@ -121,6 +129,7 @@ public final class HistoryStore: ObservableObject {
 
     /// Re-bounds the in-memory history to the requested limit. Drops oldest.
     public func enforceLimit(_ limit: Int) {
+        guard !loadFailed else { return }
         let clamped = max(1, min(maxRecordsCeiling, limit))
         guard records.count > clamped else { return }
         let overflow = records.suffix(from: clamped)
@@ -142,6 +151,7 @@ public final class HistoryStore: ObservableObject {
                        ocrConfidence: Float? = nil,
                        imagePath: String? = nil,
                        limit: Int) {
+        guard !loadFailed else { return }
         let record = HistoryRecord(
             id: capture.id,
             capturedAt: capture.capturedAt,
@@ -159,6 +169,7 @@ public final class HistoryStore: ObservableObject {
     }
 
     public func delete(_ record: HistoryRecord) {
+        guard !loadFailed else { return }
         if let p = record.textPath {
             try? FileManager.default.removeItem(at: URL(fileURLWithPath: p))
         }
@@ -168,6 +179,9 @@ public final class HistoryStore: ObservableObject {
 
     /// Wipe every record. Used by Settings → "Clear history".
     public func clearAll() {
+        // Clear history is an explicit, confirmed user action. Only this path
+        // may replace an unreadable archive with a new empty history.
+        loadFailed = false
         for r in records {
             if let path = r.textPath {
                 try? FileManager.default.removeItem(at: URL(fileURLWithPath: path))
@@ -181,6 +195,7 @@ public final class HistoryStore: ObservableObject {
     /// Undo the most recent capture (for toast undo action).
     /// Removes the most recent record from history.
     public func undoLastCapture() {
+        guard !loadFailed else { return }
         guard !records.isEmpty else { return }
         let removed = records.removeFirst()
         if let path = removed.textPath {

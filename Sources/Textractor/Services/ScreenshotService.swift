@@ -20,7 +20,7 @@ public enum ScreenshotError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .permissionDenied:    return "Screen Recording permission is required. Grant it in System Settings → Privacy & Security → Screen Recording, then re-launch Textractor."
+        case .permissionDenied:    return "Screen Recording permission is required. Grant it in System Settings → Privacy & Security → Screen Recording, then re-launch Textractor Pro."
         case .noDisplay:           return "No displays were detected."
         case .noWindow:            return "The selected window is not visible."
         case .imageCreationFailed: return "CoreGraphics could not build a screenshot."
@@ -583,6 +583,9 @@ public final class ScreenshotService: NSObject {
         maxScrolls: Int = 50,
         overlap: CGFloat = 100
     ) async throws -> CapturedImage {
+        #if APP_STORE
+        throw ScreenshotError.processingFailed("Automatic scrolling is unavailable in this edition. Capture a visible region or import saved screenshots.")
+        #else
         try ensureScreenRecordingAccess()
 
         // Find the window descriptor
@@ -656,6 +659,7 @@ public final class ScreenshotService: NSObject {
             fileURL: url,
             screenIndex: 0
         )
+        #endif
     }
 
     /// Compare two images for similarity (0.0 to 1.0)

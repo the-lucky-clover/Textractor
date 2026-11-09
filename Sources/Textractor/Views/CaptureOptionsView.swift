@@ -84,6 +84,7 @@ struct CaptureOptionsView: View {
             Toggle("Keep additive history after quit", isOn: binding(\.persistAdditiveClipboard))
                 .accessibilityIdentifier("settings.batch.persist")
             Text("Optional local file, readable by your Mac account. Turning this off removes the saved file; the current session stays available.").font(.caption).foregroundStyle(.secondary)
+            #if !APP_STORE
             Toggle("Clear additive history on ⌘V", isOn: binding(\.clearAdditiveOnPaste))
                 .accessibilityIdentifier("settings.batch.paste")
             if appState.settings.clearAdditiveOnPaste {
@@ -93,6 +94,7 @@ struct CaptureOptionsView: View {
                     _ = AXIsProcessTrustedWithOptions(options)
                 }
             }
+            #endif
             if let error = extras.persistenceError {
                 Text(error).font(.caption).foregroundStyle(.orange)
                 Button("Retry history storage") { extras.retryPersistence(settings: appState.settings) }

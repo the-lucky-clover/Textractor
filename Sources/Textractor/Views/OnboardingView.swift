@@ -45,7 +45,7 @@ public struct OnboardingRootView: View {
                         Label("Bring your iPhone or iPad", systemImage: "iphone.and.arrow.forward").font(.title2.bold())
                         Text("Choose Import from iPhone or iPad in the capture menu, then Take Photo or Scan Documents in Apple's device menu.")
                         Text("Use the same Apple Account with two-factor authentication. Keep devices nearby with Wi-Fi and Bluetooth enabled. Your Mac must support Continuity Camera.")
-                        Text("If no device appears, cancel and import a saved image. This does not require a separate Textractor iOS app.")
+                        Text("If no device appears, cancel and import a saved image. This does not require a separate Textractor Pro iOS app.")
                     default:
                         Label("Make it yours", systemImage: "slider.horizontal.3").font(.title2.bold())
                         Text("Settings includes line-break control, QR and barcode recognition, read aloud, additive clipboard, and privacy options. Replay this tour any time from Settings.")

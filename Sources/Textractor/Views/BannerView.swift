@@ -18,8 +18,17 @@ public func loadBannerImage() -> NSImage? {
        let img = NSImage(contentsOf: url) {
         return img
     }
+    if let resourcesURL = Bundle.main.url(forResource: "Textractor_Textractor", withExtension: "bundle"),
+       let resources = Bundle(url: resourcesURL),
+       let url = resources.url(forResource: "textractor-type", withExtension: "png"),
+       let image = NSImage(contentsOf: url) {
+        return image
+    }
     #if SWIFT_PACKAGE
-    if let url = Bundle.module.url(forResource: "textractor-type", withExtension: "png") {
+    // The generated accessor can fatalError after a standalone .app is moved
+    // away from its build tree. The text wordmark remains a valid fallback.
+    if Bundle.main.bundleURL.pathExtension != "app",
+       let url = Bundle.module.url(forResource: "textractor-type", withExtension: "png") {
         return NSImage(contentsOf: url)
     }
     #endif

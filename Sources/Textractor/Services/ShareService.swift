@@ -53,7 +53,7 @@ public final class ShareService {
             return
         }
         // Fallback: mailto URL
-        let subject = "Text from Textractor"
+        let subject = "Text from Textractor Pro"
         let body = (items.first as? String) ?? ""
         let urlStr = "mailto:?subject=\(subject.urlEncoded)&body=\(body.urlEncoded)"
         if let url = URL(string: urlStr) {

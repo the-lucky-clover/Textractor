@@ -62,7 +62,7 @@ struct ScreenshotImportView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
                         Label("Capture the context.", systemImage: "text.viewfinder").font(.title2.bold())
-                        Text("Import screenshots in reading order. Textractor keeps the supplied images and extracts English (US) text on this device.")
+                        Text("Import screenshots in reading order. Textractor Pro keeps the supplied images and extracts English (US) text on this device.")
                             .foregroundStyle(.secondary)
                         Text("For Messages, take overlapping screenshots yourself. Review OCR blocks, dates, speakers and overlap before export.")
                             .font(.callout).foregroundStyle(.secondary)
@@ -185,6 +185,7 @@ struct MobileSettingsView: View {
                 Section("Help") {
                     Button("Replay welcome tour", action: replay).accessibilityIdentifier("mobile.onboarding.replay")
                     Text("Message layout is a reconstruction. OCR may misread text, timestamps or order. Compare with Sources; mark corrections and exclusions during review.").font(.callout)
+                    Link("Privacy policy", destination: URL(string: "https://github.com/the-lucky-clover/Textractor/blob/main/PRIVACY_POLICY.md")!)
                 }
             }
             .navigationTitle("Settings").onAppear { title = store.archive.title }

@@ -47,6 +47,8 @@ public enum FactoryResetService {
         HistoryStore.shared.clearAll()
         CaptureExtras.shared.discardAllHistory()
         CaptureExtras.shared.stopSpeaking()
+        TelemetryService.shared.wipe()
+        AnalyticsService.shared.wipe()
 
         // 4. In-memory history list (the UI's "recent captures" sidebar).
         appState.recentCaptures.removeAll()

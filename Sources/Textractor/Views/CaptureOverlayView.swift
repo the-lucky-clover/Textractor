@@ -169,11 +169,7 @@ public init(
             .accessibilityHint("Space to toggle capture mode, Escape to cancel, Return to confirm selection, G to toggle grid")
             .onKeyPress(.space) {
                 LoggerService.shared.info("[capture.key] SPACE pressed, was mode=\(mode.rawValue)")
-                switch mode {
-                case .crosshair: mode = .window
-                case .window:    mode = .autoScroll
-                case .autoScroll: mode = .crosshair
-                }
+                mode = mode.nextAvailableMode
                 hoveredWindow = nil
                 LoggerService.shared.info("[capture.key] SPACE handled, now mode=\(mode.rawValue)")
                 return .handled

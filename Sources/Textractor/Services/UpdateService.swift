@@ -36,11 +36,23 @@ public final class UpdateService {
     public static var bundleShortVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0" }
     public static var bundleVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0" }
     public static var versionDescription: String { "v\(bundleShortVersion) (build \(bundleVersion))" }
-    public static let hasRemoteChannel = true
+    public static let hasRemoteChannel = !DistributionPolicy.isAppStoreBuild
+    public static var actionTitle: String { DistributionPolicy.isAppStoreBuild ? "Open App Store" : T.s("version.check_now") }
     private static let releasePage = URL(string: "https://github.com/the-lucky-clover/Textractor/releases")!
 
     /// Checks on explicit user action. Opens the release page only after the user chooses it.
     public func presentUpToDateAlert() {
+        #if APP_STORE
+        let alert = NSAlert()
+        alert.messageText = "Updates are provided by the App Store"
+        alert.informativeText = "Installed: \(Self.versionDescription). Open the App Store and choose Updates to check for Textractor Pro updates."
+        alert.addButton(withTitle: "Open App Store")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn,
+           let store = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.AppStore") {
+            NSWorkspace.shared.open(store)
+        }
+        #else
         guard !checking else { return }
         checking = true
         Task {
@@ -77,6 +89,7 @@ public final class UpdateService {
             }
             alert.runModal()
         }
+        #endif
     }
     public static func relativeLastChecked(_ date: Date?) -> String {
         guard let date else { return "Never" }

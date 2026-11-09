@@ -28,8 +28,8 @@
 "permission.denied" = "Not granted";
 "permission.open" = "Open Settings";
 "privacy.pii" = "Redact PII (cards, SSN, keys…)";
-"privacy.pii.redacted" = "PII is redacted before copy";
-"privacy.pii.permit" = "PPI: personal data passes through";
+"privacy.pii.redacted" = "Redaction before copy is enabled";
+"privacy.pii.permit" = "PII: personal data passes through";
 "history.open" = "Open History";
 "history.clear" = "Clear history";
 "history.cache.clear" = "Clear cache (failed shots)";
@@ -66,7 +66,7 @@
 "toast.share_airdrop" = "AirDrop";
 
 "toast.screen_permission_title" = "Screen Recording access needed";
-"toast.screen_permission_body" = "Textractor Pro needs Screen Recording to read text from your screen. Nothing is sent anywhere — every capture is processed privately on this Mac. Allow access, then try again.";
+"toast.screen_permission_body" = "Textractor Pro needs Screen Recording to read text from your screen. OCR runs on this Mac. Allow access, then try again.";
 "toast.open_settings" = "Open Settings";
 "menu.capture" = "Capture";
 "menu.region" = "Region";
@@ -88,7 +88,7 @@
 "shortcut.settings" = "⌘,  Settings";
 "shortcut.quit" = "⌘Q  Quit";
 "onboarding.tour.title" = "Meet Textractor Pro";
-"onboarding.tour.subtitle" = "Capture text on your screen with one keyboard shortcut.\n\nPrivacy-first • Works offline • No data ever leaves your device";
+"onboarding.tour.subtitle" = "Capture text on your screen with one keyboard shortcut.\n\nOn-device OCR • Works offline • Share only when you choose";
 "onboarding.tap_anywhere" = "Tap this anywhere";
 "onboarding.pick_capture_paste" = "Pick → capture → text on your clipboard";
 "onboarding.skip" = "Skip →";
@@ -109,7 +109,7 @@
 "onboarding.language.top" = "TOP";
 "onboarding.language.skip" = "Skip →";
 "onboarding.permissions.title" = "Permissions";
-"onboarding.permissions.subtitle" = "Textractor Pro needs Screen Recording to capture text on your screen.\nNo network access requested. No data leaves your Mac.";
+"onboarding.permissions.subtitle" = "Textractor Pro needs Screen Recording to capture text on your screen.\nText recognition runs locally on your Mac.";
 "onboarding.permission.screen_recording.title" = "Screen Recording";
 "onboarding.permission.screen_recording.detail" = "Required to capture regions, windows, and the full screen.";
 "onboarding.permissions.manual_hint" = "After opening System Settings, scroll to **Privacy & Security → Screen Recording**, find Textractor Pro, and flip the switch ON. Then come back here.";

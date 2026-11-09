@@ -18,7 +18,7 @@ public final class AppCoordinator: ObservableObject {
     // MARK: - State
 
     public let settingsStore = SettingsStore.shared
-    public let captureStore = CaptureStore.shared
+    public lazy var captureStore = CaptureStore.shared
     public let appState: AppState
     @Published public private(set) var previousRegion: CGRect?
 
@@ -153,7 +153,8 @@ public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
     }
 
   public func startAutoScrollCapture() {
-    guard !appState.isCapturing, captureWindows.isEmpty else { return }
+    guard DistributionPolicy.supportsAutomaticScrolling,
+          !appState.isCapturing, captureWindows.isEmpty else { return }
     pendingAutoScrollCapture = true
     presentCaptureOverlay(initialMode: .autoScroll, perCaptureLanguage: nil)
   }
@@ -433,7 +434,8 @@ public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
             }
             SoundManager.playCaptureComplete()
 
-            // Save to CaptureStore (new visual knowledge library)
+            // Optional library failure does not undo a successful clipboard copy.
+            var librarySaveError: String?
             if settings.knowledgeModeEnabled {
                 let entities: [String] = analysis.entities.compactMap { entity in
                     switch entity {
@@ -467,7 +469,12 @@ public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
                     applicationName: capture.mode == .window ? "Window" : nil,
                     windowTitle: nil
                 )
-                try? CaptureStore.shared.save(record)
+                do {
+                    try captureStore.save(record)
+                } catch {
+                    librarySaveError = error.localizedDescription
+                    LoggerService.shared.error("Text copied, but capture library save failed", error: error)
+                }
             }
 
             // History record (text-only) — in-memory recents + persistent store.
@@ -475,7 +482,7 @@ public func startCaptureWindow(perCaptureLanguageOverride: Bool = false) {
 
             // Success toast
             appState.pipelinePhase = .completed
-            guard settings.showSuccessNotifications else { return }
+            guard settings.showSuccessNotifications || librarySaveError != nil else { return }
             // Capture text at creation time so the closures never read stale state.
 let toastText = outputText
         let toastPlainText = pasteAsPlainText
@@ -491,9 +498,9 @@ let toastText = outputText
         }
             appState.toast = ToastState(
                 id: UUID(),
-                kind: .success,
+                kind: librarySaveError == nil ? .success : .info,
                 headline: T.s("toast.copied"),
-                body: copyOk ? T.s("toast.ready") : T.s("toast.copy_failed"),
+                body: librarySaveError.map { "Copied to clipboard. Library save failed: \($0)" } ?? T.s("toast.ready"),
                 capture: capture,
                 ocr: ocrResult,
                 analysis: analysis,
@@ -589,7 +596,7 @@ let toastText = outputText
     // MARK: - Sharing
 
     public func share(text: String, via provider: ShareService.Provider) {
-        ShareService.shared.share(text: text, caption: "Text from Textractor", via: provider)
+        ShareService.shared.share(text: text, caption: "Text from Textractor Pro", via: provider)
     }
 
     // MARK: - UI

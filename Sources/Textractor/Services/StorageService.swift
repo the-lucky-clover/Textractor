@@ -3,19 +3,18 @@ import AppKit
 
 /// Minimal disk I/O for Textractor's captured screenshots.
 ///
-/// In Textractor 2.x the only lifecycle is:
-///   • On OCR success: trash the temp file via `trash(_:)`.
-///   • On OCR failure: move the temp file into the recovery folder so the
-///     user can re-run OCR / pick it up manually. Removal is offered in the
-///     recovery toast's "Cancel" button and in Settings → Clear cache.
+/// Explicit removal and recovery helpers. The active pipeline retains success
+/// images in temporary storage for history re-OCR, and moves failed images to
+/// the recovery folder. Recovery removal is offered in the failure toast and
+/// Settings → Clear cache.
 public final class StorageService {
 
     public static let shared = StorageService()
 
     private init() {}
 
-    /// Move a captured image to `~/.Trash` and remove the original. Returns
-    /// `true` on success (the file is gone from disk either way).
+    /// Trash a captured image, or remove it when the system Trash is unavailable.
+    /// Returns false when neither operation succeeds.
     @discardableResult
     public func trash(_ capture: CapturedImage) -> Bool {
         CacheService.trash(url: capture.fileURL)

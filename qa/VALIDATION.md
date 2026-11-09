@@ -1,6 +1,43 @@
 # Native QA and production signoff
 
-## Current evidence
+## November 9 release-readiness iteration
+
+The current iteration prepares the Textractor Pro store product and shipping pipeline.
+On the Linux editing environment, the 51 Python release-tool/metadata/evidence/benchmark
+tests passed, both platform candidate configuration checks passed, release shell scripts
+passed syntax checks, and the changed files passed `git diff --check`.
+
+Ten native regressions were added for recovery collisions/retry preservation, unavailable
+model output, distribution mode handling, corrupt-history preservation, diagnostic opt-in,
+and nondefault settings persistence. These new tests have not yet been executed in the
+editing environment, which has no Swift or Xcode. Prior native results below are historical.
+The updated CI also compiles the actual store Release configurations as unsigned archives;
+these builds are distinct from the development UI test configuration.
+
+The additional macOS pass restores Dock-only launch/reopen controls, removes stale shortcut
+labels, honors Reduce Motion in the capture menu, and avoids the generated SwiftPM resource
+accessor's fatal fallback in an installed `.app`. Native lifecycle tests cover persisted Dock
+preferences and reopen behavior. Capture-library regressions exercise transient decrypted OCR,
+legacy cache migration, inaccessible storage, locked/missing keys and per-record read failures.
+They are queued for native execution; portable tests do not establish Swift compilation.
+
+Packaging checks inspect the actual built executable, both archive architecture slices,
+localizations, menu-bar resources and root privacy manifest. The signed archive path additionally
+checks the certificate-backed code signature's identifier and Apple team before export/upload.
+CI runs the release-safety/settings tests with `APP_STORE` as well as the ordinary build.
+
+The iOS primary icon now uses an opaque 1024×1024 RGB variant of the existing flask artwork.
+Its source and generation prompt are recorded in [ICON.md](../appstore/ios/ICON.md).
+The candidate validator rejects primary icons with alpha/transparency. Image generation
+and a passing configuration check are not evidence of App Store approval.
+
+The new [release plan](RELEASE_PLAN.md) and per-platform `release-signoff.json` keep
+native execution, physical-device acceptance, signing, privacy/metadata review and name
+acceptance separate. Record the new native CI run and tested commit here after execution.
+Existing nonsandboxed history migration into a signed sandbox container remains a device
+gate; preserved bundle identifiers alone do not establish a successful migration.
+
+## Prior native evidence (November 7)
 
 At source/test commit `f6250f3ded365f956347ac034399161d77020b59`,
 [CI run 42376263273](https://github.com/the-lucky-clover/Textractor/actions/runs/42376263273)

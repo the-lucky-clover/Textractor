@@ -24,6 +24,7 @@ public struct SettingsView: View {
     /// `Timer.publish(...).autoconnect()` poll — the service now updates
     /// its `@Published` flag in response to display-config events.
     @ObservedObject private var permissions = PermissionService.shared
+    @ObservedObject private var history = HistoryStore.shared
     private var screenRecordingGranted: Bool { permissions.screenRecordingGranted }
 
     // MARK: - Banner
@@ -113,11 +114,22 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                     ToggleRow(title: T.s("privacy.pii"), icon: "eye.slash", isOn: piiBinding)
                         .introReveal(screenRecordingGranted ? 5 : 6, appeared: firstLoad, animate: !reduceMotion)
                     piiStatusRow.introReveal(screenRecordingGranted ? 5 : 6, appeared: firstLoad, animate: !reduceMotion)
+                    Text("Text history and recovery images are stored locally. Source images can remain in temporary storage. Sharing and exporting use the destination you choose.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                    Link("Privacy policy", destination: URL(string: "https://github.com/the-lucky-clover/Textractor/blob/main/PRIVACY_POLICY.md")!)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
 
                     sectionLabel(T.s("section.history")).introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
                     Row(T.s("history.open"), icon: "clock.arrow.circlepath") { AppCoordinator.shared.showHistoryWindow() }
                         .introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
                     historyLimitBlock.introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    if let storageError = history.storageError {
+                        Text(storageError).font(.caption).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                    }
                     Row(T.s("history.clear"), icon: "trash", role: .destructive) { confirmClearHistory = true }
                         .accessibilityIdentifier("settings.history.clear")
                         .introReveal(screenRecordingGranted ? 6 : 7, appeared: firstLoad, animate: !reduceMotion)
@@ -137,14 +149,19 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("telemetry"), icon: "chart.bar", isOn: telemetryBinding)
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
+                    Text("Local diagnostics are off by default. Turning them off stops new entries; saved entries remain until erased.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                    Row("Erase local diagnostics", icon: "trash", role: .destructive) {
+                        TelemetryService.shared.wipe()
+                        AnalyticsService.shared.wipe()
+                    }
                     ToggleRow(title: T.s("knowledge.mode"), icon: "brain.head.profile", isOn: knowledgeModeBinding)
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("extended.logging"), icon: "doc.text.magnifyingglass", isOn: extendedLoggingBinding)
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
                     ToggleRow(title: T.s("menubar.color.icon"), icon: "paintpalette", isOn: menubarColorIconBinding)
-                        .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
-
-                    ToggleRow(title: T.s("auto.save.captures"), icon: "square.and.arrow.down", isOn: autoSaveCapturesBinding)
                         .introReveal(screenRecordingGranted ? 8 : 7, appeared: firstLoad, animate: !reduceMotion)
 
                     // Hidden easter-egg: Ahoy Mode. Decorates toasts / menu copy
@@ -408,12 +425,14 @@ sectionLabel(T.s("language")).introReveal(screenRecordingGranted ? 2 : 3, appear
                 VStack(alignment: .leading, spacing: 0) {
                     Text("\(T.s("version.label"))  \(UpdateService.versionDescription)")
                         .font(.system(size: 13, weight: .regular)).foregroundStyle(.primary)
+                    if !DistributionPolicy.isAppStoreBuild {
                     Text("\(T.s("version.last_checked")) \(UpdateService.relativeLastChecked(appState.settings.lastUpdateCheckAt))")
                         .font(.system(size: 9, weight: .regular)).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer(minLength: 8)
                 Button { checkForUpdates() } label: {
-                    Text(T.s("version.check_now")).font(.system(size: 11, weight: .semibold)).foregroundStyle(BreakingDad.toxicGreen)
+                    Text(UpdateService.actionTitle).font(.system(size: 11, weight: .semibold)).foregroundStyle(BreakingDad.toxicGreen)
                 }
                 .buttonStyle(.plain)
             }
@@ -564,10 +583,6 @@ private var aboutBlockV2: some View {
     private var translationTargetBinding: Binding<String> {
         Binding(get: { appState.settings.translationTargetLanguage },
                 set: { v in appState.updateSettings { $0.translationTargetLanguage = v } })
-    }
-    private var autoSaveCapturesBinding: Binding<Bool> {
-        Binding(get: { appState.settings.autoSaveCaptures },
-                set: { v in appState.updateSettings { $0.autoSaveCaptures = v } })
     }
 
     private func openLogFolder() {

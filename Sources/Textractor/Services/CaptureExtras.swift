@@ -63,7 +63,8 @@ public final class CaptureExtras: ObservableObject {
                 persistenceError = nil
             } catch { persistenceError = "Additive history could not be read or saved. Original file retained: \(error.localizedDescription)" }
         }
-        clearOnPaste = settings.clearAdditiveOnPaste
+        clearOnPaste = settings.clearAdditiveOnPaste && DistributionPolicy.supportsGlobalPasteObservation
+        #if !APP_STORE
         if clearOnPaste, globalPasteMonitor == nil {
             globalPasteMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 Task { @MainActor in self?.observePaste(event) }
@@ -77,6 +78,7 @@ public final class CaptureExtras: ObservableObject {
             if let localPasteMonitor { NSEvent.removeMonitor(localPasteMonitor) }
             globalPasteMonitor = nil; localPasteMonitor = nil
         }
+        #endif
     }
 
     public static func isOwnedPaste(keyCode: UInt16, modifiers: NSEvent.ModifierFlags,
